@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Test</h1>
+    <button id="connectButton">Connect to WebSocket</button>
+    <button id="sendMessageButton" disabled>Send Message</button>
+    <div id="messages"></div>
+
+    <script>
+        let socket;
+
+        document.getElementById('connectButton').onclick = function () {
+            // 직접 원본 URL로 연결
+            socket = new WebSocket('ws://127.0.0.1:8000/ws/status');
+            
+            console.log('Connecting to WebSocket...');
+            
+            socket.onopen = function (event) {
+                console.log('Connected to WebSocket!');
+                document.getElementById('sendMessageButton').disabled = false;
+                
+                // 연결 성공 시 메시지 표시
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML += `<p>Connection established!</p>`;
+            };
+
+            socket.onmessage = function (event) {
+                console.log('Received message:', event.data);
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML += `<p>Received: ${event.data}</p>`;
+            };
+
+            socket.onerror = function (error) {
+                console.log('WebSocket error:', error);
+                // 에러 메시지 표시
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML += `<p>Error connecting to WebSocket</p>`;
+            };
+
+            socket.onclose = function () {
+                console.log('Disconnected from WebSocket');
+                document.getElementById('sendMessageButton').disabled = true;
+                // 연결 종료 메시지 표시
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML += `<p>Connection closed</p>`;
+            };
+        };
+
+        document.getElementById('sendMessageButton').onclick = function () {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                const message = 'Hello from client!';
+                socket.send(message);
+                console.log('Sent message:', message);
+                // 전송 메시지 표시
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML += `<p>Sent: ${message}</p>`;
+            }
+        };
+    </script>
+</body>
+</html>

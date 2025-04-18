@@ -1,0 +1,3 @@
+rtspAddress: :8554
+rtpAddress: :8050
+rtcpAddress: :8051
