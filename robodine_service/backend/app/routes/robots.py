@@ -5,17 +5,19 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+from app.models.enums import RobotType, RobotStatus
 
 router = APIRouter()
 
 class RobotData(BaseModel):
-    id: str  # Only ID is required
+    id: int  # Only ID is required
+    type: Optional[RobotType] = None
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None
-    status: Optional[str] = None
-    location: Optional[str] = None
+    status: Optional[RobotStatus] = None
     battery_level: Optional[int] = None
-    timestamp: Optional[datetime] = None  # timestamp optional
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 @router.post("/update_robot")
 def update_robot_status(robot_data: RobotData):
