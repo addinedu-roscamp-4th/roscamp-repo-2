@@ -1,14 +1,21 @@
-from sqlmodel import SQLModel, Field
-from typing import Optional
+from typing import Optional, Dict
+from sqlmodel import SQLModel, Field, Relationship, Column
+from sqlalchemy import JSON, Enum as SQLEnum
 from datetime import datetime
+from .enums import CommandStatus
+from .robot import Robot
 
 class RobotCommand(SQLModel, table=True):
-    id: int = Field(primary_key=True)  # Only ID is required
+    """
+    로봇 명령 정보 관리 모델
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
     robot_id: Optional[str] = Field(default=None, foreign_key="robot.id")
-    command_type: Optional[str] = None
-    parameters: Optional[str] = None  # JSON 문자열로 저장된 파라미터
-    status: Optional[str] = None  # pending, executing, completed, failed 등
-    created_at: Optional[datetime] = None
+    command: Optional[str] = None
+    parameters: Optional[Dict] = Field(sa_column=Column(JSON))
+    status: Optional[CommandStatus] = Field(sa_column=Column(SQLEnum(CommandStatus)))
+    issued_at: Optional[datetime] = None
     executed_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    response: Optional[str] = None  # JSON 문자열로 저장된 응답
+    
+    # Relationship
+    robot: Optional[Robot] = Relationship(back_populates="commands")

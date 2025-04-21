@@ -1,10 +1,13 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Column
 from typing import Optional
 from datetime import datetime
+from sqlalchemy import Enum as SQLEnum
+from .enums import StreamSourceType, StreamStatus
 
 class VideoStream(SQLModel, table=True):
-    id: int = Field(primary_key=True)  # Only ID is required
-    robot_id: Optional[str] = Field(default=None, foreign_key="robot.id")
+    id: Optional[int] = Field(default=None, primary_key=True)
+    source_type: Optional[StreamSourceType] = Field(sa_column=Column(SQLEnum(StreamSourceType)))
+    source_id: Optional[str] = None
     url: Optional[str] = None
-    status: Optional[str] = None
-    started_at: Optional[datetime] = None
+    last_checked: datetime = Field(default_factory=datetime.utcnow)
+    status: Optional[StreamStatus] = Field(sa_column=Column(SQLEnum(StreamStatus)))
