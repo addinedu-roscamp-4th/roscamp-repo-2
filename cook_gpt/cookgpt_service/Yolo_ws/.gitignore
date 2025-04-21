@@ -1,0 +1,9 @@
+2class_yolov8n_test/test_vid/
+2class_yolov8n_test/vid/
+2class_yolov8s_test/test_vid/
+2class_yolov8s_test/vid/
+yolov8n/test_vid/
+yolov8n/result_vid_before/
+yolov8n/result_vid/
+yolov8s/test_vid/
+yolov8s/result_vid/

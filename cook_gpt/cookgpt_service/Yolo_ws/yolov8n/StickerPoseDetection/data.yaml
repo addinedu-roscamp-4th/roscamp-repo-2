@@ -1,0 +1,16 @@
+train: ./train/images
+val: ./valid/images
+test: ./test/images
+
+kpt_shape: [4, 3]
+flip_idx: [0, 1, 2, 3]
+
+nc: 4
+names: ['dongas', 'pasta', 'salad', 'steak']
+
+roboflow:
+  workspace: jen-fmceb
+  project: stickerposedetection
+  version: 4
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/jen-fmceb/stickerposedetection/dataset/4
