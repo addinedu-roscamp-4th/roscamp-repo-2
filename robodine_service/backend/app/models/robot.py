@@ -6,7 +6,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Enum as SQLEnum, and_
 from sqlalchemy.orm import foreign
 
-from .enums import RobotStatus, RobotType, EntityType
+from .enums import RobotStatus, EntityType
 
 if TYPE_CHECKING:
     from .order import Order
@@ -16,8 +16,8 @@ class Robot(SQLModel, table=True):
     __tablename__ = "robot"
 
     id: Optional[int] = Field(default=None, primary_key=True)  # int PK
-    type: Optional[RobotType] = Field(
-        sa_column=Column(SQLEnum(RobotType, name="robot_type"))
+    type: Optional[EntityType] = Field(
+        sa_column=Column(SQLEnum(EntityType, name="entity_type"))
     )
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None

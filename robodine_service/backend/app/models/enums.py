@@ -2,13 +2,11 @@ from enum import Enum
 from sqlalchemy import Enum as SQLEnum
 
 # ── ENUM 정의 ────────────────────────────────────────────────────────────────
-class RobotType(str, Enum):
-    PINKY = "PINKY"
-    COBOT = "COBOT"
-
 class EntityType(str, Enum):
-    ROBOT = "ROBOT"
+    COOKBOT = "COOKBOT"
+    ALBABOT = "ALBABOT"
     INVENTORY = "INVENTORY"
+    CHATBOT = "CHATBOT"
 
 class RobotStatus(str, Enum):
     IDLE = "IDLE"

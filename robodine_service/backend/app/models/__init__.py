@@ -12,6 +12,7 @@ from .robot_command import RobotCommand
 from .admin_settings import AdminSettings
 from .pose6d import Pose6D
 from .user import User, Notification
+from .chat import Chat
 from .enums import (
     EntityType, RobotStatus, CommandStatus, InventoryStatus,
     TableStatus, OrderStatus, EventType, StreamSourceType,
