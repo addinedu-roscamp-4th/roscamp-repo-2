@@ -25,7 +25,7 @@ git checkout -b feature/ros-service-integration
 
 ```bash
 git add .
-git commit -m "feat: ROS 서비스 통합 기능 추가 (#12)"
+git commit -m "[RD-32] 주문 처리 API 구현 완료"
 ```
 
 ### 4. 원격 저장소에 push
@@ -80,7 +80,7 @@ refactor: 코드 리팩토링 (#이슈번호)
 예시:
 
 ```bash
-git commit -m "feat: 주문 처리 REST API 구현 (#32)"
+git commit -m "[RD-32] 주문 처리 API 구현 완료"
 ```
 
 ---
