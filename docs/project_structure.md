@@ -178,7 +178,7 @@ GitHub와 Jira를 연동하여 작업 상태를 효율적으로 관리할 수 �
 - 커밋 메시지에 Jira 이슈 번호를 포함하여 자동 연동이 가능하게 합니다.
 
 ```bash
-git commit -m "[RD-32] 주문 처리 API 구현 완료"
+git commit -m "[BR-32] 주문 처리 API 구현 완료"
 ```
 
 - Pull Request 제목과 본문에도 Jira 이슈 번호를 포함하여 명확하게 연결합니다.
