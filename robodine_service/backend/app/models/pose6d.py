@@ -15,7 +15,7 @@ class Pose6D(SQLModel, table=True):
     entity_type: EntityType = Field(
         sa_column=Column(SQLEnum(EntityType, name="entity_type"), nullable=False)
     )
-    entity_id: int = Field(sa_column=Column(nullable=False))  # 모든 엔티티 PK를 int로 통일
+    entity_id: int = Field(sa_column=Column(nullable=False))
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     x: float
