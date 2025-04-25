@@ -13,7 +13,7 @@ from ultralytics import YOLO
 # 1. 모델 로딩 및 영상/출력 설정
 # ---------------------------
 # 학습된 모델 로딩 (모델 경로는 상황에 맞게 수정)
-model = YOLO('/home/addinedu/Desktop/Yolo_ws/yolov8s/runs/pose/train2/weights/best.pt')
+model = YOLO('/home/addinedu/roscamp-repo-2/cook_gpt/cookgpt_service/Yolo_ws/yolov8s/runs/pose/train2/weights/best.pt')
 
 # 영상 파일 경로 (처리할 비디오 파일 경로 지정)
 video_path_list = ['./test_vid/01_steak_approach.mp4', './test_vid/02_salad_move.mp4', './test_vid/03_pasta_fixed.mp4', './test_vid/06_katsu_approach.mp4', './test_vid/mixed_approach_03.mp4', './test_vid/mixed_approach_04.mp4', './test_vid/mixed_approach_05.mp4']
