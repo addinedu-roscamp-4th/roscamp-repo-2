@@ -10,14 +10,10 @@ from app.models.enums import EntityType, RobotStatus
 router = APIRouter()
 
 class RobotData(BaseModel):
-    id: int  # Only ID is required
+    robot_id: Optional[str] = None
     type: Optional[EntityType] = None
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None
-    status: Optional[RobotStatus] = None
-    battery_level: Optional[int] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
 @router.post("/update_robot")
 def update_robot_status(robot_data: RobotData):

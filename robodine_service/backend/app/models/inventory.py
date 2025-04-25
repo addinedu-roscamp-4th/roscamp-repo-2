@@ -14,7 +14,8 @@ class Inventory(SQLModel, table=True):
     __tablename__ = "inventory"
 
     id: Optional[int] = Field(default=None, primary_key=True)  # int PK
-    item: Optional[str] = None
+    ingredient_id: Optional[int] = Field(default=None, foreign_key="menuingredient.id")
+    name : Optional[str] = Field(default=None, foreign_key="menuingredient.name")
     count: Optional[int] = None
     status: Optional[InventoryStatus] = Field(
         sa_column=Column(SQLEnum(InventoryStatus, name="inventory_status"))
@@ -27,6 +28,7 @@ class Inventory(SQLModel, table=True):
 
 
 class MenuItem(SQLModel, table=True):
+    __tablename__ = "menuitem"
     """
     메뉴 항목 관리 모델
     """
@@ -39,14 +41,14 @@ class MenuItem(SQLModel, table=True):
     order_items: List["OrderItem"] = Relationship(back_populates="menu_item")
 
 class MenuIngredient(SQLModel, table=True):
+    __tablename__ = "menuingredient"
     """
     메뉴-재고 연결 관계 모델
     """
     id: Optional[int] = Field(default=None, primary_key=True)
+    name: Optional[str] = Field(default=None, unique=True)
     menu_item_id: Optional[int] = Field(default=None, foreign_key="menuitem.id")
-    inventory_id: Optional[int] = Field(default=None, foreign_key="inventory.id")
     quantity_required: Optional[int] = None
-    unit: Optional[str] = None
     
     menu_item: Optional[MenuItem] = Relationship(back_populates="menu_ingredients")
     inventory: Optional[Inventory] = Relationship(back_populates="menu_ingredients")

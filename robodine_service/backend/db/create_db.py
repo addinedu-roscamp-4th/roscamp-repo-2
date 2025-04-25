@@ -1,66 +1,102 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import sys
 import os
+import pkgutil
+import importlib
 
-# 현재 파일 위치에서 상위 폴더(app 폴더의 상위) 경로 추가
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'app')))
-
+from sqlalchemy import text, inspect
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlmodel import SQLModel
-from app.models import Robot, Customer, Order, Inventory, Event, Table, WaitingList, CleaningTask, Emergency, VideoStream, RobotCommand, AdminSettings
 from app.core.db_config import engine
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
 
-# SQLAlchemy 엔진 및 세션 생성
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# ─────────────────────────────────────────────────────────────────────────────
+# 1) app 패키지가 임포트될 수 있도록 경로 설정
+# ─────────────────────────────────────────────────────────────────────────────
+current_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(current_dir, '..', '..', 'app'))
+sys.path.append(project_root)
 
-# 기존 Enum 타입을 자동으로 삭제하는 함수
-def drop_all_enums():
-    with engine.connect() as connection:
-        # PostgreSQL에서 모든 ENUM 타입 목록을 조회하는 쿼리
-        enums_query = """
-        SELECT n.nspname as enum_schema,
-               t.typname as enum_name
-        FROM pg_type t
-        JOIN pg_catalog.pg_enum e ON e.enumtypid = t.oid
-        JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typtype = 'e'
-        ORDER BY enum_schema, enum_name;
-        """
-        
-        result = connection.execute(text(enums_query)).fetchall()
+# ─────────────────────────────────────────────────────────────────────────────
+# 2) app.models 하위의 모든 모듈을 재귀적으로 import
+# ─────────────────────────────────────────────────────────────────────────────
+def import_all_model_modules(pkg_name: str):
+    pkg = importlib.import_module(pkg_name)
+    for finder, name, is_pkg in pkgutil.iter_modules(pkg.__path__, pkg.__name__ + "."):
+        importlib.import_module(name)
+        if is_pkg:
+            import_all_model_modules(name)
 
-        # 조회된 enum 목록을 기반으로 모든 enum 삭제
-        for enum_schema, enum_name in result:
+import_all_model_modules("app.models")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3) 현재 public 스키마의 테이블/ENUM 조회
+# ─────────────────────────────────────────────────────────────────────────────
+def get_existing_tables() -> set[str]:
+    insp = inspect(engine)
+    return set(insp.get_table_names(schema="public"))
+
+def get_existing_enums() -> set[str]:
+    sql = """
+    SELECT t.typname
+    FROM pg_type t
+    JOIN pg_enum e ON e.enumtypid = t.oid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typtype = 'e' AND n.nspname = 'public'
+    GROUP BY t.typname;
+    """
+    with engine.connect() as conn:
+        return {row[0] for row in conn.execute(text(sql)).fetchall()}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4) 메타데이터 기반으로 missing ENUM 생성
+# ─────────────────────────────────────────────────────────────────────────────
+def create_missing_enums():
+    existing = get_existing_enums()
+    for table in SQLModel.metadata.tables.values():
+        for col in table.columns:
+            if isinstance(col.type, PGEnum):
+                enum_name = col.type.name
+                if enum_name not in existing:
+                    # enum 값 목록
+                    vals = ", ".join(f"'{v}'" for v in col.type.enums)
+                    ddl = f"CREATE TYPE {enum_name} AS ENUM ({vals});"
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(text(ddl))
+                        print(f"[ENUM] Created: {enum_name}")
+                    except SQLAlchemyError as e:
+                        print(f"[ENUM] Error creating {enum_name}: {e}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5) 메타데이터 기반으로 missing TABLE 생성
+# ─────────────────────────────────────────────────────────────────────────────
+def create_missing_tables():
+    existing = get_existing_tables()
+    for table in SQLModel.metadata.sorted_tables:
+        if table.name not in existing:
             try:
-                # ENUM 타입 삭제
-                drop_query = f"DROP TYPE IF EXISTS {enum_schema}.{enum_name} CASCADE;"
-                connection.execute(text(drop_query))
-                print(f"ENUM type '{enum_schema}.{enum_name}' has been dropped.")
-            except Exception as e:
-                print(f"Error dropping ENUM '{enum_schema}.{enum_name}': {e}")
+                # DDL을 engine.begin() 블록 밖에서 실행해도 OK—create() 내부가 자동 커밋 처리
+                table.create(bind=engine)
+                print(f"[TABLE] Created: {table.name}")
+            except SQLAlchemyError as e:
+                print(f"[TABLE] Error creating {table.name}: {e}")
 
-# 기존 테이블을 지우는 함수
-def drop_all_tables():
-    with engine.connect() as connection:
-        # 모든 테이블 삭제
-        try:
-            drop_schema_query = "DROP SCHEMA public CASCADE;"
-            connection.execute(text(drop_schema_query))  # SQL문을 text로 감싸서 실행
-            print("All tables have been dropped.")
-        except Exception as e:
-            print(f"Error dropping schema: {e}")
+# ─────────────────────────────────────────────────────────────────────────────
+# 6) 실행 진입점
+# ─────────────────────────────────────────────────────────────────────────────
+def add_new_schema():
+    print("==> Existing tables:", get_existing_tables())
+    print("==> Existing enums :", get_existing_enums())
+    print("==> Creating missing ENUM types...")
+    create_missing_enums()
+    print("==> Creating missing TABLES...")
+    create_missing_tables()
+    print("==> Done.")
 
-# 데이터베이스를 초기화하고 테이블과 enum을 새로 생성하는 함수
-def reset_database():
-    drop_all_enums()  # 모든 ENUM 삭제
-    drop_all_tables()  # 모든 테이블 삭제
-    
-    # 새롭게 정의된 테이블 및 enum을 생성
-    from sqlmodel import SQLModel
-    from app.models import Robot, Inventory, Chat  # 예시로 필요한 모델을 import
-    SQLModel.metadata.create_all(bind=engine)  # 새로운 모델을 통해 테이블 생성
-    print("Database has been reset and tables created with new models.")
-
-# 실행
-reset_database()
+if __name__ == "__main__":
+    add_new_schema()

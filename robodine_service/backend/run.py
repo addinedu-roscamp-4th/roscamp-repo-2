@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel
 
-from app.routes import robots, inventory, control
+from app.routes import robots, inventory, control, poses, websockets, streaming
 from app.routes.websockets import router as websocket_router
 from app.routes.streaming import router as streaming_router
 from app.core.db_config import engine
@@ -45,11 +45,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(websocket_router, tags=["websocket"])
 app.include_router(robots.router, prefix="/robots", tags=["robots"])
 app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
 app.include_router(control.router, prefix="/control", tags=["control"])
-app.include_router(websocket_router, tags=["websocket"])
-app.include_router(streaming_router, prefix="/stream", tags=["streaming"])
+app.include_router(streaming.router, prefix="/stream", tags=["streaming"]) # RTSP 스트리밍 관련 라우터
+app.include_router(poses.router, prefix="/pose6d", tags=["pose6d"])
 
 # --- TCP SERVER -----------------------------------------------------------
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
@@ -58,17 +59,17 @@ class RoboDineTCPHandler(socketserver.BaseRequestHandler):
         logger.info(f"[TCP] Received: {raw}")
         try:
             payload = json.loads(raw.decode('utf-8'))
-            rid = payload.get("id") or payload.get("robot_id")
-            if not rid:
-                raise ValueError("ID field is required")
-            et = payload.get("type", "").upper()
-            if et in ("COOKBOT", "ALBABOT"):
+            robot_id = payload.get("robot_id")
+            if not robot_id:
+                raise ValueError("robot_id field is required")
+            robot_type = payload.get("robot_type", "").upper()
+            if robot_type in ("COOKBOT", "ALBABOT"):
                 with get_session() as session:
-                    update_model(session, Robot, rid, payload)
+                    update_model(session, Robot, robot_id, payload)
                     session.commit()
                 response = "OK"
             else:
-                raise ValueError(f"Unknown type: {et}")
+                raise ValueError(f"Unknown type: {robot_type}")
         except Exception as e:
             logger.error(f"[TCP] Error: {e}")
             response = "ERROR"
