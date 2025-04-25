@@ -14,15 +14,13 @@ class Inventory(SQLModel, table=True):
     __tablename__ = "inventory"
 
     id: Optional[int] = Field(default=None, primary_key=True)  # int PK
-    ingredient_id: Optional[int] = Field(default=None, foreign_key="menuingredient.id")
+    ingredient_id: Optional[int] = Field(default=None)
     name : Optional[str] = Field(default=None, foreign_key="menuingredient.name")
     count: Optional[int] = None
     status: Optional[InventoryStatus] = Field(
         sa_column=Column(SQLEnum(InventoryStatus, name="inventory_status"))
     )
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    menu_ingredients: List["MenuIngredient"] = Relationship(back_populates="inventory")
 
 
 
@@ -51,4 +49,3 @@ class MenuIngredient(SQLModel, table=True):
     quantity_required: Optional[int] = None
     
     menu_item: Optional[MenuItem] = Relationship(back_populates="menu_ingredients")
-    inventory: Optional[Inventory] = Relationship(back_populates="menu_ingredients")

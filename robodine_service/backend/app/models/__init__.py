@@ -13,7 +13,7 @@ from .admin_settings import AdminSettings
 from .pose6d import Pose6D
 from .user import User, Notification
 from .chat import Chat
-from .jointandgle import JointAngles
+from .jointangle import JointAngles
 from .albabot import Albabot
 from .cookbot import Cookbot
 from .pose6d import Pose6D

@@ -26,19 +26,3 @@ class Robot(SQLModel, table=True):
     orders: List["Order"]            = Relationship(back_populates="robot")
     commands: List["RobotCommand"]   = Relationship(back_populates="robot")
     cleaning_tasks: List["CleaningTask"] = Relationship(back_populates="robot")
-
-    # ← No positional args here
-    poses: List["Pose6D"] = Relationship(
-        back_populates="robot",
-        sa_relationship_kwargs={
-            # string‐based join to avoid NameErrors at class‐def time
-            "primaryjoin": (
-                "and_("
-                "robot.c.id == pose6d.c.entity_id, "
-                "pose6d.c.entity_type == 'ALBABOT'"
-                ")"
-            ),
-            "cascade": "all, delete-orphan",
-            "lazy": "selectin",
-        },
-    )

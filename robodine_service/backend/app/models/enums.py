@@ -5,6 +5,9 @@ from sqlalchemy import Enum as SQLEnum
 class EntityType(str, Enum):
     COOKBOT = "COOKBOT"
     ALBABOT = "ALBABOT"
+    PINKY = "PINKY"
+    GLOBAL = "GLOBAL"
+    WORLD = "WORLD"
     INVENTORY = "INVENTORY"
     CHATBOT = "CHATBOT"
 
