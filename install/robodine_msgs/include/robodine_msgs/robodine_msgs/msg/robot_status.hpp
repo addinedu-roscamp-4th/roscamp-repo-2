@@ -1,1 +1,0 @@
-/home/addinedu/dev_ws/build/robodine_msgs/rosidl_generator_cpp/robodine_msgs/msg/robot_status.hpp
