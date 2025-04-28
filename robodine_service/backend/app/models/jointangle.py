@@ -9,7 +9,7 @@ from .enums import EntityType
 if TYPE_CHECKING:
     from .robot import Robot
 
-class JointAngles(SQLModel, table=True):
+class JointAngle(SQLModel, table=True):
     __tablename__ = "jointangles"
 
     id: Optional[int] = Field(default=None, primary_key=True)

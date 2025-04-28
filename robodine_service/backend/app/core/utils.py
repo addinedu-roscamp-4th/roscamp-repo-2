@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.models.robot import Robot
 from app.models.pose6d import Pose6D
-from app.models.jointangle import JointAngles
+from app.models.jointangle import JointAngle
 from app.models.albabot import Albabot
 from app.models.cookbot import Cookbot
 
@@ -56,12 +56,13 @@ def _handle_albabot(session: Session, data: Dict[str, Any]):
 
 def _handle_cookbot(session: Session, data: Dict[str, Any]):
     robot_id = data["robot_id"]
-    # 1) 기존 status를 그대로 가져오기
-    last_status = _get_last_status(session, robot_id)
+    # # 1) 기존 status를 그대로 가져오기
+    # last_status = _get_last_status(session, robot_id)
     # 2) Robot 테이블에 status만 이전 값 그대로 업데이트
     session.add(Cookbot(
         robot_id=robot_id,
-        status=last_status,
+        status=data["status"],
+        # status=last_status,
     ))
     # 3) Endpoint Pose6D 레코드 추가
     session.add(Pose6D(
@@ -76,7 +77,7 @@ def _handle_cookbot(session: Session, data: Dict[str, Any]):
         yaw=data["endpoint_yaw"],
     ))
     # 4) JointAngle 레코드 추가
-    session.add(JointAngles(
+    session.add(JointAngle(
         robot_id=robot_id,
         timestamp=datetime.now(),
         joint_1=data["angle_1"],
