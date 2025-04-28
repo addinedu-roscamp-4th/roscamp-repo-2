@@ -1,0 +1,121 @@
+prompt,result
+안녕 핑키!,greetings
+좋은 아침이야 핑키!,greetings
+핑키야 오늘 어때?,greetings
+잘 지냈어 핑키?,greetings
+하이 핑키!,greetings
+핑키야 좋은 하루!,greetings
+핑키야 힘내자!,greetings
+오늘도 잘 부탁해 핑키!,greetings
+오랜만이야 핑키!,greetings
+핑키야 기분 좋아 보여!,greetings
+핑키야 하이루~,greetings
+오늘도 밝게 인사해줘 핑키!,greetings
+좋은 하루 보내자 핑키!,greetings
+핑키야 아자아자!,greetings
+핑키야 오늘은 어때?,greetings
+핑키야 웃어줘!,greetings
+핑키야 반가워!,greetings
+핑키야 오늘 파이팅!,greetings
+핑키야 오늘도 화이팅!,greetings
+핑키야 반갑습니다!,greetings
+1번 테이블 생일 파티 준비해줘,birthday
+2번 테이블 생일 이벤트 해줘,birthday
+4번 테이블에 생일 축하해줘,birthday
+5번 테이블 케이크 준비해줘,birthday
+6번 테이블 생일 서프라이즈 해줘,birthday
+3번 테이블 풍선 데코 해줘,birthday
+7번 테이블 생일송 불러줘,birthday
+1번 테이블 생일 축하 노래 틀어줘,birthday
+2번 테이블 생일 손님 맞이해줘,birthday
+5번 테이블 생일 기념 사진 찍어줘,birthday
+6번 테이블 케이크 서빙해줘,birthday
+7번 테이블 초 불어줘,birthday
+3번 테이블 생일 메시지 전달해줘,birthday
+4번 테이블 이벤트 시작해줘,birthday
+1번 테이블 파티 모드로 해줘,birthday
+2번 테이블에 생일축하 장식 추가해줘,birthday
+5번 테이블에 특별 서비스 해줘,birthday
+6번 테이블에 생일 세팅 해줘,birthday
+7번 테이블에 깜짝 선물 준비해줘,birthday
+3번 테이블 생일 카드 전달해줘,birthday
+3번 테이블 바닥 좀 닦아줘,cleaning
+2번 테이블 물기 제거해줘,cleaning
+4번 테이블 청소 부탁해,cleaning
+5번 테이블 걸레질 해줘,cleaning
+6번 테이블 먼지 닦아줘,cleaning
+1번 테이블 깔끔하게 정리해줘,cleaning
+2번 테이블 청결 확인해줘,cleaning
+3번 테이블 음식물 제거해줘,cleaning
+5번 테이블 바닥 닦아줘,cleaning
+6번 테이블 얼룩 제거해줘,cleaning
+1번 테이블 크럼 제거해줘,cleaning
+2번 테이블 주변 정리해줘,cleaning
+3번 테이블 바닥 청소해줘,cleaning
+4번 테이블 구석 정리해줘,cleaning
+5번 테이블 깨끗이 치워줘,cleaning
+6번 테이블 청소해줘,cleaning
+1번 테이블 위생 점검해줘,cleaning
+2번 테이블 물기 닦아줘,cleaning
+3번 테이블 정리 정돈해줘,cleaning
+5번 테이블 청소 완료해줘,cleaning
+2번 테이블에 서빙 해줘,serving
+3번 테이블에 음료 가져다줘,serving
+4번 테이블에 음식 나르기,serving
+5번 테이블에 주문 전달해줘,serving
+6번 테이블에 디저트 가져다줘,serving
+1번 테이블에 음료 서빙해줘,serving
+2번 테이블에 메인 요리 가져다줘,serving
+3번 테이블에 사이드 메뉴 전달해줘,serving
+5번 테이블에 물 서빙해줘,serving
+6번 테이블에 커피 가져다줘,serving
+1번 테이블에 맥주 서빙해줘,serving
+2번 테이블에 와인 나르기,serving
+3번 테이블에 에피타이저 서빙해줘,serving
+4번 테이블에 디저트 나르기,serving
+5번 테이블에 음료 리필해줘,serving
+6번 테이블에 추가 주문 전달해줘,serving
+1번 테이블에 핫초코 서빙해줘,serving
+2번 테이블에 샐러드 가져다줘,serving
+3번 테이블에 스테이크 서빙해줘,serving
+5번 테이블에 생수 가져다줘,serving
+2번 핑키 지금 뭐가 보여?,camera on
+1번 핑키 뭐가 보이는지 설명해,camera on
+3번 핑키 카메라 켜서 뭐가 보이는지 말해줘,camera on
+2번 핑키 주변 상황 보여줘,camera on
+3번 핑키 시야를 공유해줘,camera on
+4번 핑키 카메라로 현재 상태 알려줘,camera on
+1번 핑키 화면 공유해줘,camera on
+2번 핑키 주변 촬영해줘,camera on
+3번 핑키 앞쪽 모습 보여줘,camera on
+4번 핑키 테이블 상황 확인해줘,camera on
+5번 핑키 카메라로 확인해줘,camera on
+1번 핑키 주변 영상 보여줘,camera on
+2번 핑키 카메라로 주변 알려줘,camera on
+3번 핑키 1번 테이블 보여줘,camera on
+4번 핑키 2번 테이블 상황 보여줘,camera on
+5번 핑키 3번 테이블 상황 보여줘,camera on
+1번 핑키 전방 촬영해줘,camera on
+2번 핑키 실시간 화면 보여줘,camera on
+3번 핑키 바로 앞 테이블 보여줘,camera on
+4번 핑키 카메라 각도 조정해서 보여줘,camera on
+핑키들, 지금 매장에 화재 발생!,emergency
+핑키야 매장에 연기나!,emergency
+긴급상황이야 핑키!,emergency
+핑키야 손님이 넘어졌어!,emergency
+1번 테이블에 긴급 상황 발생!,emergency
+핑키야 화재 경보기 울렸어!,emergency
+핑키야 매장에 물이 새!,emergency
+핑키야 다친 손님 있어!,emergency
+핑키야 응급처치 키트 가져와!,emergency
+4번 테이블 응급상황 발생!,emergency
+핑키야 매장에 전기 문제야!,emergency
+핑키야 매장에 가스 누출 같아!,emergency
+2번 테이블 손님이 아파 보여!,emergency
+핑키야 구조 요청해!,emergency
+핑키야 긴급 대피 준비해!,emergency
+핑키야 매장에 큰 소란 있어!,emergency
+3번 테이블 사고 발생!,emergency
+핑키야 바로 매니저 호출해!,emergency
+핑키야 구급차 요청해줘!,emergency
+핑키야 주변 손님들 대피 안내해!,emergency
