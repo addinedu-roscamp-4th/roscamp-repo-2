@@ -4,6 +4,7 @@
     msg_type: "Albabot",
     robot_id: int,
     battery_level: int,
+    status: RobotStatus,
     pinky_x: float,
     pinky_y: float,
     pinky_z: float,
@@ -28,7 +29,7 @@
 {
     robot_id: robot_id,
     battery_level: battery_level,
-    status: status(recent),
+    status: status,
     timestamp: now(),
 }
 

@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Depends
-from app.services.inventory_service import update_inventory  # 서비스 파일 호출
 from pydantic import BaseModel
 from typing import Optional
 from app.models.inventory import Inventory
