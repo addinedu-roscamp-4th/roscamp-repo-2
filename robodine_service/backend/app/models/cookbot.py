@@ -18,4 +18,4 @@ class Cookbot(SQLModel, table=True):
     status: Optional[RobotStatus] = Field(
         sa_column=Column(SQLEnum(RobotStatus, name="robot_status"))
     )
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)

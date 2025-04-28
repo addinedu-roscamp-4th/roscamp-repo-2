@@ -7,5 +7,5 @@ class Emergency(SQLModel, table=True):
     emergency_type: Optional[str] = None
     description: Optional[str] = None
     is_active: bool = Field(default=True)
-    reported_at: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     resolved_at: Optional[datetime] = None

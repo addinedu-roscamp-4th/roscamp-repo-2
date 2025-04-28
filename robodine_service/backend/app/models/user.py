@@ -19,7 +19,7 @@ class Notification(SQLModel, table=True):
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
     type: Optional[str] = None
     message: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     status: Optional[NotificationStatus] = Field(sa_column=Column(SQLEnum(NotificationStatus)))
     
     user: Optional[User] = Relationship(back_populates="notifications") 

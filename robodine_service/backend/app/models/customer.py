@@ -8,8 +8,7 @@ class Customer(SQLModel, table=True):
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     count: Optional[int] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     
     assignments: List["GroupAssignment"] = Relationship(back_populates="customer")
-    waiting: Optional["WaitingList"] = Relationship(back_populates="customer")
     orders: List["Order"] = Relationship(back_populates="customer")

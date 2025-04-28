@@ -25,7 +25,7 @@ class Order(SQLModel, table=True):
     robot_id:    Optional[int] = Field(default=None, foreign_key="robot.id")
     kiosk_id:    Optional[int] = Field(default=None, foreign_key="kioskterminal.id")
     status:      Optional[OrderStatus] = Field(sa_column=Column(SQLEnum(OrderStatus)))
-    ordered_at:  datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     served_at:   Optional[datetime] = None
 
     # 위에서 정의한 Customer.orders 와 짝을 이루도록 back_populates="orders"

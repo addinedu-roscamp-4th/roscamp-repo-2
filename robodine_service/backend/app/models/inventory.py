@@ -20,7 +20,7 @@ class Inventory(SQLModel, table=True):
     status: Optional[InventoryStatus] = Field(
         sa_column=Column(SQLEnum(InventoryStatus, name="inventory_status"))
     )
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
 
 

@@ -11,7 +11,12 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel
 
-from app.routes import robots, control, poses, websockets, streaming, inventories
+from app.routes import (
+    poses, websockets, streaming, inventories,
+    robot, albabot, cookbot, auth, users, settings, customers,
+    tables, kiosks, orders, menu, events, emergencies, 
+    video_streams
+)
 from app.routes.websockets import router as websocket_router
 from app.routes.streaming import router as streaming_router
 from app.core.db_config import engine
@@ -45,12 +50,28 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Include routers
 app.include_router(websocket_router, tags=["websocket"])
-app.include_router(robots.router, prefix="/robots", tags=["robots"])
-app.include_router(inventories.router, prefix="/inventories", tags=["inventories"])
-app.include_router(control.router, prefix="/control", tags=["control"])
+app.include_router(inventories.router, prefix="/inventory", tags=["inventory"])
 app.include_router(streaming.router, prefix="/stream", tags=["streaming"]) # RTSP 스트리밍 관련 라우터
 app.include_router(poses.router, prefix="/pose6d", tags=["pose6d"])
+
+# New routers
+app.include_router(robot.router, prefix="/robot", tags=["robot"])
+app.include_router(albabot.router, prefix="/albabot", tags=["albabot"])
+app.include_router(cookbot.router, prefix="/cookbot", tags=["cookbot"])
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(settings.router, prefix="/settings", tags=["settings"])
+app.include_router(customers.router, prefix="/customers", tags=["customers"])
+app.include_router(tables.router, prefix="/tables", tags=["tables"])
+app.include_router(kiosks.router, prefix="/kiosks", tags=["kiosks"])
+app.include_router(orders.router, prefix="/orders", tags=["orders"])
+app.include_router(menu.router, prefix="/menu", tags=["menu"])
+app.include_router(events.router, prefix="/events", tags=["events"])
+app.include_router(emergencies.router, prefix="/emergencies", tags=["emergencies"])
+app.include_router(video_streams.router, prefix="/video-streams", tags=["video_streams"])
 
 # --- TCP SERVER -----------------------------------------------------------
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):

@@ -20,7 +20,7 @@ class Robot(SQLModel, table=True):
     )
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
     # Relationships
     orders: List["Order"]            = Relationship(back_populates="robot")

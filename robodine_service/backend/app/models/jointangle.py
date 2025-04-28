@@ -14,7 +14,7 @@ class JointAngle(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     robot_id: int = Field(default=None)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
     # Joint angles
     joint1: float

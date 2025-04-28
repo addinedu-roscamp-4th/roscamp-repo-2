@@ -9,5 +9,5 @@ class VideoStream(SQLModel, table=True):
     source_type: Optional[StreamSourceType] = Field(sa_column=Column(SQLEnum(StreamSourceType)))
     source_id: Optional[str] = None
     url: Optional[str] = None
-    last_checked: datetime = Field(default_factory=datetime.utcnow)
+    last_checked: Optional[datetime] = Field(default_factory=datetime.utcnow)
     status: Optional[StreamStatus] = Field(sa_column=Column(SQLEnum(StreamStatus)))

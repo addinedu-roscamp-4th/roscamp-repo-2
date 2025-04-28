@@ -22,7 +22,7 @@ class Pose6D(SQLModel, table=True):
         )
     )
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
     # Pose fields
     x: float

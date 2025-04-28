@@ -14,7 +14,7 @@ class RobotCommand(SQLModel, table=True):
     command: Optional[str] = None
     parameters: Optional[Dict] = Field(sa_column=Column(JSON))
     status: Optional[CommandStatus] = Field(sa_column=Column(SQLEnum(CommandStatus)))
-    issued_at: Optional[datetime] = None
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     executed_at: Optional[datetime] = None
     
     # Relationship

@@ -19,4 +19,4 @@ class Albabot(SQLModel, table=True):
         sa_column=Column(SQLEnum(RobotStatus, name="robot_status"))
     )
     battery_level: Optional[float] = Field
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
