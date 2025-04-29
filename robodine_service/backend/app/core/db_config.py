@@ -1,11 +1,11 @@
-from sqlmodel import create_engine
+from sqlmodel import create_engine, SQLModel, Session
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = "postgresql+psycopg2://robodine_user:robodine_pass@localhost:5432/robodine_db"
+DATABASE_URL = "sqlite:///./robodine.db"
 
 # 데이터베이스 연결 엔진 생성
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
 
 # 세션 생성기 설정
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -15,8 +15,13 @@ Base = declarative_base()
 
 def get_db():
     """Dependency to get a database session."""
-    db = SessionLocal()
+    db = Session(engine)
     try:
         yield db
     finally:
         db.close()
+
+# 의존성 주입을 위한 세션 팩토리
+def get_session():
+    with Session(engine) as session:
+        return session

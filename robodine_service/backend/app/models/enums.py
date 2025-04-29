@@ -61,6 +61,7 @@ class StreamStatus(str, Enum):
 
 class UserRole(str, Enum):
     ADMIN = "ADMIN"
+    EMPLOYEE = "EMPLOYEE"
     KIOSK = "KIOSK"
 
 class NotificationStatus(str, Enum):
