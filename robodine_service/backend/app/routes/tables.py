@@ -18,7 +18,7 @@ class TableResponse(BaseModel):
     status: TableStatus
 
 class TableCreateRequest(BaseModel):
-    number: int
+    table_number: int
     max_customer: int
 
 class AssignTableRequest(BaseModel):
@@ -40,7 +40,7 @@ def get_tables(db: Session = Depends(get_db)):
 @router.post("", response_model=dict)
 def create_table(table_data: TableCreateRequest, db: Session = Depends(get_db)):
     # Check if table number already exists
-    existing_table = db.query(Table).filter(Table.table_number == table_data.number).first()
+    existing_table = db.query(Table).filter(Table.table_number == table_data.table_number).first()
     if existing_table:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -49,7 +49,7 @@ def create_table(table_data: TableCreateRequest, db: Session = Depends(get_db)):
     
     # Create new table
     new_table = Table(
-        table_number=table_data.number,
+        table_number=table_data.table_number,
         max_customer=table_data.max_customer,
         status=TableStatus.AVAILABLE
     )

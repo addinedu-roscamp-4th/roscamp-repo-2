@@ -1,50 +1,46 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+# app/routes/customers.py
+from fastapi import APIRouter, Depends, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 from pydantic import BaseModel
+from datetime import datetime
 
 from app.core.db_config import get_db
-from app.models import Customer, User
-from app.routes.auth import get_current_user
+from app.models.customer import Customer
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/customers",
+    tags=["customers"],
+)
 
-# --- Customer Models ---
-class CustomerResponse(BaseModel):
-    id: int
-    count: int
-    created_at: datetime
-
+# --- Pydantic Schemas ---
 class CustomerCreateRequest(BaseModel):
     count: int
 
-# --- Router Endpoints ---
-@router.get("", response_model=List[CustomerResponse])
-def get_customers(db: Session = Depends(get_db)):
-    customers = db.query(Customer).all()
-    return [
-        CustomerResponse(
-            id=customer.id,
-            count=customer.count,
-            created_at=customer.created_at
-        ) for customer in customers
-    ]
+class CustomerResponse(BaseModel):
+    id: int
+    count: int
+    timestamp: datetime
 
-@router.post("", response_model=CustomerResponse)
-def create_customer(customer_data: CustomerCreateRequest, db: Session = Depends(get_db)):
-    # Create new customer group
-    new_customer = Customer(
-        count=customer_data.count,
-        created_at=datetime.utcnow()
-    )
-    
+    class Config:
+        orm_mode = True
+
+# --- Endpoints ---
+@router.get("", response_model=List[CustomerResponse])
+def list_customers(db: Session = Depends(get_db)):
+    """
+    모든 고객 그룹 조회
+    """
+    return db.query(Customer).all()
+
+@router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
+def create_customer(request: CustomerCreateRequest, db: Session = Depends(get_db)):
+    """
+    새로운 고객 그룹 생성
+    """
+    new_customer = Customer(count=request.count)
     db.add(new_customer)
     db.commit()
     db.refresh(new_customer)
-    
-    return CustomerResponse(
-        id=new_customer.id,
-        count=new_customer.count,
-        created_at=new_customer.created_at
-    ) 
+    return new_customer

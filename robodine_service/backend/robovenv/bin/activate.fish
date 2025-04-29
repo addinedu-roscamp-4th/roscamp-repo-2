@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/addinedu/dev_ws/robodine_project/robodine_service/backend/robovenv
+set -gx VIRTUAL_ENV /home/addinedu/dev_ws/roscamp-repo-2/robodine_service/backend/robovenv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

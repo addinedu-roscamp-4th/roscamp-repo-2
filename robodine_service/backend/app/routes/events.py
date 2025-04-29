@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.core.db_config import get_db
 from app.models import Event, SystemLog, User
-from app.models.enums import EventType, UserRole
+from app.models.enums import EventType, UserRole, EntityType
 from app.routes.auth import get_current_user
 
 router = APIRouter()
@@ -15,14 +15,14 @@ router = APIRouter()
 class EventResponse(BaseModel):
     id: int
     type: EventType
-    related_entity_type: str
+    related_entity_type: EntityType
     related_entity_id: str
     description: str
     timestamp: datetime
 
 class EventCreateRequest(BaseModel):
     type: EventType
-    related_entity_type: str
+    related_entity_type: EntityType
     related_entity_id: str
     description: str
 

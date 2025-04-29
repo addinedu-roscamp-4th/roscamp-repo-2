@@ -20,7 +20,7 @@ class InventoryCreateRequest(BaseModel):
     ingredient_id: int
     name: str
     count: int
-    status: str
+    status: InventoryStatus
 
 class MenuItemData(BaseModel):
     id: int

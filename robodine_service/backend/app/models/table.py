@@ -6,7 +6,7 @@ from .enums import TableStatus
 
 class Table(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    number: Optional[int] = None
+    table_number: Optional[int] = None
     max_customer: Optional[int] = None
     status: Optional[TableStatus] = Field(sa_column=Column(SQLEnum(TableStatus)))
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
