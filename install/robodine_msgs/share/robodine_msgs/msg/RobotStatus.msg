@@ -1,1 +1,0 @@
-/home/addinedu/dev_ws/src/robodine_msgs/msg/RobotStatus.msg
