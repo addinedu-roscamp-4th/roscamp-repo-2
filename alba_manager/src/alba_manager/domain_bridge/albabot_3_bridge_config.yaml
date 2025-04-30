@@ -1,0 +1,12 @@
+# Name of the domain bridge, used for node naming and logging
+name: albabot_3
+from_domain: 58
+to_domain: 112
+topics:
+  pinky_battery_present:
+    type: std_msgs/msg/Float32
+    remap: /albabot_3/pinky_battery_present
+
+  tracked_pose:
+    type: geometry_msgs/msg/PoseStamped
+    remap: /albabot_3/tracked_pose
