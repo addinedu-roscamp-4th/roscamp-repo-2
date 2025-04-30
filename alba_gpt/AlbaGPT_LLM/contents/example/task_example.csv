@@ -1,101 +1,141 @@
 prompt,result
-안녕 핑키!,greetings
-좋은 아침이야 핑키!,greetings
-핑키야 오늘 어때?,greetings
-잘 지냈어 핑키?,greetings
-하이 핑키!,greetings
-핑키야 좋은 하루!,greetings
-핑키야 힘내자!,greetings
-오늘도 잘 부탁해 핑키!,greetings
-오랜만이야 핑키!,greetings
-핑키야 기분 좋아 보여!,greetings
-핑키야 하이루~,greetings
-오늘도 밝게 인사해줘 핑키!,greetings
-좋은 하루 보내자 핑키!,greetings
-핑키야 아자아자!,greetings
-핑키야 오늘은 어때?,greetings
-핑키야 웃어줘!,greetings
-핑키야 반가워!,greetings
-핑키야 오늘 파이팅!,greetings
-핑키야 오늘도 화이팅!,greetings
-핑키야 반갑습니다!,greetings
-1번 테이블 생일 파티 준비해줘,birthday
-2번 테이블 생일 이벤트 해줘,birthday
-4번 테이블에 생일 축하해줘,birthday
-5번 테이블 케이크 준비해줘,birthday
-6번 테이블 생일 서프라이즈 해줘,birthday
-3번 테이블 풍선 데코 해줘,birthday
-7번 테이블 생일송 불러줘,birthday
-1번 테이블 생일 축하 노래 틀어줘,birthday
-2번 테이블 생일 손님 맞이해줘,birthday
-5번 테이블 생일 기념 사진 찍어줘,birthday
-6번 테이블 케이크 서빙해줘,birthday
-7번 테이블 초 불어줘,birthday
-3번 테이블 생일 메시지 전달해줘,birthday
-4번 테이블 이벤트 시작해줘,birthday
-1번 테이블 파티 모드로 해줘,birthday
-2번 테이블에 생일축하 장식 추가해줘,birthday
-5번 테이블에 특별 서비스 해줘,birthday
-6번 테이블에 생일 세팅 해줘,birthday
-7번 테이블에 깜짝 선물 준비해줘,birthday
-3번 테이블 생일 카드 전달해줘,birthday
-3번 테이블 바닥 좀 닦아줘,cleaning
-2번 테이블 물기 제거해줘,cleaning
-4번 테이블 청소 부탁해,cleaning
-5번 테이블 걸레질 해줘,cleaning
-6번 테이블 먼지 닦아줘,cleaning
-1번 테이블 깔끔하게 정리해줘,cleaning
-2번 테이블 청결 확인해줘,cleaning
-3번 테이블 음식물 제거해줘,cleaning
-5번 테이블 바닥 닦아줘,cleaning
-6번 테이블 얼룩 제거해줘,cleaning
-1번 테이블 크럼 제거해줘,cleaning
-2번 테이블 주변 정리해줘,cleaning
-3번 테이블 바닥 청소해줘,cleaning
-4번 테이블 구석 정리해줘,cleaning
-5번 테이블 깨끗이 치워줘,cleaning
-6번 테이블 청소해줘,cleaning
-1번 테이블 위생 점검해줘,cleaning
-2번 테이블 물기 닦아줘,cleaning
-3번 테이블 정리 정돈해줘,cleaning
-5번 테이블 청소 완료해줘,cleaning
-2번 테이블에 서빙 해줘,serving
-3번 테이블에 음료 가져다줘,serving
-4번 테이블에 음식 나르기,serving
-5번 테이블에 주문 전달해줘,serving
-6번 테이블에 디저트 가져다줘,serving
-1번 테이블에 음료 서빙해줘,serving
-2번 테이블에 메인 요리 가져다줘,serving
-3번 테이블에 사이드 메뉴 전달해줘,serving
-5번 테이블에 물 서빙해줘,serving
-6번 테이블에 커피 가져다줘,serving
-1번 테이블에 맥주 서빙해줘,serving
-2번 테이블에 와인 나르기,serving
-3번 테이블에 에피타이저 서빙해줘,serving
-4번 테이블에 디저트 나르기,serving
-5번 테이블에 음료 리필해줘,serving
-6번 테이블에 추가 주문 전달해줘,serving
-1번 테이블에 핫초코 서빙해줘,serving
-2번 테이블에 샐러드 가져다줘,serving
-3번 테이블에 스테이크 서빙해줘,serving
-5번 테이블에 생수 가져다줘,serving
-2번 핑키 지금 뭐가 보여?,camera on
-1번 핑키 뭐가 보이는지 설명해,camera on
-3번 핑키 카메라 켜서 뭐가 보이는지 말해줘,camera on
-2번 핑키 주변 상황 보여줘,camera on
-3번 핑키 시야를 공유해줘,camera on
-4번 핑키 카메라로 현재 상태 알려줘,camera on
-1번 핑키 화면 공유해줘,camera on
-2번 핑키 주변 촬영해줘,camera on
-3번 핑키 앞쪽 모습 보여줘,camera on
-4번 핑키 테이블 상황 확인해줘,camera on
-5번 핑키 카메라로 확인해줘,camera on
-1번 핑키 주변 영상 보여줘,camera on
-2번 핑키 카메라로 주변 알려줘,camera on
-3번 핑키 1번 테이블 보여줘,camera on
-4번 핑키 2번 테이블 상황 보여줘,camera on
-5번 핑키 3번 테이블 상황 보여줘,camera on
-1번 핑키 전방 촬영해줘,camera on
-2번 핑키 실시간 화면 보여줘,camera on
-3번 핑키 바로 앞 테이블 보여줘,camera on
-4번 핑키 카메라 각도 조정해서 보여줘,camera on
+안녕 핑키!,GREETINGS
+좋은 아침이야 핑키!,GREETINGS
+핑키야 오늘 어때?,GREETINGS
+잘 지냈어 핑키?,GREETINGS
+하이 핑키!,GREETINGS
+핑키야 좋은 하루!,GREETINGS
+핑키야 힘내자!,GREETINGS
+오늘도 잘 부탁해 핑키!,GREETINGS
+오랜만이야 핑키!,GREETINGS
+핑키야 기분 좋아 보여!,GREETINGS
+핑키야 하이루~,GREETINGS
+오늘도 밝게 인사해줘 핑키!,GREETINGS
+좋은 하루 보내자 핑키!,GREETINGS
+핑키야 아자아자!,GREETINGS
+핑키야 오늘은 어때?,GREETINGS
+핑키야 웃어줘!,GREETINGS
+핑키야 반가워!,GREETINGS
+핑키야 오늘 파이팅!,GREETINGS
+핑키야 오늘도 화이팅!,GREETINGS
+핑키야 반갑습니다!,GREETINGS
+1번 핑키 베터리가 부족해 보이는데,MAINTENANCE
+2번 핑키 베터리 충전하러 가,MAINTENANCE
+3번 핑키 배터리 잔량 얼마 안 남은 것 같아,MAINTENANCE
+2번 핑키 충전기 꽂고 와,MAINTENANCE
+3번 핑키 충전 좀 하고 와야겠어,MAINTENANCE
+1번 핑키 배터리 경고 떴어,MAINTENANCE
+4번 핑키 전원 꺼질 것 같아,MAINTENANCE
+5번 핑키 방전되기 전에 충전하자,MAINTENANCE
+5번 핑키 배터리 상태 확인해 줘,MAINTENANCE
+3번 핑키 충전 스테이션으로 가자,MAINTENANCE
+4번 핑키 전력 부족 알림 받았어,MAINTENANCE
+2번 핑키 전력 좀 채우자,MAINTENANCE
+3번 핑키 배터리 모드 전환해,MAINTENANCE
+5번 핑키 파워 세이브 모드 들어가,MAINTENANCE
+5번 핑키 전원 상태 좀 체크해 줘,MAINTENANCE
+4번 핑키 오늘 충전 안 했지?,MAINTENANCE
+7번 핑키 에너지 부족 메시지 떴어,MAINTENANCE
+6번 핑키 너무 오래 움직였어, 충전하자,MAINTENANCE
+2번 핑키 전원 꺼지기 전에 베이스로 돌아가,MAINTENANCE
+3번 핑키 충전소로 복귀해,MAINTENANCE
+3번 테이블 바닥 좀 닦아줘,CLEANING
+2번 테이블 물기 제거해줘,CLEANING
+4번 테이블 청소 부탁해,CLEANING
+5번 테이블 걸레질 해줘,CLEANING
+6번 테이블 먼지 닦아줘,CLEANING
+1번 테이블 깔끔하게 정리해줘,CLEANING
+2번 테이블 청결 확인해줘,CLEANING
+3번 테이블 음식물 제거해줘,CLEANING
+5번 테이블 바닥 닦아줘,CLEANING
+6번 테이블 얼룩 제거해줘,CLEANING
+1번 테이블 크럼 제거해줘,CLEANING
+2번 테이블 주변 정리해줘,CLEANING
+3번 테이블 바닥 청소해줘,CLEANING
+4번 테이블 구석 정리해줘,CLEANING
+5번 테이블 깨끗이 치워줘,CLEANING
+6번 테이블 청소해줘,CLEANING
+1번 테이블 위생 점검해줘,CLEANING
+2번 테이블 물기 닦아줘,CLEANING
+3번 테이블 정리 정돈해줘,CLEANING
+5번 테이블 청소 완료해줘,CLEANING
+2번 테이블에 서빙 해줘,SERVING
+3번 테이블에 음료 가져다줘,SERVING
+4번 테이블에 음식 나르기,SERVING
+5번 테이블에 주문 전달해줘,SERVING
+6번 테이블에 디저트 가져다줘,SERVING
+1번 테이블에 음료 서빙해줘,SERVING
+2번 테이블에 메인 요리 가져다줘,SERVING
+3번 테이블에 사이드 메뉴 전달해줘,SERVING
+5번 테이블에 물 서빙해줘,SERVING
+6번 테이블에 커피 가져다줘,SERVING
+1번 테이블에 맥주 서빙해줘,SERVING
+2번 테이블에 와인 나르기,SERVING
+3번 테이블에 에피타이저 서빙해줘,SERVING
+4번 테이블에 디저트 나르기,SERVING
+5번 테이블에 음료 리필해줘,SERVING
+6번 테이블에 추가 주문 전달해줘,SERVING
+1번 테이블에 핫초코 서빙해줘,SERVING
+2번 테이블에 샐러드 가져다줘,SERVING
+3번 테이블에 스테이크 서빙해줘,SERVING
+5번 테이블에 생수 가져다줘,SERVING
+2번 핑키 지금 뭐가 보여?,CAMREA
+1번 핑키 뭐가 보이는지 설명해,CAMREA
+3번 핑키 카메라 켜서 뭐가 보이는지 말해줘,CAMREA
+2번 핑키 주변 상황 보여줘,CAMREA
+3번 핑키 시야를 공유해줘,CAMREA
+4번 핑키 카메라로 현재 상태 알려줘,CAMREA
+1번 핑키 화면 공유해줘,CAMREA
+2번 핑키 주변 촬영해줘,CAMREA
+3번 핑키 앞쪽 모습 보여줘,CAMREA
+4번 핑키 테이블 상황 확인해줘,CAMREA
+5번 핑키 카메라로 확인해줘,CAMREA
+1번 핑키 주변 영상 보여줘,CAMREA
+2번 핑키 카메라로 주변 알려줘,CAMREA
+3번 핑키 1번 테이블 보여줘,CAMREA
+4번 핑키 2번 테이블 상황 보여줘,CAMREA
+5번 핑키 3번 테이블 상황 보여줘,CAMREA
+1번 핑키 전방 촬영해줘,CAMREA
+2번 핑키 실시간 화면 보여줘,CAMREA
+3번 핑키 바로 앞 테이블 보여줘,CAMREA
+4번 핑키 카메라 각도 조정해서 보여줘,CAMREA
+1번 핑키 원상 복귀,IDLE
+2번 핑키 고생했어 하던 일 해,IDLE
+3번 핑키 기본 모드로 돌아가,IDLE
+2번 핑키 대기 상태로 전환,IDLE
+3번 핑키 지금 하던 일 계속 해,IDLE
+5번 핑키 쉬고 있어,IDLE
+4번 핑키 명령 없으니까 대기해,IDLE
+2번 핑키 평소처럼 움직여,IDLE
+1번 핑키 지시 없을 때 루틴 따라,IDLE
+2번 핑키 자율 모드로 전환,IDLE
+5번 핑키 자유롭게 움직여도 돼,IDLE
+6번 핑키 일단 멈추고 있어,IDLE
+4번 핑키 다음 명령 있을 때까지 대기,IDLE
+3번 핑키 알아서 하던 일 마저 해,IDLE
+4번 핑키 지금은 할 일 없어,IDLE
+2번 핑키 수고했어, 쉬어,IDLE
+5번 핑키 자율주행 시작,IDLE
+8번 핑키 명령 대기 중 상태로 전환,IDLE
+6번 핑키 지금은 아무것도 하지 마,IDLE
+5번 핑키 휴식 모드로 들어가,IDLE
+핑키들 지금 가게에 불났어,EMERGENCY
+핑키들 가게에 도둑이 들었어,EMERGENCY
+핑키들 매장에서 연기가 나고 있어,EMERGENCY
+핑키들 전기 합선 난 것 같아,EMERGENCY
+핑키들 고객이 기절했어,EMERGENCY
+핑키들 식기세척기에서 물이 새고 있어,EMERGENCY
+핑키들 주방에 불씨가 남아 있어,EMERGENCY
+핑키들 매장 안에 가스 냄새 나,EMERGENCY
+핑키들 정전 났어 조명 안 켜져,EMERGENCY
+핑키들 화장실에 물이 넘쳤어,EMERGENCY
+핑키들 누가 바닥에 넘어졌어,EMERGENCY
+핑키들 창고 문이 열려 있어 위험해,EMERGENCY
+핑키들 냉장고 전원이 꺼졌어,EMERGENCY
+핑키들 계산대 근처에 이상한 소리 들려,EMERGENCY
+핑키들 CCTV 연결이 끊겼어,EMERGENCY
+핑키들 천장에서 물이 떨어지고 있어,EMERGENCY
+핑키들 누가 칼 들고 난동 부리고 있어,EMERGENCY
+핑키들 매장 안에 연기 감지기 울렸어,EMERGENCY
+핑키들 손님이 갑자기 쓰러졌어,EMERGENCY
+핑키들 출입문이 고장 나서 안 열려,EMERGENCY
