@@ -1,4 +1,5 @@
 absl-py==2.1.0
+accelerate==1.6.0
 action-msgs==2.0.2
 action-tutorials-interfaces==0.33.5
 action-tutorials-py==0.33.5
@@ -488,7 +489,7 @@ threadpoolctl==3.6.0
 tiktoken==0.9.0
 timm==1.0.15
 tinycss2==1.4.0
-tokenizers==0.21.1
+tokenizers==0.19.1
 toml==0.10.2
 topic-monitor==0.33.5
 torch==2.6.0
@@ -497,7 +498,7 @@ tornado==6.4.2
 tqdm==4.67.1
 traitlets==5.14.3
 trajectory-msgs==5.3.6
-transformers==4.49.0
+transformers==4.40.0
 triton==3.2.0
 turtlesim==1.8.3
 type-description-interfaces==2.0.2

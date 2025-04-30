@@ -45,20 +45,3 @@ def alba_udp_server(stop_event, shared_data):
     sock.close()
     cv2.destroyAllWindows()
     return
-
-# def get_latest_frame():
-#     """
-#     지정된 AlbaBot으로 부터 가장 최신 프레임을 받아오는 함수입니다.
-#     """
-    
-#     if latest_frame is not None:
-#         final_frame = latest_frame.copy()
-#         recieved_image_path = 'test.jpg'
-
-#         cv2.imwrite(recieved_image_path, final_frame)
-#         print(f"Image successfully saved to {recieved_image_path}")
-#         cv2.destroyAllWindows()
-
-#         return latest_frame.copy()
-#     else :
-#         return
