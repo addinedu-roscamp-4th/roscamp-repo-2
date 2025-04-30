@@ -20,15 +20,15 @@ from AlbaGPT_communication import AlbaGPT_UDP
 
 load_dotenv()
 
-alba_work_type_list = ["cleaning", "serving", "birthday", "emergency"]
-alba_task_type_list = alba_work_type_list + ["greetings", "camera on"]
+alba_work_type_list = ["CLEANING", "SERVING", "MAINTENANCE", "EMERGENCY", "IDLE"]
+alba_task_type_list = alba_work_type_list + ["GREETINGS", "CAMREA_ON"]
 
 def alba_task_discriminator(user_query, alba_task_type_list=alba_task_type_list):
     """
     알바봇에게 입력된 프롬프트가 어떤 type의 명령인지 구분해주는 함수입니다.
     
     Returns : 
-        cleaning, serving, birthday, emergency, greetings, camera on, none 중 하나
+        CLEANING, SERVING, MAINTENANCE, EMERGENCY, GREETINGS, CAMREA_ON, none 중 하나
     """
     task_example_csv_path = './contents/example/task_example.csv' # 유저 프롬프트에 따른 분류된 task를 정리한 csv 파일
     fields = []
@@ -57,13 +57,13 @@ def alba_task_discriminator(user_query, alba_task_type_list=alba_task_type_list)
     
     판단 기준은 다음과 같습니다:
 
-    1. 요청이 인사인 경우 → 정확히 **"greetings"** 라고만 출력하세요.
+    1. 요청이 인사인 경우 → 정확히 **"GREETINGS"** 라고만 출력하세요.
     2. 요청이 작업 명령일 경우 → 해당 작업이 {alba_task_type_list} 배열 원소 중 무엇인지 판단하고, 해당 태스크 이름만 출력하세요.
-    3. 만약 "무엇이 보이냐", "보이는 것을 설명해달라"는 요청이 포함된다면, **camera on**으로 간주하세요. 이 경우 '카메라'라는 단어가 없어도 무조건 camera on으로 판단하세요.
+    3. 만약 "무엇이 보이냐", "보이는 것을 설명해달라"는 요청이 포함된다면, **CAMREA_ON**으로 간주하세요. 이 경우 '카메라'라는 단어가 없어도 무조건 CAMREA_ON으로 판단하세요.
     4. {alba_task_type_list}의 배열에 없는 원소에 대해서는 **"none"**을 출력하세요.
 
     이때 아래 조건을 반드시 따르세요:
-    - 출력은 반드시 **소문자** 단어 하나로만 답변하세요.
+    - 출력은 반드시 **대문자** 단어 하나로만 답변하세요.
     - 추가 설명, 문장, 다른 단어는 절대 포함하지 마세요.
     - 가능한 한 명확하고 단정적으로 판단하세요.
     - 설명, 문장, 구두점은 답변으로 내놓지 않아요.
@@ -118,16 +118,16 @@ def validate_alba_task_discriminator(user_query, alba_task_type_list=alba_task_t
 
 def generate_alba_greetings_response(user_query, chat_history, memory):
     """
-    alba_task_discriminator 함수로 구분된 task가 'greetings'인 경우 user_query에 대해 대답을 생성하여 json으로 반환해주는 함수입니다.
+    alba_task_discriminator 함수로 구분된 task가 'GREETINGS'인 경우 user_query에 대해 대답을 생성하여 json으로 반환해주는 함수입니다.
 
     Returns : JSON outputs
         {{
             "pinky_id" : {pinky_id},
-            "pinky_task" : greetings,
+            "pinky_task" : GREETINGS,
             "pinky_response" : {alba_greetings_response}
         }}
     """
-    greetings_example_csv_path = './contents/example/greetings_example.csv' # greetings 상황에 대한 응답을 정리한 csv 파일
+    greetings_example_csv_path = './contents/example/greetings_example.csv' # GREETINGS 상황에 대한 응답을 정리한 csv 파일
     fields = []
     greetings_example_list = []
 
@@ -148,8 +148,8 @@ def generate_alba_greetings_response(user_query, chat_history, memory):
         })
             
     greetings_example = "\n".join(
-        f'{{"prompt": "{greetings["prompt"]}", "pinky_id": "{greetings["pinky_id"]}", "pinky_task": "{greetings["pinky_task"]}", "pinky_response": "{greetings["pinky_response"]}"}}'
-        for greetings in greetings_example_list
+        f'{{"prompt": "{GREETINGS["prompt"]}", "pinky_id": "{GREETINGS["pinky_id"]}", "pinky_task": "{GREETINGS["pinky_task"]}", "pinky_response": "{GREETINGS["pinky_response"]}"}}'
+        for GREETINGS in greetings_example_list
     )
 
     alba_greetings_prompt = """
@@ -165,7 +165,7 @@ def generate_alba_greetings_response(user_query, chat_history, memory):
 
     [조건]
     1. pinky_id는 "X번 핑키!"에서의 X 입니다. 이때 X가 없으면 pinky_id는 비워두세요.
-    2. pinky_task는 무조건 string형 "greetings" 입니다.
+    2. pinky_task는 무조건 string형 "GREETINGS" 입니다.
     3. pinky_response는 {user_query}에 대한 string형 답변입니다.
     4. 출력은 반드시 JSON 형식의 텍스트만 반환해야 합니다.
     5. 절대 마크다운 형식(예: ```json, ``` 또는 ''' 등)을 사용하지 마세요.
@@ -317,13 +317,13 @@ def generate_alba_work_response(user_query, chat_history, memory, work):
 
 def generate_alba_camera_on_response(user_query, chat_history, recieved_image):
     """
-    alba_task_discriminator 함수로 구분된 task가 'camera on'인 경우 해당 알바 봇으로부터 수신되는 영상의 이미지 프레임을 토대로 상황을 해석하여 json으로 반환해주는 함수입니다.
+    alba_task_discriminator 함수로 구분된 task가 'CAMREA_ON'인 경우 해당 알바 봇으로부터 수신되는 영상의 이미지 프레임을 토대로 상황을 해석하여 json으로 반환해주는 함수입니다.
 
     Returns : JSON outputs
         {{
             "pinky_id" : {pinky_id},
-            "pinky_task" : greetings,
-            "pinky_response" : {alba_greetings_response}
+            "pinky_task" : CAMREA_ON,
+            "pinky_response" : {alba_camrea_on_response}
         }}
     """
     recieved_image_dir = './contents/image'
@@ -356,7 +356,7 @@ def generate_alba_camera_on_response(user_query, chat_history, recieved_image):
 
         [조건]
         1. pinky_id는 "X번 핑키!"에서의 X 입니다. 이때 X가 없으면 pinky_id는 비워두세요.
-        2. pinky_task는 무조건 string형 "camera on" 입니다.
+        2. pinky_task는 무조건 string형 "CAMREA_ON" 입니다.
         3. pinky_response는 {user_prompt}에 대한 string형 답변입니다.
         4. 출력은 반드시 JSON 형식의 텍스트만 반환해야 합니다.
         5. 절대 마크다운 형식(예: ```json, ``` 또는 ''' 등)을 사용하지 마세요.
@@ -380,20 +380,20 @@ def generate_alba_camera_on_response(user_query, chat_history, recieved_image):
 
         multimodal_llm = MultiModal(llm, system_prompt=multimodal_system_prompt, user_prompt=user_prompt)
 
-        alba_camera_on_response = multimodal_llm.invoke(recieved_image_path)
-        alba_camera_on_response = alba_camera_on_response.strip().strip('"""').strip()
-        alba_camera_on_response = alba_camera_on_response.strip().strip('').strip()
+        alba_camrea_on_response = multimodal_llm.invoke(recieved_image_path)
+        alba_camrea_on_response = alba_camrea_on_response.strip().strip('"""').strip()
+        alba_camrea_on_response = alba_camrea_on_response.strip().strip('').strip()
 
         try:
-            alba_camera_on_response = json.loads(alba_camera_on_response)
+            alba_camrea_on_response = json.loads(alba_camrea_on_response)
         except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format: {alba_camera_on_response}")
+            raise ValueError(f"Invalid JSON format: {alba_camrea_on_response}")
         
     else :
         print("❌ Error : 현재 카메라가 켜져있지 않습니다.")
         return 
 
-    return alba_camera_on_response
+    return alba_camrea_on_response
 
 def save_alba_response(task, alba_response) :
     """
@@ -405,8 +405,8 @@ def save_alba_response(task, alba_response) :
     if not os.path.exists(alba_response_dir) :
         os.makedirs(alba_response_dir)
 
-    if task == "greetings" :
-        greetings_file_path = os.path.join(alba_response_dir, 'greetings' + '_response.json')
+    if task == "GREETINGS" :
+        greetings_file_path = os.path.join(alba_response_dir, 'GREETINGS' + '_response.json')
 
         with open(greetings_file_path, 'a', encoding="UTF-8") as json_writer:
             json.dump(alba_response, json_writer, indent=4, ensure_ascii=False)
@@ -415,13 +415,13 @@ def save_alba_response(task, alba_response) :
         
         json_writer.close()
 
-    elif task == "camera on" :
-        camera_on_file_path = os.path.join(alba_response_dir, 'camera_on' + '_response.json')
+    elif task == "CAMREA_ON" :
+        CAMREA_ON_file_path = os.path.join(alba_response_dir, 'CAMREA_ON' + '_response.json')
 
-        with open(camera_on_file_path, 'a', encoding="UTF-8") as json_writer:
+        with open(CAMREA_ON_file_path, 'a', encoding="UTF-8") as json_writer:
             json.dump(alba_response, json_writer, indent=4, ensure_ascii=False)
             json_writer.write('\n\n')
-            print(f"⭕️ Alba response successfully saved to {camera_on_file_path}")
+            print(f"⭕️ Alba response successfully saved to {CAMREA_ON_file_path}")
         
         json_writer.close()
     
