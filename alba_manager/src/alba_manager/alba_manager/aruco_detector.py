@@ -47,13 +47,7 @@ class SendMapPosition(Node):
         self.pub_pos_timer = self.create_timer(0.1, self.timer_callback)
 
         # 마커 크기 및 3D 좌표 설정 (미터 단위)
-        marker_size = MARKER_SIZE_MM  # 35mm == 0.35
-        self.marker_3d_edges = np.array([
-            [0, 0, 0],
-            [0, marker_size, 0],
-            [marker_size, marker_size, 0],
-            [marker_size, 0, 0]
-        ], dtype='float32').reshape((4, 1, 3))
+        self.marker_size = MARKER_SIZE_MM  # 35mm == 0.35
 
         # 카메라 설정
         self.cap = cv2.VideoCapture(CAM_DEVICE)
@@ -85,43 +79,53 @@ class SendMapPosition(Node):
         corners, ids, rejected = self.detector.detectMarkers(frame_undistorted)
 
         # 마커가 검출되면 표시 및 포즈 추정
-        if corners is not None and len(corners) > 0:
-            for corner, id in zip(corners, ids):
+        if ids is not None:
+            # 검출된 마커 표시
+            #cv2.aruco.drawDetectedMarkers(frame_undistorted, corners, ids)
+
+            # 각 마커의 포즈 추정
+            rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
+                corners, self.marker_size, self.camera_matrix, self.dist_coeffs
+            )
+
+            # 각 마커에 대해 처리
+            for i in range(len(ids)):
                 # 코너 포인트 추출 및 표시
-                corner = np.array(corner).reshape((4, 2))
-                (topLeft, topRight, bottomRight, bottomLeft) = corner
+                # 좌표축 표시
+                """
+                cv2.drawFrameAxes(frame_undistorted, self.camera_matrix, self.dist_coeffs,
+                                rvecs[i], tvecs[i], self.marker_size/2)
+                """
 
-                center_x = int((topLeft[0] + bottomRight[0]) / 2)
-                center_y = int((topLeft[1] + bottomRight[1]) / 2)
+                # 마커의 3D 위치 표시
+                pos_x = tvecs[i][0][0]
+                pos_y = tvecs[i][0][1]
+                pos_z = tvecs[i][0][2]
 
-                # 코너 포인트 좌표 변환
-                topRightPoint = (int(topRight[0]), int(topRight[1]))
-                topLeftPoint = (int(topLeft[0]), int(topLeft[1]))
-                bottomRightPoint = (int(bottomRight[0]), int(bottomRight[1]))
-                bottomLeftPoint = (int(bottomLeft[0]), int(bottomLeft[1]))
+                # 회전 벡터를 오일러 각도로 변환
+                rot_matrix, _ = cv2.Rodrigues(rvecs[i])
+                euler_angles = cv2.RQDecomp3x3(rot_matrix)[0]
+                #euler_angles = [abs(angle) for angle in euler_angles]  # 각도를 절대값으로 변환
 
-                # PnP로 포즈 추정
-                ret, rvec, tvec = cv2.solvePnP(
-                    self.marker_3d_edges,
-                    corner.reshape((4, 1, 2)),  # reshape을 2D로
-                    self.camera_matrix,
-                    self.dist_coeffs
-                )
+                # 마커 정보 표시
+                corner = corners[i][0]
+                center_x = int(np.mean(corner[:, 0]))
+                center_y = int(np.mean(corner[:, 1]))
+
 
                 if ret:
                     # 위치 및 회전 정보 계산
-                    x = round(tvec[0][0], 2)
-                    y = round(tvec[1][0], 2)
-                    z = round(tvec[2][0], 2)
-                    rx = round(np.rad2deg(rvec[0][0]), 2)
-                    ry = round(np.rad2deg(rvec[1][0]), 2)
-                    rz = round(np.rad2deg(rvec[2][0]), 2)
+                    x = round(pos_x, 2)
+                    y = round(pos_y, 2)
+                    z = round(pos_z, 2)
+                    rx = round(euler_angles[0], 2)
+                    ry = round(euler_angles[1], 2)
+                    rz = round(euler_angles[2], 2)
 
                     # 위치 및 회전 정보 표시
                     map_pos_x, map_pos_y = webcam_to_map(center_x, center_y)
-                    #print(map_pos_x, map_pos_y)
                     msg = AlbabotCoordinate()
-                    msg.robot_id = int(id)
+                    msg.robot_id = int(ids[i][0])
                     msg.global_pose.position.x = float(round(center_x))
                     msg.global_pose.position.y = float(round(center_y))
                     msg.global_pose.position.z = 0.0
