@@ -1,15 +1,28 @@
-from typing import Optional, List
-from sqlmodel import SQLModel, Field, Relationship
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
 
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, Enum as SQLEnum
+
+from .enums import RobotStatus, EntityType
+
+if TYPE_CHECKING:
+    from .pose6d import Pose6D
+    from .order import Order
+
 class Robot(SQLModel, table=True):
-    id: str = Field(primary_key=True)  # Only ID is required
+    __tablename__ = "robot"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    robot_id: Optional[str] = Field(default=None, index=True)
+    type: Optional[EntityType] = Field(
+        sa_column=Column(SQLEnum(EntityType, name="entity_type"))
+    )
     mac_address: Optional[str] = None
     ip_address: Optional[str] = None
-    status: Optional[str] = None
-    location: Optional[str] = None
-    battery_level: Optional[int] = None
-    timestamp: Optional[datetime] = None
-    
-    # Optional relationships
-    orders: Optional[List["Order"]] = Relationship(back_populates="robot")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    # Relationships
+    orders: List["Order"]            = Relationship(back_populates="robot")
+    commands: List["RobotCommand"]   = Relationship(back_populates="robot")
+    cleaning_tasks: List["CleaningTask"] = Relationship(back_populates="robot")

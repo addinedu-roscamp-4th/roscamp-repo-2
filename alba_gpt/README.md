@@ -1,5 +1,6 @@
-### 파일 구조
+### 📁 파일 구조
 
+~~~
 AlbaGPT
 ├── AlbaGPT_communication 
 │   ├── AlbaGPT_UDP.py : AlbaGPT UDP 서버 
@@ -25,3 +26,4 @@ AlbaGPT
 ├── AlbaGPT_Vision
 ├── README.md
 └── requirements.txt : 가상환경 설정
+~~~

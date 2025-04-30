@@ -1,5 +1,5 @@
 from sqlmodel import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = "postgresql+psycopg2://robodine_user:robodine_pass@localhost:5432/robodine_db"
@@ -12,3 +12,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 기본 테이블 클래스 설정
 Base = declarative_base()
+
+def get_db():
+    """Dependency to get a database session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

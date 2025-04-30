@@ -3,12 +3,13 @@ from typing import Optional, List
 from datetime import datetime
 
 class Customer(SQLModel, table=True):
-    id: int = Field(primary_key=True)  # Only ID is required
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    table_number: Optional[int] = None
-    entry_time: Optional[datetime] = None
-    exit_time: Optional[datetime] = None
-
-    # Optional relationships
-    orders: Optional[List["Order"]] = Relationship(back_populates="customer")
+    """
+    고객 그룹 단위로 관리: 성인/어린이 수, 대기·주문 내역
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    count: Optional[int] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    assignments: List["GroupAssignment"] = Relationship(back_populates="customer")
+    waiting: Optional["WaitingList"] = Relationship(back_populates="customer")
+    orders: List["Order"] = Relationship(back_populates="customer")
