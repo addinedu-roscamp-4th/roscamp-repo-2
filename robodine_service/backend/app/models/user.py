@@ -6,11 +6,13 @@ from .enums import UserRole, NotificationStatus
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    username: Optional[str] = None
-    password_hash: Optional[str] = None
-    role: Optional[UserRole] = Field(sa_column=Column(SQLEnum(UserRole)))
+    username: str = Field(index=True, unique=True)
+    password_hash: str
+    name: str
+    role: UserRole = Field(sa_column=Column(SQLEnum(UserRole)))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    last_login: Optional[datetime] = None
     
     notifications: List["Notification"] = Relationship(back_populates="user")
 

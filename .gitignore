@@ -192,3 +192,4 @@ log/
 install/
 robovenv/
 .env
+node_modules/

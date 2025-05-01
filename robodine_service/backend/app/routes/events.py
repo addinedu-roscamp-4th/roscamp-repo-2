@@ -16,14 +16,14 @@ class EventResponse(BaseModel):
     id: int
     type: EventType
     related_entity_type: EntityType
-    related_entity_id: str
+    related_entity_id: int
     description: str
     timestamp: datetime
 
 class EventCreateRequest(BaseModel):
     type: EventType
     related_entity_type: EntityType
-    related_entity_id: str
+    related_entity_id: int
     description: str
 
 class SystemLogResponse(BaseModel):

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Menu, X, Home, User, Settings, Package, 
   Database, Bell, LogOut, Monitor, AlertOctagon,
-  Coffee, Users, Video, Server
+  Coffee, Users, Video, Server, CloudLightning, AlertTriangle, ShoppingCart
 } from 'react-feather';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -153,39 +153,40 @@ const Header = ({ toggleSidebar }) => {
   );
 };
 
-const Sidebar = ({ isOpen, closeSidebar }) => {
+const Sidebar = ({ isOpen, toggleSidebar }) => {
   const location = useLocation();
   
   const menuItems = [
-    { path: '/', icon: <Home size={20} />, label: '대시보드' },
-    { path: '/robots', icon: <Server size={20} />, label: '로봇 관리' },
-    { path: '/customers', icon: <Users size={20} />, label: '고객·테이블 관리' },
-    { path: '/orders', icon: <Package size={20} />, label: '주문 관리' },
-    { path: '/inventory', icon: <Database size={20} />, label: '재고 관리' },
-    { path: '/video-streams', icon: <Video size={20} />, label: '영상 스트리밍' },
-    { path: '/emergencies', icon: <AlertOctagon size={20} />, label: '비상 상황 관리' },
-    { path: '/settings', icon: <Settings size={20} />, label: '설정' },
+    { name: '대시보드', icon: Home, path: '/dashboard' },
+    { name: '로봇 관리', icon: CloudLightning, path: '/robots' },
+    { name: '고객 관리', icon: Users, path: '/customers' },
+    { name: '영상 보기', icon: Video, path: '/video-streams' },
+    { name: '비상 상황', icon: AlertTriangle, path: '/emergencies' },
+    { name: '주문 관리', icon: ShoppingCart, path: '/orders' },
+    { name: '재고 관리', icon: Package, path: '/inventory' },
+    { name: '설정', icon: Settings, path: '/settings' },
   ];
   
   return (
-    <>
+    <div className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
       {/* 모바일 오버레이 */}
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden"
-          onClick={closeSidebar}
+          onClick={toggleSidebar}
         ></div>
       )}
       
-      {/* 사이드바 */}
-      <aside className={`fixed top-14 bottom-0 left-0 z-20 w-64 bg-gray-800 text-white transform transition-transform duration-200 ease-in-out ${
-        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
+      <aside 
+        className={`fixed inset-y-0 left-0 z-30 w-64 bg-gray-800 text-white overflow-y-auto transition-transform transform ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}
+      >
         <div className="p-4">
-          <div className="flex justify-between items-center mb-6 lg:hidden">
+          <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold">메뉴</h2>
             <button 
-              onClick={closeSidebar}
+              onClick={toggleSidebar}
               className="p-2 rounded-md hover:bg-gray-700"
             >
               <X size={20} />
@@ -194,22 +195,25 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
           
           <nav>
             <ul className="space-y-2">
-              {menuItems.map(item => (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className={`flex items-center px-4 py-3 rounded-md transition-colors ${
-                      location.pathname === item.path
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-300 hover:bg-gray-700'
-                    }`}
-                    onClick={closeSidebar}
-                  >
-                    <span className="mr-3">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </Link>
-                </li>
-              ))}
+              {menuItems.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <li key={index}>
+                    <Link
+                      to={item.path}
+                      className={`flex items-center px-4 py-3 rounded-md ${
+                        location.pathname === item.path
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:bg-gray-700'
+                      }`}
+                      onClick={toggleSidebar}
+                    >
+                      <Icon size={20} className="mr-3" />
+                      <span>{item.name}</span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </nav>
         </div>
@@ -224,7 +228,7 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
           </div>
         </div>
       </aside>
-    </>
+    </div>
   );
 };
 
@@ -237,7 +241,7 @@ const Layout = ({ children }) => {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header toggleSidebar={toggleSidebar} />
-      <Sidebar isOpen={sidebarOpen} closeSidebar={closeSidebar} />
+      <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
       
       <main className="pt-14 lg:pl-64 transition-all duration-200">
         {children}

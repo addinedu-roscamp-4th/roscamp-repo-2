@@ -1,20 +1,118 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw, AlertTriangle, Wifi } from 'react-feather';
 
 const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesError, selectedEvent, wsConnected }) => {
-  const [scale, setScale] = useState(1);
+  // 식당 영역 좌표 (최상단에 정의하여 다른 계산에 사용)
+  const restaurantArea = {
+    topLeft: { x: 21, y: 51 },
+    topRight: { x: 62, y: 51 },
+    bottomLeft: { x: 21, y: 75 },
+    bottomRight: { x: 62, y: 75 }
+  };
+
+  // 식당 중심점 계산
+  const centerX = (restaurantArea.topLeft.x + restaurantArea.topRight.x) / 2;
+  const centerY = (restaurantArea.topLeft.y + restaurantArea.bottomLeft.y) / 2;
+
+  // 기본 확대/축소 비율 - 식당 영역이 더 크게 보이도록 조정
+  const [scale, setScale] = useState(15); 
+  
+  // 기본 위치 - 식당 영역이 중앙에 오도록 조정
+  const [position, setPosition] = useState({ 
+    x: 0,  // 초기 위치는 컴포넌트 마운트 후 설정
+    y: 0
+  });
+  
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const mapContainerRef = useRef(null);
+  
+  // 맵 크기 설정 - 좌표와 픽셀이 1:1 매핑
+  const MAP_WIDTH = 99;  // 픽셀
+  const MAP_HEIGHT = 100; // 픽셀
+
+  // 컴포넌트 마운트 시 식당 영역이 중앙에 오도록 위치 초기화
+  useEffect(() => {
+    // 컨테이너 크기 확인
+    if (mapContainerRef.current) {
+      const containerWidth = mapContainerRef.current.clientWidth;
+      const containerHeight = mapContainerRef.current.clientHeight;
+      
+      // 식당 중심점이 뷰포트 중앙에 오도록 조정
+      const offsetX = (containerWidth / 2 / scale) - centerX;
+      const offsetY = (containerHeight / 2 / scale) - centerY;
+      
+      setPosition({ x: offsetX * scale, y: offsetY * scale });
+    }
+  }, [scale, centerX, centerY]); // 의존성 배열에 centerX, centerY 추가
 
   const zoomIn = () => {
-    setScale(prev => Math.min(prev + 0.1, 2));
+    setScale(prev => Math.min(prev + 0.5, 15)); // 최대 확대 레벨 증가
   };
 
   const zoomOut = () => {
-    setScale(prev => Math.max(prev - 0.1, 0.5));
+    setScale(prev => Math.max(prev - 0.5, 1));
   };
 
   const resetZoom = () => {
-    setScale(1);
+    setScale(15); // 기본 확대 레벨
+    
+    // 식당 중심점이 뷰포트 중앙에 오도록 위치 재설정
+    if (mapContainerRef.current) {
+      const containerWidth = mapContainerRef.current.clientWidth;
+      const containerHeight = mapContainerRef.current.clientHeight;
+      
+      const offsetX = (containerWidth / 2 / 15) - centerX;
+      const offsetY = (containerHeight / 2 / 15) - centerY;
+      
+      setPosition({ x: offsetX * 15, y: offsetY * 15 });
+    }
   };
+
+  // 드래그 시작 핸들러
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y
+    });
+    e.preventDefault();
+  };
+
+  // 드래그 중 핸들러
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+      e.preventDefault();
+    }
+  };
+
+  // 드래그 종료 핸들러
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 드래그 이벤트 등록 및 제거
+  useEffect(() => {
+    const containerElement = mapContainerRef.current;
+    
+    if (containerElement) {
+      containerElement.addEventListener('mousemove', handleMouseMove);
+      containerElement.addEventListener('mouseup', handleMouseUp);
+      containerElement.addEventListener('mouseleave', handleMouseUp);
+    }
+    
+    return () => {
+      if (containerElement) {
+        containerElement.removeEventListener('mousemove', handleMouseMove);
+        containerElement.removeEventListener('mouseup', handleMouseUp);
+        containerElement.removeEventListener('mouseleave', handleMouseUp);
+      }
+    };
+  }, [isDragging, dragStart]);
 
   const getTableColor = (status) => {
     switch (status) {
@@ -30,14 +128,16 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   };
 
   const getRobotColor = (status) => {
-    switch (status) {
+    switch (status?.toUpperCase()) {
       case 'ONLINE':
+      case 'IDLE':
         return 'bg-green-400';
       case 'BUSY':
         return 'bg-blue-400';
       case 'WARNING':
         return 'bg-yellow-400';
       case 'OFFLINE':
+      case 'NOT_CONNECTED':
         return 'bg-red-400';
       default:
         return 'bg-gray-400';
@@ -46,9 +146,26 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
 
   // 각 항목에 기본 위치 할당
   const getDefaultPosition = (id, type) => {
-    // 테이블과 로봇이 겹치지 않도록 기본 위치 분산
-    const baseX = type === 'table' ? 100 + (id * 50) % 500 : 250 + (id * 60) % 400;
-    const baseY = type === 'table' ? 100 + Math.floor(id / 10) * 70 : 200 + Math.floor(id / 8) * 80;
+    // 식당 영역 내에 위치하도록 조정
+    const minX = restaurantArea.topLeft.x + 5;
+    const maxX = restaurantArea.topRight.x - 5;
+    const minY = restaurantArea.topLeft.y + 5;
+    const maxY = restaurantArea.bottomLeft.y - 5;
+    
+    const width = maxX - minX;
+    const height = maxY - minY;
+    
+    const padding = 3;
+    
+    // 테이블과 로봇이 겹치지 않도록 기본 위치 분산 (식당 영역 내)
+    const baseX = type === 'table' 
+      ? minX + padding + ((id % 4) * (width / 4))
+      : minX + padding + ((id % 3) * (width / 3));
+      
+    const baseY = type === 'table' 
+      ? minY + padding + (Math.floor(id / 4) * (height / 4))
+      : minY + padding + (Math.floor(id / 3) * (height / 3));
+      
     return { x: baseX, y: baseY };
   };
 
@@ -61,7 +178,7 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
     const eventX = selectedEvent.location.x;
     const eventY = selectedEvent.location.y;
     
-    return Math.abs(itemX - eventX) < 20 && Math.abs(itemY - eventY) < 20;
+    return Math.abs(itemX - eventX) < 2 && Math.abs(itemY - eventY) < 2;
   };
 
   // 에러 메시지 표시 여부 확인
@@ -71,15 +188,54 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   const validTables = tables.filter(table => table && (table.position || table.id));
   const validRobots = robots.filter(robot => robot && (robot.position || robot.id));
 
+  // 테이블 기본 위치 (고정) - 좌표 1:1 변환 (식당 영역 내 균등 분포)
+  const tablePositions = {};
+  
+  // 식당 내 테이블 위치 계산 (2x2 그리드로 배치)
+  const tableSpacingX = (restaurantArea.topRight.x - restaurantArea.topLeft.x) / 3;
+  const tableSpacingY = (restaurantArea.bottomLeft.y - restaurantArea.topLeft.y) / 3;
+  
+  // 4개의 테이블만 배치
+  tablePositions[1] = {
+    x: restaurantArea.topLeft.x + tableSpacingX,
+    y: restaurantArea.topLeft.y + tableSpacingY
+  };
+  tablePositions[2] = {
+    x: restaurantArea.topRight.x - tableSpacingX,
+    y: restaurantArea.topLeft.y + tableSpacingY
+  };
+  tablePositions[3] = {
+    x: restaurantArea.topLeft.x + tableSpacingX,
+    y: restaurantArea.bottomLeft.y - tableSpacingY
+  };
+  tablePositions[4] = {
+    x: restaurantArea.topRight.x - tableSpacingX,
+    y: restaurantArea.bottomLeft.y - tableSpacingY
+  };
+
+  // 테이블 및 로봇 시각화 크기 설정
+  // TIP: 아래 값을 수정하여 테이블과 로봇의 크기를 조절할 수 있습니다.
+  const TABLE_SIZE = 4; // 테이블 크기 (픽셀) - 식당 영역에 맞게 조정
+  const ROBOT_SIZE = 3;  // 로봇 크기 (픽셀) - 더 크게 설정
+
+  // 임시로 테이블 데이터 추가 (디버깅용)
+  console.log("Tables:", validTables);
+  const debugTables = Array.from({ length: 4 }, (_, i) => ({
+    id: i + 1,
+    tableNumber: i + 1,
+    status: i % 3 === 0 ? 'AVAILABLE' : i % 3 === 1 ? 'OCCUPIED' : 'RESERVED',
+    position: tablePositions[i + 1]
+  }));
+
   return (
     <div className="bg-white rounded-lg shadow p-4 h-full">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center">
           <h2 className="text-lg font-semibold text-gray-700">매장 맵</h2>
           {wsConnected && (
-            <span className="ml-2 flex items-center text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full">
+            <span className="ml-2 flex items-center text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
               <Wifi size={12} className="mr-1" />
-              연결됨 (데이터 수신 기능 미구현)
+              연결됨
             </span>
           )}
         </div>
@@ -124,72 +280,117 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
           </p>
         </div>
       ) : (
-        <div className="relative border border-gray-300 rounded-lg overflow-hidden bg-gray-50" style={{ height: '400px' }}>
-          <div className="absolute inset-0" style={{ transform: `scale(${scale})`, transformOrigin: 'center', transition: 'transform 0.3s ease' }}>
-            {/* Tables */}
-            {validTables.map(table => {
-              const position = table.position || getDefaultPosition(table.id || 0, 'table');
+        <div 
+          ref={mapContainerRef}
+          className="relative border border-gray-300 rounded-lg overflow-hidden bg-gray-50" 
+          style={{ height: '400px', cursor: isDragging ? 'grabbing' : 'grab' }}
+          onMouseDown={handleMouseDown}
+        >
+          <div className="absolute inset-0" style={{ 
+            transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`, 
+            transformOrigin: 'center', 
+            transition: isDragging ? 'none' : 'transform 0.3s ease',
+            width: `${MAP_WIDTH}px`,
+            height: `${MAP_HEIGHT}px`
+          }}>
+            {/* 격자 배경 */}
+            <div className="absolute inset-0">
+              {Array.from({ length: Math.floor(MAP_HEIGHT / 2) }).map((_, y) => (
+                <div key={`grid-y-${y}`} className="absolute w-full h-px bg-gray-200" style={{ top: `${y * 2}px` }} />
+              ))}
+              {Array.from({ length: Math.floor(MAP_WIDTH / 2) }).map((_, x) => (
+                <div key={`grid-x-${x}`} className="absolute w-px h-full bg-gray-200" style={{ left: `${x * 2}px` }} />
+              ))}
+            </div>
+            
+            {/* 식당 영역 테두리 */}
+            <div 
+              className="absolute border-[2px] border-blue-700 z-0 bg-blue-50 bg-opacity-30"
+              style={{
+                left: `${restaurantArea.topLeft.x}px`,
+                top: `${restaurantArea.topLeft.y}px`,
+                width: `${restaurantArea.topRight.x - restaurantArea.topLeft.x}px`,
+                height: `${restaurantArea.bottomLeft.y - restaurantArea.topLeft.y}px`
+              }}
+            />
+            
+            {/* 테이블 */}
+            {/* TIP: style 내의 width와 height를 수정하여 테이블 크기 조절 가능 */}
+            {(validTables.length > 0 ? validTables : debugTables).map(table => {
+              // 1~4번 테이블만 표시
+              if (table.tableNumber > 4) return null;
+              
+              const position = table.position || tablePositions[table.tableNumber] || getDefaultPosition(table.id || 0, 'table');
               return (
                 <div
                   key={`table-${table.id}`}
-                  className={`absolute w-14 h-14 rounded-md border-2 flex items-center justify-center transition-all ${getTableColor(table.status)} ${isHighlighted(table) ? 'ring-4 ring-blue-500 z-10' : ''}`}
+                  className={`absolute border-[0.1px] flex items-center justify-center transition-all ${getTableColor(table.status)} ${isHighlighted(table) ? 'ring-1 ring-blue-500 z-10' : ''}`}
                   style={{
                     left: `${position.x}px`,
                     top: `${position.y}px`,
-                    transform: 'translate(-50%, -50%)'
+                    width: `${TABLE_SIZE}px`,
+                    height: `${TABLE_SIZE}px`,
+                    transform: 'translate(-50%, -50%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
-                  title={`테이블 ${table.number || table.id} - ${table.status || '상태 없음'}`}
+                  title={`테이블 ${table.tableNumber || table.id} - ${table.status || '상태 없음'}`}
                 >
-                  <span className="font-bold text-gray-700">{table.number || table.id}</span>
+                  <span className="absolute font-semibold text-[3px] text-gray-900 text-center" style={{ lineHeight: '1px' }}>{table.tableNumber || table.id}</span>
                 </div>
               );
             })}
             
-            {/* Robots */}
+            {/* 로봇 */}
+            {/* TIP: style 내의 width와 height를 수정하여 로봇 크기 조절 가능 */}
             {validRobots.map(robot => {
               const position = robot.position || getDefaultPosition(robot.id || 0, 'robot');
               return (
                 <div
                   key={`robot-${robot.id}`}
-                  className={`absolute w-8 h-8 rounded-full border-2 border-gray-600 flex items-center justify-center ${getRobotColor(robot.status)} ${isHighlighted(robot) ? 'ring-4 ring-blue-500 z-10' : ''}`}
+                  className={`absolute rounded-full flex items-center justify-center ${getRobotColor(robot.status)} ${isHighlighted(robot) ? 'ring-1 ring-blue-500 z-20' : 'z-10'}`}
                   style={{
                     left: `${position.x}px`,
                     top: `${position.y}px`,
-                    transform: 'translate(-50%, -50%)'
+                    width: `${ROBOT_SIZE}px`,
+                    height: `${ROBOT_SIZE}px`,
+                    transform: 'translate(-50%, -50%)',
+                    boxShadow: '0 0 0.5px rgba(0,0,0,0.3)'
                   }}
                   title={`${robot.name || `로봇 ${robot.id}`} - ${robot.status || '상태 없음'}`}
                 >
-                  <span className="font-bold text-xs text-white">{robot.id}</span>
+                  <span className="absolute font-semibold text-[2px] text-black text-center" style={{ lineHeight: '1px' }}>{robot.id}</span>
                 </div>
               );
             })}
             
-            {/* Event highlight */}
+            {/* 이벤트 하이라이트 */}
             {selectedEvent && selectedEvent.location && (
               <div
-                className="absolute w-16 h-16 rounded-full border-4 border-dashed border-blue-500 z-0 animate-pulse"
+                className="absolute rounded-full border-2 border-dashed border-blue-500 z-0 animate-pulse"
                 style={{
                   left: `${selectedEvent.location.x}px`,
                   top: `${selectedEvent.location.y}px`,
+                  width: `${TABLE_SIZE / 2}px`,
+                  height: `${TABLE_SIZE / 2}px`,
                   transform: 'translate(-50%, -50%)'
                 }}
               />
             )}
           </div>
           
-          {/* 실시간 업데이트 정보 */}
-          <div className="absolute bottom-2 right-2 bg-yellow-50 text-yellow-700 text-xs px-2 py-1 rounded flex items-center">
-            <Wifi size={12} className="mr-1" />
-            {wsConnected ? 
-              '실시간 위치 업데이트 기능이 구현되지 않았습니다' : 
-              '웹소켓 연결되지 않음'
-            }
-          </div>
+          {/* 웹소켓 연결 오류 메시지 */}
+          {!wsConnected && (
+            <div className="absolute bottom-2 right-2 bg-red-50 text-red-600 text-xs px-2 py-1 rounded flex items-center">
+              {/* <AlertTriangle size={12} className="mr-1" />
+              웹소켓 연결 오류 */}
+            </div>
+          )}
           
-          {/* 정적 위치 정보 알림 */}
-          <div className="absolute top-2 left-2 bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded flex items-center">
-            <AlertTriangle size={12} className="mr-1" />
-            위치 정보는 정적 데이터입니다
+          {/* 조작 힌트 */}
+          <div className="absolute top-2 right-2 bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded flex items-center">
+            <span>드래그하여 이동, 확대/축소 가능</span>
           </div>
         </div>
       )}
@@ -197,15 +398,15 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
       <div className="mt-3 text-sm text-gray-500">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-sm bg-green-200 border border-green-500"></div>
+            <div className="w-3 h-3 mr-1 bg-green-200 border border-green-500"></div>
             <span>사용 가능</span>
           </div>
           <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-sm bg-red-200 border border-red-500"></div>
+            <div className="w-3 h-3 mr-1 bg-red-200 border border-red-500"></div>
             <span>사용 중</span>
           </div>
           <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-sm bg-yellow-200 border border-yellow-500"></div>
+            <div className="w-3 h-3 mr-1 bg-yellow-200 border border-yellow-500"></div>
             <span>예약됨</span>
           </div>
           <div className="flex items-center ml-4">

@@ -9,7 +9,7 @@ from app.core.db_config import get_db
 from app.models import Order, OrderItem, Customer, Robot, KioskTerminal
 from app.models.enums import OrderStatus
 
-router = APIRouter(prefix="/orders", tags=["orders"])
+router = APIRouter()
 
 # --- Pydantic Schemas ---
 class OrderItemRequest(BaseModel):

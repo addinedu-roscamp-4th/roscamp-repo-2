@@ -1,235 +1,220 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 from datetime import datetime
-from pydantic import BaseModel
 
 from app.core.db_config import get_db
 from app.models import User, Notification
 from app.models.enums import UserRole, NotificationStatus
 from app.routes.auth import get_current_user, get_password_hash
+from pydantic import BaseModel
 
-router = APIRouter()
+router = APIRouter(prefix="/api/users")
 
-# --- User Models ---
+
+# --- User DTOs ---
+from pydantic import BaseModel, validator
+
 class UserResponse(BaseModel):
     id: int
     username: str
+    name: str
     role: UserRole
     created_at: datetime
     updated_at: datetime
+    last_login: datetime | None
+
+    @validator("name", pre=True, always=True)
+    def default_name(cls, v):
+        return v or ""
+
+    class Config:
+        orm_mode = True
+
 
 class UserListResponse(BaseModel):
     id: int
     username: str
+    name: str
     role: UserRole
     created_at: datetime
     updated_at: datetime
+    last_login: datetime | None
+
+    @validator("name", pre=True, always=True)
+    def default_name(cls, v):
+        return v or ""
+
+    class Config:
+        orm_mode = True
 
 class UserCreateRequest(BaseModel):
     username: str
     password: str
-    role: UserRole
+    name: str
+    role: UserRole = UserRole.ADMIN
+
 
 class UserUpdateRequest(BaseModel):
-    password: Optional[str] = None
-    role: Optional[UserRole] = None
+    name: str | None = None
+    role: UserRole | None = None
+    password: str | None = None
 
+
+# --- Notification DTOs ---
 class NotificationResponse(BaseModel):
     id: int
-    type: str
-    message: str
+    type: str | None
+    message: str | None
     created_at: datetime
-    status: NotificationStatus
+    status: NotificationStatus | None
+
+    class Config:
+        orm_mode = True
+
 
 class NotificationCreateRequest(BaseModel):
     type: str
     message: str
 
-# --- Router Endpoints ---
+
+# --- Endpoints ---
+@router.get("/me", response_model=UserResponse)
+def read_current_user(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
 @router.get("", response_model=List[UserListResponse])
-def get_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Only admin users can list all users
+def read_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view all users"
         )
-    
-    users = db.query(User).all()
-    return [
-        UserListResponse(
-            id=user.id,
-            username=user.username,
-            role=user.role,
-            created_at=user.created_at,
-            updated_at=user.updated_at
-        ) for user in users
-    ]
+    return db.query(User).all()
+
 
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Users can view their own info, admins can view anyone
-    if current_user.id != user_id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this user"
-        )
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID {user_id} not found"
-        )
-    
-    return UserResponse(
-        id=user.id,
-        username=user.username,
-        role=user.role,
-        created_at=user.created_at,
-        updated_at=user.updated_at
-    )
-
-@router.post("", response_model=UserResponse)
-def create_user(user_data: UserCreateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Only admins can create users
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to create users"
-        )
-    
-    # Check if username already exists
-    existing_user = db.query(User).filter(User.username == user_data.username).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Username {user_data.username} already exists"
-        )
-    
-    # Create new user
-    new_user = User(
-        username=user_data.username,
-        password_hash=get_password_hash(user_data.password),
-        role=user_data.role,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return UserResponse(
-        id=new_user.id,
-        username=new_user.username,
-        role=new_user.role,
-        created_at=new_user.created_at,
-        updated_at=new_user.updated_at
-    )
-
-@router.put("/{user_id}")
-def update_user(
+def read_user(
     user_id: int,
-    user_data: UserUpdateRequest, 
-    db: Session = Depends(get_db), 
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Users can update their own info, admins can update anyone
-    if current_user.id != user_id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this user"
-        )
-    
-    # Find user
-    user = db.query(User).filter(User.id == user_id).first()
+    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Not authorized to access this user")
+    user = db.get(User, user_id)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID {user_id} not found"
-        )
-    
-    # Update user fields
-    if user_data.password:
-        user.password_hash = get_password_hash(user_data.password)
-    
-    # Only admins can change roles
-    if user_data.role and current_user.role == UserRole.ADMIN:
-        user.role = user_data.role
-    
-    user.updated_at = datetime.utcnow()
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found")
+    return user
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
+def create_user(
+    payload: UserCreateRequest,
+    db: Session = Depends(get_db)
+):
+    if db.query(User).filter(User.username == payload.username).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Username already exists")
+    user = User(
+        username=payload.username,
+        password_hash=get_password_hash(payload.password),
+        name=payload.name,
+        role=payload.role
+    )
     db.add(user)
     db.commit()
-    
-    return {"status": "success", "message": "사용자 정보가 성공적으로 수정되었습니다."}
+    db.refresh(user)
+    return user
+
+
+@router.put("/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    payload: UserUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Not authorized to update this user")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found")
+
+    if payload.name is not None:
+        user.name = payload.name
+    if payload.role is not None and current_user.role == UserRole.ADMIN:
+        user.role = payload.role
+    if payload.password is not None:
+        user.password_hash = get_password_hash(payload.password)
+
+    user.updated_at = datetime.utcnow()
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Not authorized to delete users")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found")
+    db.delete(user)
+    db.commit()
+
 
 # --- Notifications ---
 @router.get("/{user_id}/notifications", response_model=List[NotificationResponse])
-def get_notifications(
-    user_id: int, 
-    db: Session = Depends(get_db), 
+def read_notifications(
+    user_id: int,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Users can view their own notifications, admins can view anyone's
-    if current_user.id != user_id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view these notifications"
-        )
-    
-    # Find user
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID {user_id} not found"
-        )
-    
-    # Get notifications
-    notifications = db.query(Notification).filter(Notification.user_id == user_id).all()
-    
-    return [
-        NotificationResponse(
-            id=notification.id,
-            type=notification.type,
-            message=notification.message,
-            created_at=notification.created_at,
-            status=notification.status
-        ) for notification in notifications
-    ]
+    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Not authorized to view these notifications")
+    if not db.get(User, user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found")
+    return db.query(Notification).filter(Notification.user_id == user_id).all()
 
-@router.post("/{user_id}/notifications")
+
+@router.post(
+    "/{user_id}/notifications",
+    status_code=status.HTTP_201_CREATED,
+    response_model=NotificationResponse
+)
 def create_notification(
     user_id: int,
-    notification_data: NotificationCreateRequest,
+    payload: NotificationCreateRequest,
     db: Session = Depends(get_db)
 ):
-    # Find user
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with ID {user_id} not found"
-        )
-    
-    # Create notification
-    new_notification = Notification(
+    if not db.get(User, user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found")
+    note = Notification(
         user_id=user_id,
-        type=notification_data.type,
-        message=notification_data.message,
-        created_at=datetime.utcnow(),
+        type=payload.type,
+        message=payload.message,
         status=NotificationStatus.PENDING
     )
-    
-    db.add(new_notification)
+    db.add(note)
     db.commit()
-    db.refresh(new_notification)
-    
-    return {
-        "id": new_notification.id,
-        "status": "success",
-        "message": "알림이 생성되었습니다."
-    } 
+    db.refresh(note)
+    return note

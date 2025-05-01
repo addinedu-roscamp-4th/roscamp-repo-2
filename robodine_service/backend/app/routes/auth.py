@@ -17,10 +17,11 @@ SECRET_KEY = getenv("SECRET_KEY", "your-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+# OAuth2 scheme - update tokenUrl to match the prefixed endpoint
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-router = APIRouter()
+# Create a router with the /api/auth prefix
+router = APIRouter(prefix="/api/auth")
 
 # --- Auth Models ---
 class LoginRequest(BaseModel):
@@ -80,6 +81,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 # --- Router Endpoints ---
+# Note the route is now just "/login" as the prefix is already "/api/auth"
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -89,6 +91,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # Update last login time
+    user.last_login = datetime.utcnow()
+    db.commit()
+    
+    # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}, 
@@ -100,4 +108,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def logout():
     # Since JWT tokens are stateless, server-side logout isn't necessary
     # In a more complex system, you might implement token blacklisting here
-    return {"status": "success", "message": "로그아웃 완료."} 
+    return {"status": "success", "message": "로그아웃 완료."}
+
+@router.get("/validate")
+async def validate_token(current_user: User = Depends(get_current_user)):
+    """Validate the current token and return user info"""
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "name": current_user.name,
+        "role": current_user.role
+    } 

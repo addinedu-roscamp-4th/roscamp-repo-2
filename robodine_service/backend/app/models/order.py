@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class KioskTerminal(SQLModel, table=True):
     __tablename__ = "kioskterminal"
     id: Optional[int] = Field(default=None, primary_key=True)
-    location: Optional[str] = None
+    table_number: Optional[int] = Field(default=None)
     ip_address: Optional[str] = None
 
     orders: Optional["Order"] = Relationship(back_populates="kioskterminal")

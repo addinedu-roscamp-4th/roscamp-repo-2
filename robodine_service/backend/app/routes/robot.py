@@ -1,3 +1,5 @@
+#robodine_service/backend/app/routes/robot.py
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -15,7 +17,7 @@ class RobotRegisterRequest(BaseModel):
     robot_id: int
     robot_type: EntityType
     mac_address: str
-    ip: str
+    ip_address: str
 
 class RobotResponse(BaseModel):
     robot_id: int
@@ -57,7 +59,7 @@ def register_robot(robot_data: RobotRegisterRequest, db: Session = Depends(get_d
         # Update existing robot
         existing_robot.type = robot_data.robot_type
         existing_robot.mac_address = robot_data.mac_address
-        existing_robot.ip_address = robot_data.ip
+        existing_robot.ip_address = robot_data.ip_address
         existing_robot.timestamp = datetime.utcnow()
         db.add(existing_robot)
     else:
@@ -66,7 +68,7 @@ def register_robot(robot_data: RobotRegisterRequest, db: Session = Depends(get_d
             robot_id=str(robot_data.robot_id),
             type=robot_data.robot_type,
             mac_address=robot_data.mac_address,
-            ip_address=robot_data.ip,
+            ip_address=robot_data.ip_address,
             timestamp=datetime.utcnow()
         )
         db.add(new_robot)
@@ -78,6 +80,19 @@ def register_robot(robot_data: RobotRegisterRequest, db: Session = Depends(get_d
         "status": "success",
         "message": "로봇 정보가 성공적으로 등록되었습니다."
     }
+
+@router.get("", response_model=List[RobotResponse])
+def get_robots(db: Session = Depends(get_db)):
+    robots = db.query(Robot).all()
+    return [
+        RobotResponse(
+            robot_id=int(robot.robot_id),
+            robot_type=robot.type,
+            mac_address=robot.mac_address,
+            ip_address=robot.ip_address,
+            timestamp=robot.timestamp
+        ) for robot in robots
+    ]
 
 @router.get("/{robot_id}", response_model=RobotResponse)
 def get_robot(robot_id: int, db: Session = Depends(get_db)):

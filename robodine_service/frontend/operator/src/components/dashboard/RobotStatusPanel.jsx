@@ -1,3 +1,5 @@
+// robodine_service/frontend/operator/src/components/dashboard/RobotStatusPanel.jsx
+
 import React, { useState } from 'react';
 import { Server, Battery, Clock, AlertTriangle, PlusCircle, CheckCircle } from 'react-feather';
 
@@ -15,6 +17,10 @@ const RobotStatusPanel = ({ robots = [], error, isLoading }) => {
         return 'bg-yellow-100 text-yellow-800';
       case 'ERROR':
         return 'bg-red-100 text-red-800';
+      case 'NOT_CONNECTED':
+        return 'bg-red-100 text-red-800';
+      case 'WARNING':
+        return 'bg-yellow-100 text-yellow-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -22,6 +28,7 @@ const RobotStatusPanel = ({ robots = [], error, isLoading }) => {
 
   // 배터리 레벨에 따른 색상
   const getBatteryColor = (level) => {
+    if (level === undefined || level === null) return 'bg-gray-500';
     if (level < 20) return 'bg-red-500';
     if (level < 50) return 'bg-yellow-500';
     return 'bg-green-500';
@@ -87,7 +94,7 @@ const RobotStatusPanel = ({ robots = [], error, isLoading }) => {
           <p className="mt-1 text-sm text-gray-500">등록된 로봇이 없습니다.</p>
         </div>
       ) : (
-        <div className="space-y-3 max-h-72 overflow-y-auto pr-2">
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
           {robots.map((robot) => (
             <div 
               key={robot.id} 
@@ -98,12 +105,12 @@ const RobotStatusPanel = ({ robots = [], error, isLoading }) => {
                 <div className="flex justify-between items-start">
                   <div className="flex items-start">
                     <div className={`p-2 rounded-md mr-3 ${
-                      robot.status?.toUpperCase() === 'ONLINE' ? 'bg-green-100' : 
+                      robot.status?.toUpperCase() === 'ONLINE' || robot.status?.toUpperCase() === 'IDLE' ? 'bg-green-100' : 
                       robot.status?.toUpperCase() === 'BUSY' ? 'bg-yellow-100' : 
                       'bg-gray-100'
                     }`}>
                       <Server size={20} className={
-                        robot.status?.toUpperCase() === 'ONLINE' ? 'text-green-600' : 
+                        robot.status?.toUpperCase() === 'ONLINE' || robot.status?.toUpperCase() === 'IDLE' ? 'text-green-600' : 
                         robot.status?.toUpperCase() === 'BUSY' ? 'text-yellow-600' : 
                         'text-gray-600'
                       } />
@@ -144,18 +151,28 @@ const RobotStatusPanel = ({ robots = [], error, isLoading }) => {
                         <>
                           <div className="text-gray-500">위치:</div>
                           <div className="text-gray-800 font-mono">
-                            X: {robot.position.x || 0}, Y: {robot.position.y || 0}
+                            X: {robot.position.x || 0}, Y: {robot.position.y || 0}, Z: {robot.position.z || 0}
                           </div>
                         </>
                       )}
                       
                       <div className="text-gray-500">상태:</div>
                       <div className="text-gray-800 flex items-center">
-                        {robot.status?.toUpperCase() === 'ONLINE' ? 
+                        {robot.status?.toUpperCase() === 'ONLINE' || robot.status?.toUpperCase() === 'IDLE' ? 
                           <CheckCircle size={14} className="mr-1 text-green-500" /> : 
+                          robot.status?.toUpperCase() === 'BUSY' ?
+                          <Clock size={14} className="mr-1 text-yellow-500" /> :
+                          robot.status?.toUpperCase() === 'ERROR' || robot.status?.toUpperCase() === 'NOT_CONNECTED' ?
+                          <AlertTriangle size={14} className="mr-1 text-red-500" /> :
                           <PlusCircle size={14} className="mr-1 text-gray-500" />
                         }
-                        {robot.status?.toUpperCase() === 'ONLINE' ? '정상 작동 중' : '상태 확인 필요'}
+                        {robot.status?.toUpperCase() === 'ONLINE' ? '정상 작동 중' : 
+                         robot.status?.toUpperCase() === 'IDLE' ? '대기 중' :
+                         robot.status?.toUpperCase() === 'BUSY' ? '작업 중' :
+                         robot.status?.toUpperCase() === 'ERROR' ? '오류 상태' :
+                         robot.status?.toUpperCase() === 'NOT_CONNECTED' ? '연결 끊김' :
+                         robot.status?.toUpperCase() === 'OFFLINE' ? '오프라인' :
+                         robot.status || '상태 확인 필요'}
                       </div>
                     </div>
                   </div>
