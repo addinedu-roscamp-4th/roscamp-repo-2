@@ -237,6 +237,8 @@ const DashboardPage = () => {
   const [eventsData, setEventsData] = useState([]);
   const [ordersData, setOrdersData] = useState([]);
   const [poseData, setPoseData] = useState([]);
+  const [poseLatencies, setPoseLatencies] = useState({});
+
   
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
@@ -390,6 +392,8 @@ const DashboardPage = () => {
         
         // 세계 좌표계 위치만 사용 (entity_type이 'WORLD')
         if (entityType === 'WORLD') {
+          const ts = new Date(pose['Pose6D.timestamp'] || pose.timestamp).getTime();
+          const now = Date.now();
           if (!acc[entityId]) {
             acc[entityId] = [];
           }
@@ -397,8 +401,9 @@ const DashboardPage = () => {
             x: pose['Pose6D.x'] || pose.x || 0,
             y: pose['Pose6D.y'] || pose.y || 0,
             z: pose['Pose6D.z'] || pose.z || 0,
-            timestamp: pose['Pose6D.timestamp'] || pose.timestamp
+            timestamp: ts,
           });
+          setPoseLatencies(lat => ({ ...lat, [entityId]: now - ts }));
         }
         return acc;
       }, {});
@@ -534,6 +539,7 @@ const DashboardPage = () => {
   const tablesWS = useWebSocket('tables', handleTablesMessage);
   const eventsWS = useWebSocket('events', handleEventsMessage);
   const ordersWS = useWebSocket('orders', handleOrdersMessage);
+  const poseWS = useWebSocket('pose', handlePoseMessage);
   
   // status 토픽에서 로봇 상세 정보와 위치 정보 수신
   const statusWS = useWebSocket('status', (data) => {
@@ -721,9 +727,13 @@ const DashboardPage = () => {
           {/* 첫 번째 행: 로봇 상태 + 매장 맵 */}
           <div className="col-span-12 lg:col-span-8">
             <StoreMap 
-              robots={processedRobots} 
               tables={processedTables} 
-              isLoading={isLoading} 
+              isLoading={isLoading}
+              wsConnected={robotsWS.connected}
+              robots={processedRobots.map(robot => ({
+                ...robot,
+                latency: poseLatencies[robot.id]
+              }))}
             />
           </div>
           <div className="col-span-12 lg:col-span-4">

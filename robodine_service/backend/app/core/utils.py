@@ -10,14 +10,14 @@ from app.models.albabot import Albabot
 from app.models.cookbot import Cookbot
 
 
-def dispatch_payload(session: Session, data: Dict[str, Any]) -> None:
+def dispatch_payload(session: Session, data: Dict[str, Any]) -> Dict[str, Any]:
     msg_type = data.get("msg_type")
     if msg_type == "Albabot":
-        _handle_albabot(session, data)
+        return _handle_albabot(session, data)
     elif msg_type == "Cookbot":
-        _handle_cookbot(session, data)
+        return _handle_cookbot(session, data)
     elif msg_type == "Ingredient":
-        _handle_ingredient(session, data)
+        return _handle_ingredient(session, data)
     else:
         raise ValueError(f"Unknown msg_type: {msg_type}")
 
@@ -53,6 +53,7 @@ def _handle_albabot(session: Session, data: Dict[str, Any]):
             pitch=data[f"{prefix}_pitch"],
             yaw=data[f"{prefix}_yaw"],
         ))
+    return {"affected_entity": {"type": "albabot", "id": robot_id}}
 
 def _handle_cookbot(session: Session, data: Dict[str, Any]):
     robot_id = data["robot_id"]
@@ -87,6 +88,8 @@ def _handle_cookbot(session: Session, data: Dict[str, Any]):
         joint_5=data["angle_5"],
         joint_6=data["angle_6"],
     ))
+    return {"affected_entity": {"type": "cookbot", "id": robot_id}}
+
 
 def _handle_ingredient(session: Session, data: Dict[str, Any]):
     session.add(Pose6D(
@@ -100,3 +103,5 @@ def _handle_ingredient(session: Session, data: Dict[str, Any]):
         pitch=data["pitch"],
         yaw=data["yaw"],
     ))
+    return {"affected_entity": {"type": "pose6d", "id": data["ingredient_id"]}}
+

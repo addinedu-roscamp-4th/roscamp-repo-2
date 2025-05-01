@@ -1,3 +1,5 @@
+// robodine_service/frontend/operator/src/components/dashboard/StoreMap.jsx
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw, AlertTriangle, Wifi } from 'react-feather';
 
@@ -361,6 +363,20 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
                   title={`${robot.name || `로봇 ${robot.id}`} - ${robot.status || '상태 없음'}`}
                 >
                   <span className="absolute font-semibold text-[2px] text-black text-center" style={{ lineHeight: '1px' }}>{robot.id}</span>
+
+                  {/* 레이턴시 표시 */}
+                  {typeof robot.latency === 'number' && (
+                  <span
+                    className="absolute text-[2px] text-gray-700"
+                    style={{
+                      bottom: `-${ROBOT_SIZE - 1}px`,    // 로봇 점 아래로 2px 띄워서
+                      fontSize: '1px',                    // 작게
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {robot.latency}ms
+                  </span>
+                  )}
                 </div>
               );
             })}
@@ -383,8 +399,8 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
           {/* 웹소켓 연결 오류 메시지 */}
           {!wsConnected && (
             <div className="absolute bottom-2 right-2 bg-red-50 text-red-600 text-xs px-2 py-1 rounded flex items-center">
-              {/* <AlertTriangle size={12} className="mr-1" />
-              웹소켓 연결 오류 */}
+              <AlertTriangle size={12} className="mr-1" />
+              웹소켓 연결 오류
             </div>
           )}
           

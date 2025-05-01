@@ -7,6 +7,7 @@ import json
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
+import anyio
 
 from fastapi import FastAPI, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,6 +37,8 @@ from app.core.utils import dispatch_payload
 
 from app.services.streaming_service import get_stream_urls, add_stream_url
 
+main_loop = None
+
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -48,7 +51,8 @@ last_broadcast = {
     "robots": datetime.min,
     "tables": datetime.min,
     "events": datetime.min,
-    "orders": datetime.min
+    "orders": datetime.min,
+    "status": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -185,158 +189,140 @@ async def broadcast_orders_update(orders_data):
 async def broadcast_entity_update(entity_type, entity_id):
     """엔티티 변경 시 해당 데이터를 웹소켓으로 브로드캐스팅"""
     try:
-        with Session(engine) as session:
-            if entity_type == "robot":
-                # 단일 로봇 또는 전체 로봇 데이터 전송
-                if entity_id:
-                    robot = session.get(Robot, entity_id)
-                    if robot:
-                        data = [serialize_robot(robot)]
+        # 1) DB 조회를 별도 스레드에서 실행
+        def _sync_db_work():
+            with Session(engine) as session:
+                out = {"entity": entity_type}
+                # robot
+                if entity_type == "robot":
+                    # 단일 또는 전체 조회
+                    if entity_id:
+                        robot = session.get(Robot, entity_id)
+                        out['data'] = [serialize_robot(robot)] if robot else []
                     else:
-                        return
-                else:
-                    robots = session.exec(select(Robot)).all()
-                    data = [serialize_robot(robot) for robot in robots]
-                
-                await broadcast_robots_update(data)
-                last_broadcast["robots"] = datetime.now()
-                
-                # 로봇 상세 정보와 위치 정보를 status 토픽으로 전송
-                # 로봇, 알바봇, 쿡봇, 위치 데이터 조회
-                albabots = session.exec(
-                    select(Albabot)
-                    .distinct(Albabot.robot_id)
-                ).all()
-                cookbots = session.exec(
-                    select(Cookbot)
-                    .distinct(Cookbot.robot_id)                    
-                ).all()
-                poses = session.exec(
-                    select(Pose6D)
-                    .where(Pose6D.entity_type == "WORLD")
-                    .distinct(Pose6D.entity_id)
+                        robots = session.exec(select(Robot)).all()
+                        out['data'] = [serialize_robot(r) for r in robots]
+                    # 상세 상태 조회 (albabot, cookbot, pose6d)
+                    albabots = session.exec(
+                        select(Albabot)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
+                        .distinct(Albabot.robot_id)
                     ).all()
-                
-                # 데이터 직렬화
-                albabot_data = [serialize_albabot(bot) for bot in albabots]
-                cookbot_data = [serialize_cookbot(bot) for bot in cookbots]
-                pose_data = [serialize_pose6d(pose) for pose in poses]
-                
-                # 통합 데이터 전송
-                combined_data = {
-                    "robots": data,
-                    "albabots": albabot_data,
-                    "cookbots": cookbot_data,
-                    "poses": pose_data
-                }
-                
-                await broadcast_status_update(combined_data)
-                
-            elif entity_type == "table":
-                # 단일 테이블 또는 전체 테이블 데이터 전송
-                if entity_id:
-                    table = session.get(Table, entity_id)
-                    if table:
-                        data = [serialize_table(table)]
+                    cookbots = session.exec(
+                        select(Cookbot)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
+                        .distinct(Cookbot.robot_id)
+                    ).all()
+                    poses = session.exec(
+                        select(Pose6D)
+                        .where(Pose6D.entity_type == "WORLD")
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .distinct(Pose6D.entity_id)
+                    ).all()
+                    out['albabots'] = albabots
+                    out['cookbots'] = cookbots
+                    out['poses'] = poses
+                # table
+                elif entity_type == "table":
+                    if entity_id:
+                        t = session.get(Table, entity_id)
+                        out['data'] = [serialize_table(t)] if t else []
                     else:
-                        return
-                else:
-                    tables = session.exec(select(Table)).all()
-                    data = [serialize_table(table) for table in tables]
-                
-                await broadcast_tables_update(data)
-                last_broadcast["tables"] = datetime.now()
-                
-            elif entity_type == "event":
-                # 단일 이벤트 또는 최신 이벤트 20개 전송
-                if entity_id:
-                    event = session.get(Event, entity_id)
-                    if event:
-                        data = [serialize_event(event)]
+                        ts = session.exec(select(Table)).all()
+                        out['data'] = [serialize_table(t) for t in ts]
+                # event
+                elif entity_type == "event":
+                    if entity_id:
+                        ev = session.get(Event, entity_id)
+                        out['data'] = [serialize_event(ev)] if ev else []
                     else:
-                        return
-                else:
-                    events = session.exec(select(Event).order_by(Event.timestamp.desc()).limit(20)).all()
-                    data = [serialize_event(event) for event in events]
-                
-                await broadcast_events_update(data)
-                last_broadcast["events"] = datetime.now()
-                
-            elif entity_type == "order":
-                # 단일 주문 또는 최신 주문 10개 전송
-                if entity_id:
-                    order = session.get(Order, entity_id)
-                    if order:
-                        data = [serialize_order(order)]
+                        evs = session.exec(
+                            select(Event)
+                            .order_by(Event.timestamp.desc())
+                            .limit(20)
+                        ).all()
+                        out['data'] = [serialize_event(e) for e in evs]
+                # order
+                elif entity_type == "order":
+                    if entity_id:
+                        o = session.get(Order, entity_id)
+                        out['data'] = [serialize_order(o)] if o else []
                     else:
-                        return
-                else:
-                    orders = session.exec(select(Order).order_by(Order.timestamp.desc()).limit(10)).all()
-                    data = [serialize_order(order) for order in orders]
-                
-                await broadcast_orders_update(data)
-                last_broadcast["orders"] = datetime.now()
-                
-            elif entity_type == "pose6d":
-                # Pose6D가 변경되면 로봇 업데이트에 포함시키기
-                poses = session.exec(select(Pose6D).where(Pose6D.entity_type == "WORLD")).all()
-                if poses:
-                    # 로봇 데이터도 함께 보내기 위해 로봇 쿼리도 실행
-                    robots = session.exec(select(Robot)).all()
-                    robot_data = [serialize_robot(robot) for robot in robots]
-                    
-                    # Albabot, Cookbot 데이터도 함께 전송
-                    albabots = session.exec(select(Albabot)).all()
-                    cookbots = session.exec(select(Cookbot)).all()
-                    
-                    # 추가 데이터를 포함하여 브로드캐스트 호출
-                    albabot_data = [serialize_albabot(bot) for bot in albabots]
-                    cookbot_data = [serialize_cookbot(bot) for bot in cookbots]
-                    pose_data = [serialize_pose6d(pose) for pose in poses]
-                    
-                    # 통합 데이터 생성
-                    combined_data = {
-                        "robots": robot_data,
-                        "albabots": albabot_data,
-                        "cookbots": cookbot_data,
-                        "poses": pose_data
-                    }
-                    
-                    # 로봇 토픽으로는 로봇 데이터만 전송
-                    await broadcast_robots_update(robot_data)
-                    # 상태 토픽으로는 통합 데이터 전송
-                    await broadcast_status_update(combined_data)
-                    
-                last_broadcast["robots"] = datetime.now()
-                
-            elif entity_type == "albabot" or entity_type == "cookbot":
-                # 로봇 상세 정보도 함께 조회하여 status 토픽으로 전송
-                # 로봇 데이터 조회
-                robots = session.exec(select(Robot)).all()
-                robot_data = [serialize_robot(robot) for robot in robots]
-                
-                # 로봇, 알바봇, 쿡봇 데이터 조회
-                albabots = session.exec(select(Albabot)).all()
-                cookbots = session.exec(select(Cookbot)).all()
-                poses = session.exec(select(Pose6D).where(Pose6D.entity_type == "WORLD")).all()
-                
-                # 데이터 직렬화
-                albabot_data = [serialize_albabot(bot) for bot in albabots]
-                cookbot_data = [serialize_cookbot(bot) for bot in cookbots]
-                pose_data = [serialize_pose6d(pose) for pose in poses]
-                
-                # 통합 데이터 전송
-                combined_data = {
-                    "robots": robot_data,
-                    "albabots": albabot_data,
-                    "cookbots": cookbot_data,
-                    "poses": pose_data
-                }
-                
-                await broadcast_status_update(combined_data)
-                
+                        os_ = session.exec(
+                            select(Order)
+                            .order_by(Order.timestamp.desc())
+                            .limit(10)
+                        ).all()
+                        out['data'] = [serialize_order(o) for o in os_]
+                # pose6d
+                elif entity_type == "pose6d":
+                    poses_ = session.exec(
+                        select(Pose6D)
+                        .where(Pose6D.entity_type == "WORLD")
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .distinct(Pose6D.entity_id)
+                    ).all()
+                    out['poses'] = poses_
+                # albabot or cookbot triggers full status
+                elif entity_type in ("albabot","cookbot"):
+                    # full status: robot 기본정보 + 로봇별 최신 Albabot/Cookbot/Pose6D
+                    out['robots'] = session.exec(select(Robot)).all()
+                    out['albabots'] = session.exec(
+                        select(Albabot)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
+                        .distinct(Albabot.robot_id)
+                    ).all()
+                    out['cookbots'] = session.exec(
+                        select(Cookbot)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
+                        .distinct(Cookbot.robot_id)
+                    ).all()
+                    out['poses'] = session.exec(
+                        select(Pose6D)
+                        .where(Pose6D.entity_type=="WORLD")
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .distinct(Pose6D.entity_id)
+                    ).all()
+                return out
+
+        result = await anyio.to_thread.run_sync(_sync_db_work)
+        now = datetime.now()
+
+        # 2) 스레드에서 반환된 결과로 브로드캐스트
+        e = result['entity']
+        if e == "robot":
+            await broadcast_robots_update(result['data'])
+            last_broadcast['robots'] = now
+            combined = {
+                'robots': result['data'],
+                'albabots': [serialize_albabot(b) for b in result['albabots']],
+                'cookbots': [serialize_cookbot(c) for c in result['cookbots']],
+                'poses': [serialize_pose6d(p) for p in result['poses']],
+            }
+            await broadcast_status_update(combined)
+            last_broadcast['status'] = now
+        elif e == "table":
+            await broadcast_tables_update(result['data'])
+            last_broadcast['tables'] = now
+        elif e == "event":
+            await broadcast_events_update(result['data'])
+            last_broadcast['events'] = now
+        elif e == "order":
+            await broadcast_orders_update(result['data'])
+            last_broadcast['orders'] = now
+        elif e == "pose6d" or e in ("albabot","cookbot"):
+            # full status
+            combined = {
+                'robots': [serialize_robot(r) for r in result.get('robots',[])],
+                'albabots': [serialize_albabot(b) for b in result.get('albabots',[])],
+                'cookbots': [serialize_cookbot(c) for c in result.get('cookbots',[])],
+                'poses': [serialize_pose6d(p) for p in result.get('poses',[])],
+            }
+            await broadcast_status_update(combined)
+            last_broadcast['status'] = now
+
     except Exception as e:
-        logger.error(f"Error in broadcasting {entity_type} update: {str(e)}")
+        logger.error(f"Error in broadcasting {entity_type} update: {e}")
 
 # 백업 폴링 함수 - 변경 감지 실패 대비 (10초 주기)
 async def fallback_polling():
@@ -362,6 +348,11 @@ async def fallback_polling():
             # 주문 데이터 10초마다 갱신
             if (now - last_broadcast["orders"]).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("order", None)
+
+            # fallback_polling 에서 status도 주기 갱신
+            if (now - last_broadcast["status"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("robot", None)   # robot→status 통합 로직 사용
+            
                 
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
@@ -370,6 +361,8 @@ async def fallback_polling():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global main_loop
+    main_loop = asyncio.get_event_loop()
     logger.info("Starting up application...")
     SQLModel.metadata.create_all(bind=engine)
     logger.info("Database tables created successfully")
@@ -426,10 +419,10 @@ class RoboDineTCPHandler(socketserver.BaseRequestHandler):
                 # 변경 후 즉시 비동기 브로드캐스팅 작업 생성
                 if entity_type:
                     # FastAPI 메인 이벤트 루프에서 직접 태스크 생성
-                    loop = asyncio.get_event_loop()
-                    loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(broadcast_entity_update(entity_type, entity_id))
-                    )
+                    if main_loop:
+                        main_loop.call_soon_threadsafe(
+                            lambda: asyncio.create_task(broadcast_entity_update(entity_type, entity_id))
+                        )
                     logger.info(f"[TCP] Scheduled broadcast for {entity_type} with ID {entity_id}")
                 
             response = "OK"

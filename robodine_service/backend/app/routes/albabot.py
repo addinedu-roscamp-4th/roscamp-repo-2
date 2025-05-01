@@ -19,7 +19,12 @@ class AlbabotStatusResponse(BaseModel):
 @router.get("", response_model=List[AlbabotStatusResponse])
 def get_all_albabot_status(db: Session = Depends(get_db)):
     # robot_id가 겹치지 않는 Albabot 레코드들 가져오기
-    albabot_records = db.query(Albabot).distinct(Albabot.robot_id).all()
+    albabot_records = (
+        db.query(Albabot)
+        .order_by(Albabot.robot_id, Albabot.id.desc())
+        .distinct(Albabot.robot_id)
+        .all()
+    )
     if not albabot_records:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -18,7 +18,12 @@ class CookbotStatusResponse(BaseModel):
 @router.get("", response_model=List[CookbotStatusResponse])
 def get_all_albabot_status(db: Session = Depends(get_db)):
     # robot_id가 겹치지 않는 Albabot 레코드들 가져오기
-    cookbot_records = db.query(Cookbot).distinct(Cookbot.robot_id).all()
+    cookbot_records = (
+        db.query(Cookbot)
+        .order_by(Cookbot.robot_id, Cookbot.id.desc())
+        .distinct(Cookbot.robot_id)
+        .all()
+    )
     if not cookbot_records:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

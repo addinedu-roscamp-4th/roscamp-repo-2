@@ -26,6 +26,8 @@ class Pose6DData(BaseModel):
     class Config:
         orm_mode = True
 
+        
+
 @router.post("/create", summary="Log a new Pose6D record")
 def create_pose6d(
     data: Pose6DData,
