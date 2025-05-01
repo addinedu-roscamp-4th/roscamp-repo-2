@@ -37,13 +37,13 @@ def main_thread(shared_data) :
                     save_alba_response(discriminated_task, alba_response)
 
 if __name__=="__main__":
-    stop_event = Event()
+    udp_stop_event = Event()
     manager = Manager()
     
     shared_data = manager.Namespace()
     shared_data.latest_frame = None
 
-    udp_process = Process(target=AlbaGPT_UDP.alba_udp_server, args=(stop_event,shared_data))
+    udp_process = Process(target=AlbaGPT_UDP.alba_udp_server, args=(udp_stop_event,shared_data))
     main_process = Process(target=main_thread, args=(shared_data,))
 
     udp_process.start()
