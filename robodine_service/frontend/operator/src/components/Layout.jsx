@@ -243,8 +243,8 @@ const Layout = ({ children }) => {
       <Header toggleSidebar={toggleSidebar} />
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
       
-      <main className="pt-14 lg:pl-64 transition-all duration-200">
-        {children}
+      <main className="pt-14 lg:pl-64 transition-all duration-200 h-[calc(100vh-0.5rem)] overflow-auto">
+      {children}
       </main>
     </div>
   );

@@ -31,22 +31,22 @@ const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
 // 매장 맵 테이블 위치 정의 (예시)
 const TABLE_POSITIONS = {
   // 테이블 번호에 따른 x, y 좌표 (0-100 범위의 상대적 위치)
-  1: { x: 20, y: 20 },
-  2: { x: 20, y: 40 },
-  3: { x: 20, y: 60 },
-  4: { x: 20, y: 80 },
-  5: { x: 40, y: 20 },
-  6: { x: 40, y: 40 },
-  7: { x: 40, y: 60 },
-  8: { x: 40, y: 80 },
-  9: { x: 60, y: 20 },
-  10: { x: 60, y: 40 },
-  11: { x: 60, y: 60 },
-  12: { x: 60, y: 80 },
-  13: { x: 80, y: 20 },
-  14: { x: 80, y: 40 },
-  15: { x: 80, y: 60 },
-  16: { x: 80, y: 80 },
+  1: { x: 34, y: 59 },
+  2: { x: 48, y: 59 },
+  3: { x: 34, y: 67 },
+  4: { x: 48, y: 67 },
+  // 5: { x: 40, y: 20 },
+  // 6: { x: 40, y: 40 },
+  // 7: { x: 40, y: 60 },
+  // 8: { x: 40, y: 80 },
+  // 9: { x: 60, y: 20 },
+  // 10: { x: 60, y: 40 },
+  // 11: { x: 60, y: 60 },
+  // 12: { x: 60, y: 80 },
+  // 13: { x: 80, y: 20 },
+  // 14: { x: 80, y: 40 },
+  // 15: { x: 80, y: 60 },
+  // 16: { x: 80, y: 80 },
 };
 
 // 웹소켓 연결 상태 관리를 위한 커스텀 훅
@@ -284,7 +284,7 @@ const DashboardPage = () => {
           baseInfo.battery = 100; // 쿡봇은 유선 전원 가정
         }
         // 로그를 주석 처리하여 중복 출력 방지
-        // console.log("변환 전 로봇 데이터:", baseInfo);
+        console.log("변환 전 로봇 데이터:", baseInfo);
         return baseInfo;
       });
 
@@ -335,7 +335,7 @@ const DashboardPage = () => {
             if (robot.type === 'ALBABOT' && Array.isArray(data.albabots)) {
               const matchingAlbabot = data.albabots.find(ab => ab["Albabot.robot_id"] === robot.robot_id);
               if (matchingAlbabot) {
-                console.log("매칭된 알바봇 데이터:", matchingAlbabot);
+                // console.log("매칭된 알바봇 데이터:", matchingAlbabot);
                 updatedRobot.status = matchingAlbabot["Albabot.status"] || robot.status;
                 
                 // 배터리 레벨이 0-1 사이의 값이면 퍼센트로 변환 (100 곱하기)
@@ -348,9 +348,10 @@ const DashboardPage = () => {
             }
 
             if (robot.type === 'COOKBOT' && Array.isArray(data.cookbots)) {
-              const matchingCookbot = data.cookbots.find(cb => cb.robot_id === robot.robot_id);
+              const matchingCookbot = data.cookbots.find(cb => cb["Cookbot.robot_id"] === robot.robot_id);
               if (matchingCookbot) {
-                updatedRobot.status = matchingCookbot.status || robot.status;
+                // console.log("매칭된 쿡봇 데이터:", matchingCookbot);
+                updatedRobot.status = matchingCookbot["Cookbot.status"] || robot.status;
               }
             }
 
@@ -358,7 +359,7 @@ const DashboardPage = () => {
           });
 
           // 상태 업데이트 후 로깅
-          console.log("로봇 데이터 상태 업데이트:", updatedRobots);
+          // console.log("로봇 데이터 상태 업데이트:", updatedRobots);
           return updatedRobots;
         });
       }
@@ -374,7 +375,7 @@ const DashboardPage = () => {
       
       // 완전한 데이터가 있는 경우에만 추가 로그 표시
       if (robotsData.some(robot => robot.position && robot.battery > 0)) {
-        console.log("모든 데이터가 반영된 로봇 상태:", robotsData);
+        // console.log("모든 데이터가 반영된 알바봇 상태:", robotsData);
       }
     }
   }, [robotsData]);
@@ -660,7 +661,7 @@ const DashboardPage = () => {
   const recentOrders = useMemo(() => {
     return [...processedOrders].sort((a, b) => 
       new Date(b.timestamp) - new Date(a.timestamp)
-    ).slice(0, 5); // 최근 5개만 표시
+    ).slice(0, 10); // 최근 5개만 표시
   }, [processedOrders]);
 
   // UI에 표시할 이벤트 데이터 처리
@@ -705,62 +706,62 @@ const DashboardPage = () => {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">대시보드</h1>
-        <div className="flex items-center">
-            <p className="text-sm text-gray-500 mr-4">
-            마지막 업데이트: {formatDateTime(lastUpdateTime)}
-            </p>
-          <button
-              onClick={handleRefreshData}
-              className="flex items-center justify-center p-2 rounded-md bg-white border border-gray-300 hover:bg-gray-50 transition-colors"
-              disabled={isLoading}
-            >
-              <RefreshCw size={16} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>새로고침</span>
-          </button>
-        </div>
-      </div>
-
-        <div className="grid grid-cols-12 gap-6">
-          {/* 첫 번째 행: 로봇 상태 + 매장 맵 */}
-          <div className="col-span-12 lg:col-span-8">
-            <StoreMap 
-              tables={processedTables} 
-              isLoading={isLoading}
-              wsConnected={robotsWS.connected}
-              robots={processedRobots.map(robot => ({
-                ...robot,
-                latency: poseLatencies[robot.id]
-              }))}
-            />
-          </div>
-          <div className="col-span-12 lg:col-span-4">
-            <RobotStatusPanel 
-              robots={processedRobots} 
-              error={robotsWS.error} 
-              isLoading={isLoading} 
-            />
-          </div>
-
-          {/* 두 번째 행: 이벤트 + 주문 */}
-          <div className="col-span-12 lg:col-span-6">
-            <EventTimeline 
-              events={recentEvents}
-              error={eventsWS.error}
-              isLoading={isLoading}
-            />
-          </div>
-          <div className="col-span-12 lg:col-span-6">
-            <RecentOrders 
-              orders={recentOrders}
-              // onViewOrder={(id) => console.log(`주문 상세보기: ${id}`)}
-            />
-          </div>
-        </div>
+    <div className="h-full w-full flex flex-col">
+  {/* 헤더 영역: 고정 높이 */}
+  <header className="flex-shrink-0 px-4 py-2 bg-white shadow-md flex items-center justify-between">
+    <h1 className="text-2xl font-bold text-gray-800">대시보드</h1>
+    <div className="flex items-center space-x-4">
+      <p className="text-sm text-gray-500">
+        마지막 업데이트: {formatDateTime(lastUpdateTime)}
+      </p>
+      <button
+        onClick={handleRefreshData}
+        className="p-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+        disabled={isLoading}
+      >
+        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+      </button>
     </div>
-    </Layout>
+  </header>
+
+  {/* 메인 컨텐츠: 패널들이 화면에 딱 맞게 배치 */}
+  <main className="flex-1 grid grid-cols-12 grid-rows-[32rem_1fr] gap-4 p-4 h-full overflow-hidden">
+  {/* 매장 맵 */}
+    <section className="col-span-12 lg:col-span-8 h-full">
+      <StoreMap
+        tables={processedTables}
+        robots={processedRobots.map(r => ({ ...r, latency: poseLatencies[r.id] }))}
+        isLoading={isLoading}
+        wsConnected={robotsWS.connected}
+      />
+    </section>
+    {/* 로봇 상태 패널 */}
+    <section className="col-span-12 lg:col-span-4 flex flex-col min-h-0">
+        <RobotStatusPanel
+        className="h-full"
+        robots={processedRobots}
+        error={robotsWS.error}
+        isLoading={isLoading}
+      />
+    </section>
+    {/* 이벤트 타임라인 */}
+    <section className="col-span-12 lg:col-span-6 flex flex-col min-h-0">
+    <EventTimeline
+        className="flex-1 overflow-auto"
+        events={recentEvents}
+        error={eventsWS.error}
+        isLoading={isLoading}
+      />
+    </section>
+    {/* 최근 주문 리스트 */}
+    <section className="col-span-12 lg:col-span-6 flex flex-col min-h-0">
+    <div className="flex-1 overflow-y-auto">
+    <RecentOrders orders={recentOrders} />
+  </div>
+</section>
+  </main>
+</div>
+  </Layout>
   );
 };
 

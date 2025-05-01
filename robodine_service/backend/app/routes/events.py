@@ -37,6 +37,7 @@ class SystemLogCreateRequest(BaseModel):
     message: str
 
 # --- Router Endpoints ---
+
 @router.get("", response_model=List[EventResponse])
 def get_events(db: Session = Depends(get_db)):
     events = db.query(Event).all()

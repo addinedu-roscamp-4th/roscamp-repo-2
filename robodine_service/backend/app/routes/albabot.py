@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime
@@ -62,7 +62,11 @@ def get_albabot_status(robot_id: int, db: Session = Depends(get_db)):
     ) 
 
 @router.post("/status", response_model=AlbabotStatusResponse)
-def create_albabot_status(albabot: AlbabotStatusResponse, db: Session = Depends(get_db)):
+def create_albabot_status(
+    albabot: AlbabotStatusResponse,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+    ):
     # Check if Albabot with the same robot_id already exists
     existing_albabot = db.query(Albabot).filter(Albabot.robot_id == str(albabot.robot_id)).first()
     # Create new Albabot record
@@ -77,6 +81,14 @@ def create_albabot_status(albabot: AlbabotStatusResponse, db: Session = Depends(
     db.commit()
     db.refresh(new_albabot)
     
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "albabot",
+        int(new_albabot.robot_id)
+    )
+
     return AlbabotStatusResponse(
         robot_id=int(new_albabot.robot_id),
         status=new_albabot.status,

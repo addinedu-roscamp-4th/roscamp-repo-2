@@ -73,7 +73,7 @@ def serialize_robot(robot):
 
 def serialize_table(table):
     """Table 모델을 JSON 직렬화 가능한 형태로 변환"""
-    table_status = str(table.type) if table.type else None
+    table_status = str(table.status) if table.status else None
     if table_status:
         table_status = table_status.replace('TableStatus.', '')
     return {

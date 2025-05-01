@@ -1,9 +1,9 @@
 // robodine_service/frontend/operator/src/components/dashboard/StoreMap.jsx
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw, AlertTriangle, Wifi } from 'react-feather';
 
-const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesError, selectedEvent, wsConnected }) => {
+const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesError, selectedEvent, wsConnected, className = ''}) => {
   // 식당 영역 좌표 (최상단에 정의하여 다른 계산에 사용)
   const restaurantArea = {
     topLeft: { x: 21, y: 51 },
@@ -20,10 +20,7 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   const [scale, setScale] = useState(15); 
   
   // 기본 위치 - 식당 영역이 중앙에 오도록 조정
-  const [position, setPosition] = useState({ 
-    x: 0,  // 초기 위치는 컴포넌트 마운트 후 설정
-    y: 0
-  });
+  const [position, setPosition] = useState(null);
   
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -34,49 +31,46 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   const MAP_HEIGHT = 100; // 픽셀
 
   // 컴포넌트 마운트 시 식당 영역이 중앙에 오도록 위치 초기화
-  useEffect(() => {
-    // 컨테이너 크기 확인
-    if (mapContainerRef.current) {
-      const containerWidth = mapContainerRef.current.clientWidth;
-      const containerHeight = mapContainerRef.current.clientHeight;
-      
-      // 식당 중심점이 뷰포트 중앙에 오도록 조정
-      const offsetX = (containerWidth / 2 / scale) - centerX;
-      const offsetY = (containerHeight / 2 / scale) - centerY;
-      
-      setPosition({ x: offsetX * scale, y: offsetY * scale });
-    }
-  }, [scale, centerX, centerY]); // 의존성 배열에 centerX, centerY 추가
+    // 페인팅 이전에 동기적으로 실행되어 깜빡임 제거
+    useLayoutEffect(() => {
+      if (!mapContainerRef.current || isLoading) return;
+      // 이 안에 바로 쓰는 대신, animation frame으로 늦춰서
+      requestAnimationFrame(() => {
+        const W = mapContainerRef.current.clientWidth;
+        const H = mapContainerRef.current.clientHeight;
+        setPosition({ x: W/2 - centerX*scale, y: H/2 - centerY*scale });
+      });
+    }, [centerX, centerY, scale, isLoading]);
 
   const zoomIn = () => {
-    setScale(prev => Math.min(prev + 0.5, 15)); // 최대 확대 레벨 증가
+    setScale(prev => Math.min(prev + 2, 25)); // 최대 확대 레벨 증가
   };
 
   const zoomOut = () => {
-    setScale(prev => Math.max(prev - 0.5, 1));
+    setScale(prev => Math.max(prev - 2, 1));
   };
 
   const resetZoom = () => {
-    setScale(15); // 기본 확대 레벨
-    
-    // 식당 중심점이 뷰포트 중앙에 오도록 위치 재설정
-    if (mapContainerRef.current) {
-      const containerWidth = mapContainerRef.current.clientWidth;
-      const containerHeight = mapContainerRef.current.clientHeight;
-      
-      const offsetX = (containerWidth / 2 / 15) - centerX;
-      const offsetY = (containerHeight / 2 / 15) - centerY;
-      
-      setPosition({ x: offsetX * 15, y: offsetY * 15 });
-    }
+        const newScale = 15;
+        setScale(newScale);
+        // 똑같은 픽셀 기준 계산
+        if (mapContainerRef.current) {
+          const W = mapContainerRef.current.clientWidth;
+          const H = mapContainerRef.current.clientHeight;
+          const x = W / 2 - centerX * newScale;
+          const y = H / 2 - centerY * newScale;
+          setPosition({ x, y });
+        }
   };
 
   // 드래그 시작 핸들러
   const handleMouseDown = (e) => {
     setIsDragging(true);
+    const currX = position?.x || 0;
+    const currY = position?.y || 0;
     setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
+      x: e.clientX - currX,
+      y: e.clientY - currY
     });
     e.preventDefault();
   };
@@ -134,13 +128,23 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
       case 'ONLINE':
       case 'IDLE':
         return 'bg-green-400';
-      case 'BUSY':
-        return 'bg-blue-400';
-      case 'WARNING':
+      case 'COOKING':
         return 'bg-yellow-400';
+      case 'SERVING':
+        return 'bg-blue-400';
+      case 'CLEANING':
+        return 'bg-purple-400';
+      case 'EMERGENCY':
+        return 'bg-red-400';
+      case 'MAINTENANCE':
+        return 'bg-orange-400';
+      case 'SECURITY':
+        return 'bg-gray-400';
       case 'OFFLINE':
       case 'NOT_CONNECTED':
-        return 'bg-red-400';
+        return 'bg-black-400';
+      case 'ERROR':
+        return 'bg-black';
       default:
         return 'bg-gray-400';
     }
@@ -230,7 +234,7 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   }));
 
   return (
-    <div className="bg-white rounded-lg shadow p-4 h-full">
+    <div className={`bg-white rounded-lg shadow p-4 ${className}`}>
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center">
           <h2 className="text-lg font-semibold text-gray-700">매장 맵</h2>
@@ -284,17 +288,24 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
       ) : (
         <div 
           ref={mapContainerRef}
-          className="relative border border-gray-300 rounded-lg overflow-hidden bg-gray-50" 
+          className="relative border border-gray-300 rounded-lg overflow-hidden bg-gray-50 h-full" 
           style={{ height: '400px', cursor: isDragging ? 'grabbing' : 'grab' }}
           onMouseDown={handleMouseDown}
         >
-          <div className="absolute inset-0" style={{ 
-            transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`, 
-            transformOrigin: 'center', 
+       {/* position이 null일 땐 숨겨두기 */}
+        <div
+          className="absolute inset-0"
+          style={{
+            visibility: position ? 'visible' : 'hidden',
+            transformOrigin: '0 0',
+            transform: position 
+              ? `scale(${scale}) translate(${position.x/scale}px, ${position.y/scale}px)` 
+              : undefined,
             transition: isDragging ? 'none' : 'transform 0.3s ease',
             width: `${MAP_WIDTH}px`,
             height: `${MAP_HEIGHT}px`
-          }}>
+          }}
+            >
             {/* 격자 배경 */}
             <div className="absolute inset-0">
               {Array.from({ length: Math.floor(MAP_HEIGHT / 2) }).map((_, y) => (
@@ -427,11 +438,35 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
           </div>
           <div className="flex items-center ml-4">
             <div className="w-3 h-3 mr-1 rounded-full bg-green-400"></div>
-            <span>로봇 온라인</span>
+            <span>대기</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 mr-1 rounded-full bg-yellow-400"></div>
+            <span>요리중</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 mr-1 rounded-full bg-blue-400"></div>
+            <span>서빙중</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 mr-1 rounded-full bg-purple-400"></div>
+            <span>청소중</span>
           </div>
           <div className="flex items-center">
             <div className="w-3 h-3 mr-1 rounded-full bg-red-400"></div>
-            <span>로봇 오프라인</span>
+            <span>비상</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 mr-1 rounded-full bg-orange-400"></div>
+            <span>정비중</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 mr-1 rounded-full bg-gray-400"></div>
+            <span>보안</span>
+          </div>
+          <div className="flex items-center">
+          <div className="w-3 h-3 mr-1 rounded-full bg-black"></div>
+          <span>오류</span>
           </div>
         </div>
       </div>

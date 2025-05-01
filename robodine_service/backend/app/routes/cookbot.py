@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime
@@ -57,3 +57,34 @@ def get_cookbot_status(robot_id: int, db: Session = Depends(get_db)):
         status=cookbot.status,
         timestamp=cookbot.timestamp
     ) 
+
+@router.post("/status", response_model=CookbotStatusResponse)
+def create_cookbot_status(
+    cookbot_in: CookbotStatusResponse,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    # 새로운 Cookbot 상태 기록 생성
+    new_cookbot = Cookbot(
+        robot_id=str(cookbot_in.robot_id),
+        status=cookbot_in.status,
+        timestamp=cookbot_in.timestamp
+    )
+    db.add(new_cookbot)
+    db.commit()
+    db.refresh(new_cookbot)
+
+    # 모듈 초기화 이후 동적 import
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "cookbot",
+        int(new_cookbot.robot_id)
+    )
+
+    return CookbotStatusResponse(
+        robot_id=int(new_cookbot.robot_id),
+        status=new_cookbot.status,
+        timestamp=new_cookbot.timestamp
+    )

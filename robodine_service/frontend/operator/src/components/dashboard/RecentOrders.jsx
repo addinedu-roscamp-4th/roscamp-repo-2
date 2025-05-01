@@ -52,7 +52,7 @@ const RecentOrders = ({ orders = [], onViewOrder }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-white rounded-lg shadow h-full flex flex-col">
       <div className="flex justify-between items-center p-4 border-b">
         <h3 className="font-semibold text-gray-800 flex items-center">
           <DollarSign size={18} className="mr-2 text-blue-500" />
@@ -60,7 +60,8 @@ const RecentOrders = ({ orders = [], onViewOrder }) => {
         </h3>
       </div>
 
-      <div className="overflow-x-auto">
+      
+      <div className="flex-1 overflow-y-auto">
         {orders.length > 0 ? (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Filter, Clock, AlertTriangle, AlertOctagon, AlertCircle, Server, PlusCircle } from 'react-feather';
 
 // EventTimeline 컴포넌트 - 최근 이벤트 타임라인 표시
-const EventTimeline = ({ events = [], onSelectEvent, error, isLoading }) => {
+const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className = ''}) => {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [activeFilters, setActiveFilters] = useState(['ALL']);
 
@@ -95,7 +95,7 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading }) => {
   const filteredEvents = filterEvents();
 
   return (
-    <div className="bg-white rounded-lg shadow p-4 h-full">
+    <div className={`bg-white … p-4 flex flex-col ${className}`}>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold text-gray-700 flex items-center">
           <Clock className="mr-2 text-blue-500" />
@@ -178,7 +178,8 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading }) => {
           </p>
         </div>
       ) : (
-        <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
+        // 이벤트 목록
+        <div className="space-y-4 overflow-y-auto pr-2 flex-1">
           {filteredEvents.map((event) => (
             <div 
               key={event.id} 
