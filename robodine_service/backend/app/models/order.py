@@ -15,15 +15,14 @@ class KioskTerminal(SQLModel, table=True):
     table_number: Optional[int] = Field(default=None)
     ip_address: Optional[str] = None
 
-    orders: Optional["Order"] = Relationship(back_populates="kioskterminal")
 
 class Order(SQLModel, table=True):
     __tablename__ = "order"  # 필요하다면 "orders" 로 변경 가능
 
     id: Optional[int] = Field(default=None, primary_key=True)
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
-    robot_id:    Optional[int] = Field(default=None, foreign_key="robot.id")
-    kiosk_id:    Optional[int] = Field(default=None, foreign_key="kioskterminal.id")
+    robot_id:    Optional[int] = Field(default=None, foreign_key="robot.robot_id")
+    table_id:    Optional[int] = Field(default=None)
     status:      Optional[OrderStatus] = Field(sa_column=Column(SQLEnum(OrderStatus)))
     timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     served_at:   Optional[datetime] = None
@@ -31,7 +30,6 @@ class Order(SQLModel, table=True):
     # 위에서 정의한 Customer.orders 와 짝을 이루도록 back_populates="orders"
     customer:  Optional[Customer]       = Relationship(back_populates="orders")
     robot:     Optional[Robot]          = Relationship(back_populates="orders")
-    kioskterminal:     Optional[KioskTerminal]  = Relationship(back_populates="orders")
 
 class OrderItem(SQLModel, table=True):
     __tablename__ = "orderitem"

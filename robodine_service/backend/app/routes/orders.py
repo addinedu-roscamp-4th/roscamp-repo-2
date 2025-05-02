@@ -1,5 +1,5 @@
 # app/routes/orders.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -19,7 +19,7 @@ class OrderItemRequest(BaseModel):
 class OrderCreateRequest(BaseModel):
     customer_id: int
     robot_id: Optional[int] = None
-    kiosk_id: Optional[int] = None
+    table_id: Optional[int] = None
     items: List[OrderItemRequest]
 
 class OrderItemResponse(BaseModel):
@@ -30,7 +30,7 @@ class OrderResponse(BaseModel):
     id: int
     customer_id: int
     robot_id: Optional[int]
-    kiosk_id: Optional[int]
+    table_id: Optional[int]
     items: List[OrderItemResponse]
     status: OrderStatus
     timestamp: datetime
@@ -43,7 +43,7 @@ class OrderListResponse(BaseModel):
     id: int
     customer_id: int
     robot_id: Optional[int]
-    kiosk_id: Optional[int]
+    table_id: Optional[int]
     status: OrderStatus
     timestamp: datetime
 
@@ -62,7 +62,7 @@ def get_orders(db: Session = Depends(get_db)):
             id=o.id,
             customer_id=o.customer_id,
             robot_id=o.robot_id,
-            kiosk_id=o.kiosk_id,
+            table_id=o.table_id,
             status=o.status,
             timestamp=o.timestamp
         ) for o in orders
@@ -84,7 +84,7 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
         id=o.id,
         customer_id=o.customer_id,
         robot_id=o.robot_id,
-        kiosk_id=o.kiosk_id,
+        table_id=o.table_id,
         items=item_res,
         status=o.status,
         timestamp=o.timestamp,
@@ -92,9 +92,13 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
     )
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-def create_order(data: OrderCreateRequest, db: Session = Depends(get_db)):
+def create_order(
+    data: OrderCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)):
     # 1) Customer 검증
     cust = db.query(Customer).get(data.customer_id)
+
     if not cust:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail=f"Customer {data.customer_id} not found")
@@ -104,19 +108,13 @@ def create_order(data: OrderCreateRequest, db: Session = Depends(get_db)):
         if not rob:
             raise HTTPException(status.HTTP_404_NOT_FOUND,
                                 detail=f"Robot {data.robot_id} not found")
-    # 3) (선택) KioskTerminal 검증
-    if data.kiosk_id is not None:
-        ks = db.query(KioskTerminal).get(data.kiosk_id)
-        if not ks:
-            raise HTTPException(status.HTTP_404_NOT_FOUND,
-                                detail=f"KioskTerminal {data.kiosk_id} not found")
 
     # 4) Order 생성
     new_o = Order(
         customer_id=data.customer_id,
         robot_id=data.robot_id,
-        kiosk_id=data.kiosk_id,
-        status=OrderStatus.PLACED
+        table_id=data.table_id,
+        status=OrderStatus.PREPARING,
         # timestamp: default_factory에 의해 자동 설정
     )
     db.add(new_o)
@@ -133,19 +131,27 @@ def create_order(data: OrderCreateRequest, db: Session = Depends(get_db)):
         db.add(oi)
     db.commit()
 
-    # 6) 방금 추가된 OrderItem 조회
+     # **1) 주문 항목을 직접 다시 조회합니다**
     items = db.query(OrderItem).filter(OrderItem.order_id == new_o.id).all()
-    item_res = [
-        OrderItemResponse(menu_item_id=i.menu_item_id, quantity=i.quantity)
-        for i in items
-    ]
 
+    # 2) 웹소켓 브로드캐스트 예약 (entity_id=new_o.id 로 변경)
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "order",
+        None,
+    )
+
+    # 3) Pydantic 응답으로 리턴
     return OrderResponse(
         id=new_o.id,
         customer_id=new_o.customer_id,
         robot_id=new_o.robot_id,
-        kiosk_id=new_o.kiosk_id,
-        items=item_res,
+        table_id=new_o.table_id,
+        items=[
+            OrderItemResponse(menu_item_id=i.menu_item_id, quantity=i.quantity)
+            for i in items
+        ],
         status=new_o.status,
         timestamp=new_o.timestamp,
         served_at=new_o.served_at
@@ -154,6 +160,7 @@ def create_order(data: OrderCreateRequest, db: Session = Depends(get_db)):
 @router.put("/{order_id}/status", response_model=OrderResponse)
 def update_order_status(order_id: int,
                         req: OrderStatusUpdateRequest,
+                        background_tasks: BackgroundTasks,
                         db: Session = Depends(get_db)):
     o = db.query(Order).filter(Order.id == order_id).first()
     if not o:
@@ -172,11 +179,20 @@ def update_order_status(order_id: int,
         OrderItemResponse(menu_item_id=i.menu_item_id, quantity=i.quantity)
         for i in items
     ]
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "order",
+        None,
+    )
+
     return OrderResponse(
         id=o.id,
         customer_id=o.customer_id,
         robot_id=o.robot_id,
-        kiosk_id=o.kiosk_id,
+        table_id=o.table_id,
         items=item_res,
         status=o.status,
         timestamp=o.timestamp,

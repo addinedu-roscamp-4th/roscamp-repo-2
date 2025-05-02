@@ -12,7 +12,7 @@ import anyio
 from fastapi import FastAPI, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
-from sqlmodel import SQLModel, Session, select
+from sqlmodel import SQLModel, Session, select, case
 
 from app.routes import (
     poses, websockets, streaming, inventories,
@@ -29,10 +29,11 @@ from app.core.database import get_session
 from app.models.robot import Robot
 from app.models.table import Table
 from app.models.event import Event
-from app.models.order import Order
+from app.models.order import Order, OrderItem, KioskTerminal
 from app.models.pose6d import Pose6D
 from app.models.albabot import Albabot
 from app.models.cookbot import Cookbot
+from app.models.inventory import Inventory, MenuItem, MenuIngredient
 from app.core.utils import dispatch_payload
 
 from app.services.streaming_service import get_stream_urls, add_stream_url
@@ -110,7 +111,7 @@ def serialize_order(order):
         "Order.id": order.id,
         "Order.customer_id": order.customer_id,
         "Order.robot_id": order.robot_id,
-        "Order.kiosk_id": order.kiosk_id, 
+        "Order.table_id": order.table_id, 
         "Order.status": order_status,
         "Order.timestamp": order.timestamp.isoformat() if order.timestamp else None,
         "Order.served_at": order.served_at.isoformat() if order.served_at else None
@@ -159,6 +160,31 @@ def serialize_cookbot(robot):
         "Cookbot.timestamp": robot.timestamp.isoformat() if robot.timestamp else None
     }
 
+def serialize_kioskterminal(kioskterminal):
+    """KioskTerminal 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "KioskTerminal.id": kioskterminal.id,
+        "KioskTerminal.table_number": kioskterminal.table_number,
+        "KioskTerminal.ip_address": kioskterminal.ip_address
+    }
+
+def serialize_orderitem(orderitem):
+    """OrderItem 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "OrderItem.order_id": orderitem.order_id,
+        "OrderItem.menu_item_id": orderitem.menu_item_id,
+        "OrderItem.quantity": orderitem.quantity
+    }
+
+def serialize_menuitem(menuitem):
+    """MenuItem 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "MenuItem.id": menuitem.id,
+        "MenuItem.name": menuitem.name,
+        "MenuItem.price": menuitem.price,
+        "MenuItem.prepare_time": menuitem.prepare_time
+    }
+
 # 서버 측에서 사용할 데이터 전송 함수들
 async def broadcast_robots_update(robots_data):
     """로봇 데이터 업데이트를 브로드캐스팅"""
@@ -183,7 +209,12 @@ async def broadcast_events_update(events_data):
 
 async def broadcast_orders_update(orders_data):
     """주문 데이터 업데이트를 브로드캐스팅"""
-    await manager.broadcast_update(orders_data, "orders")
+    message = {
+        "type": "update",
+        "topic": "orders",
+        "data": orders_data
+    }
+    await manager.broadcast(message, "orders")
 
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
@@ -200,8 +231,11 @@ async def broadcast_entity_update(entity_type, entity_id):
                         robot = session.get(Robot, entity_id)
                         out['data'] = [serialize_robot(robot)] if robot else []
                     else:
-                        robots = session.exec(select(Robot)).all()
-                        out['data'] = [serialize_robot(r) for r in robots]
+                        robots = session.exec(
+                            select(Robot)
+                            .order_by(Robot.robot_id)
+                            ).all()
+                        out['data'] = [serialize_robot(robot) for robot in robots]
                     # 상세 상태 조회 (albabot, cookbot, pose6d)
                     albabots = session.exec(
                         select(Albabot)
@@ -225,48 +259,73 @@ async def broadcast_entity_update(entity_type, entity_id):
                 # table
                 elif entity_type == "table":
                     if entity_id:
-                        t = session.get(Table, entity_id)
-                        out['data'] = [serialize_table(t)] if t else []
+                        table = session.get(Table, entity_id)
+                        out['data'] = [serialize_table(table)] if table else []
                     else:
-                        ts = session.exec(select(Table)).all()
-                        out['data'] = [serialize_table(t) for t in ts]
+                        tables = session.exec(select(Table)).all()
+                        out['data'] = [serialize_table(table) for table in tables]
                 # event
                 elif entity_type == "event":
                     if entity_id:
-                        ev = session.get(Event, entity_id)
-                        out['data'] = [serialize_event(ev)] if ev else []
+                        event = session.get(Event, entity_id)
+                        out['data'] = [serialize_event(event)] if event else []
                     else:
-                        evs = session.exec(
+                        events = session.exec(
                             select(Event)
                             .order_by(Event.timestamp.desc())
                             .limit(20)
                         ).all()
-                        out['data'] = [serialize_event(e) for e in evs]
+                        out['data'] = [serialize_event(event) for event in events]
                 # order
                 elif entity_type == "order":
                     if entity_id:
-                        o = session.get(Order, entity_id)
-                        out['data'] = [serialize_order(o)] if o else []
+                        order = session.get(Order, entity_id)
+                        out['data'] = [serialize_order(order)] if order else []
                     else:
-                        os_ = session.exec(
+                        orders = session.exec(
                             select(Order)
-                            .order_by(Order.timestamp.desc())
-                            .limit(10)
+                            .order_by(
+                                case(
+                                    (Order.status == "PREPARING", 0),
+                                    else_=1
+                                ),
+                                Order.id.desc())
+                            .limit(20)
                         ).all()
-                        out['data'] = [serialize_order(o) for o in os_]
+                        out['data'] = [serialize_order(order) for order in orders]
+                    # # 주문 아이템 및 키오스크 단말기 정보 추가
+                    orderitems = session.exec(
+                        select(OrderItem)
+                        .order_by(OrderItem.order_id.desc())
+                        .distinct(OrderItem.order_id)
+                    ).all()
+                    out['orderitems'] = orderitems
+                    kioskterminals = session.exec(
+                        select(KioskTerminal)
+                        .order_by(KioskTerminal.id.desc())
+                    ).all()
+                    out['kioskterminals'] = kioskterminals
+                    menuitems = session.exec(
+                        select(MenuItem)
+                        .order_by(MenuItem.id)
+                    ).all()
+                    out['menuitems'] = menuitems
                 # pose6d
                 elif entity_type == "pose6d":
-                    poses_ = session.exec(
+                    poses = session.exec(
                         select(Pose6D)
                         .where(Pose6D.entity_type == "WORLD")
                         .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
                     ).all()
-                    out['poses'] = poses_
+                    out['poses'] = poses
                 # albabot or cookbot triggers full status
                 elif entity_type in ("albabot","cookbot"):
                     # full status: robot 기본정보 + 로봇별 최신 Albabot/Cookbot/Pose6D
-                    out['robots'] = session.exec(select(Robot)).all()
+                    out['robots'] = session.exec(
+                        select(Robot)
+                        .order_by(Robot.robot_id)
+                        ).all()
                     out['albabots'] = session.exec(
                         select(Albabot)
                         .order_by(Albabot.robot_id, Albabot.id.desc())
@@ -289,40 +348,45 @@ async def broadcast_entity_update(entity_type, entity_id):
         now = datetime.now()
 
         # 2) 스레드에서 반환된 결과로 브로드캐스트
-        e = result['entity']
-        if e == "robot":
+        entity = result['entity']
+        if entity == "robot":
             await broadcast_robots_update(result['data'])
             last_broadcast['robots'] = now
             combined = {
                 'robots': result['data'],
-                'albabots': [serialize_albabot(b) for b in result['albabots']],
-                'cookbots': [serialize_cookbot(c) for c in result['cookbots']],
-                'poses': [serialize_pose6d(p) for p in result['poses']],
+                'albabots': [serialize_albabot(albabots) for albabots in result['albabots']],
+                'cookbots': [serialize_cookbot(cookbots) for cookbots in result['cookbots']],
+                'poses': [serialize_pose6d(poses) for poses in result['poses']],
             }
             await broadcast_status_update(combined)
             last_broadcast['status'] = now
-        elif e == "table":
+        elif entity == "table":
             await broadcast_tables_update(result['data'])
             last_broadcast['tables'] = now
-        elif e == "event":
+        elif entity == "event":
             await broadcast_events_update(result['data'])
             last_broadcast['events'] = now
-        elif e == "order":
-            await broadcast_orders_update(result['data'])
-            last_broadcast['orders'] = now
-        elif e == "pose6d" or e in ("albabot","cookbot"):
-            # full status
+        elif entity == "order":
             combined = {
-                'robots': [serialize_robot(r) for r in result.get('robots',[])],
-                'albabots': [serialize_albabot(b) for b in result.get('albabots',[])],
-                'cookbots': [serialize_cookbot(c) for c in result.get('cookbots',[])],
-                'poses': [serialize_pose6d(p) for p in result.get('poses',[])],
+                'orders': [result['data']],
+                'kioskterminals': [serialize_kioskterminal(kioskterminals) for kioskterminals in result['kioskterminals']],
+                'orderitems' : [serialize_orderitem(orderitems) for orderitems in result['orderitems']],
+                'menuitems' : [serialize_menuitem(menuitems) for menuitems in result['menuitems']],
+            }
+            await broadcast_orders_update(combined)
+            last_broadcast['orders'] = now
+        elif entity == entity in ("albabot","cookbot"):
+            combined = {
+                'robots': [serialize_robot(robots) for robots in result.get('robots',[])],
+                'albabots': [serialize_albabot(albabots) for albabots in result.get('albabots',[])],
+                'cookbots': [serialize_cookbot(cookbots) for cookbots in result.get('cookbots',[])],
+                'poses': [serialize_pose6d(poses) for poses in result.get('poses',[])],
             }
             await broadcast_status_update(combined)
             last_broadcast['status'] = now
 
-    except Exception as e:
-        logger.error(f"Error in broadcasting {entity_type} update: {e}")
+    except Exception as entity:
+        logger.error(f"Error in broadcasting {entity_type} update: {entity}")
 
 # 백업 폴링 함수 - 변경 감지 실패 대비 (10초 주기)
 async def fallback_polling():

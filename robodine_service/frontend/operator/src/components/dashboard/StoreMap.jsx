@@ -225,7 +225,7 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   const ROBOT_SIZE = 3;  // 로봇 크기 (픽셀) - 더 크게 설정
 
   // 임시로 테이블 데이터 추가 (디버깅용)
-  console.log("Tables:", validTables);
+  // console.log("Tables:", validTables);
   const debugTables = Array.from({ length: 4 }, (_, i) => ({
     id: i + 1,
     tableNumber: i + 1,

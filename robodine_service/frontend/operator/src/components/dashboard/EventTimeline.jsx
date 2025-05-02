@@ -41,20 +41,22 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
       setActiveFilters([...activeFilters, filterType]);
     }
   };
-
+  // WELCOME = "WELCOME"
+  // CALL = "CALL"
+  // BIRTHDAY = "BIRTHDAY"
+  // EMERGENCY = "EMERGENCY"
+  // CLEANING = "CLEANING"
   // 이벤트 아이콘 가져오기
   const getEventIcon = (eventType) => {
     switch (eventType?.toUpperCase()) {
-      case 'WARNING':
+      case 'CLEANING':
         return <AlertTriangle className="text-yellow-500" size={18} />;
-      case 'ERROR':
-        return <AlertOctagon className="text-red-500" size={18} />;
-      case 'SYSTEM':
-        return <Server className="text-blue-500" size={18} />;
-      case 'ROBOT':
-        return <Server className="text-purple-500" size={18} />;
       case 'EMERGENCY':
-        return <AlertCircle className="text-red-500" size={18} />;
+        return <AlertOctagon className="text-red-500" size={18} />;
+      case 'WELCOME':
+        return <Server className="text-blue-500" size={18} />;
+      case 'BIRTHDAY':
+        return <Server className="text-purple-500" size={18} />;
       default:
         return <PlusCircle className="text-gray-500" size={18} />;
     }
@@ -63,16 +65,14 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
   // 이벤트 색상 가져오기
   const getEventColor = (eventType) => {
     switch (eventType?.toUpperCase()) {
-      case 'WARNING':
+      case 'CLEANING':
         return 'border-yellow-500';
-      case 'ERROR':
-        return 'border-red-500';
-      case 'SYSTEM':
-        return 'border-blue-500';
-      case 'ROBOT':
-        return 'border-purple-500';
       case 'EMERGENCY':
         return 'border-red-500';
+      case 'WELCOME':
+        return 'border-blue-500';
+      case 'BIRTHDAY':
+        return 'border-purple-500';
       default:
         return 'border-gray-300';
     }
@@ -193,9 +193,6 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
                   </span>
                   <div>
                     <p className="text-sm font-medium text-gray-900">{event.message}</p>
-                    {event.location && (
-                      <p className="text-xs text-gray-500">위치: {event.location}</p>
-                    )}
                     {event.robotId && (
                       <p className="text-xs text-gray-500">로봇 ID: {event.robotId}</p>
                     )}

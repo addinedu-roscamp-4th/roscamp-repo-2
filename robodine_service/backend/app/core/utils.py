@@ -11,6 +11,7 @@ from app.models.cookbot import Cookbot
 
 
 def dispatch_payload(session: Session, data: Dict[str, Any]) -> Dict[str, Any]:
+    print(f"Dispatching payload: {data}")
     msg_type = data.get("msg_type")
     if msg_type == "Albabot":
         return _handle_albabot(session, data)
@@ -103,5 +104,5 @@ def _handle_ingredient(session: Session, data: Dict[str, Any]):
         pitch=data["pitch"],
         yaw=data["yaw"],
     ))
-    return {"affected_entity": {"type": "pose6d", "id": data["ingredient_id"]}}
+    return {"affected_entity": {"type": "inventory", "id": data["ingredient_id"]}}
 

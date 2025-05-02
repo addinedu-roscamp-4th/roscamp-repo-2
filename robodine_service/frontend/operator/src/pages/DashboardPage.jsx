@@ -235,7 +235,11 @@ const DashboardPage = () => {
   });
   const [tablesData, setTablesData] = useState([]);
   const [eventsData, setEventsData] = useState([]);
-  const [ordersData, setOrdersData] = useState([]);
+
+  const [ordersData, setOrdersData] = useState({
+    orders: [], kioskterminals: [], orderItems: [], menuitems: []
+  });  
+
   const [poseData, setPoseData] = useState([]);
   const [poseLatencies, setPoseLatencies] = useState({});
 
@@ -247,17 +251,17 @@ const DashboardPage = () => {
 
   // 디버깅을 위한 상태 로깅 함수
   const logDataState = useCallback(() => {
-    console.log("로봇 데이터:", robotsData);
-    console.log("로봇 상세 데이터:", robotDetailsData);
-    console.log("테이블 데이터:", tablesData);
+    // console.log("로봇 데이터:", robotsData);
+    // console.log("로봇 상세 데이터:", robotDetailsData);
+    // console.log("테이블 데이터:", tablesData);
     console.log("주문 데이터:", ordersData);
-    console.log("이벤트 데이터:", eventsData);
-    console.log("위치 데이터:", poseData);
+    // console.log("이벤트 데이터:", eventsData);
+    // console.log("위치 데이터:", poseData);
   }, [robotsData, robotDetailsData, tablesData, ordersData, eventsData, poseData]);
 
   // 로봇 상태 메시지 핸들러
   const handleRobotsMessage = useCallback((data) => {
-    // console.log("로봇 웹소켓 데이터 수신:", data);
+    console.log("로봇 웹소켓 데이터 수신:", data);
     
     if (!Array.isArray(data)) {
       console.warn('로봇 데이터가 배열 형태가 아닙니다:', data);
@@ -284,7 +288,7 @@ const DashboardPage = () => {
           baseInfo.battery = 100; // 쿡봇은 유선 전원 가정
         }
         // 로그를 주석 처리하여 중복 출력 방지
-        console.log("변환 전 로봇 데이터:", baseInfo);
+        // console.log("변환 전 로봇 데이터:", baseInfo);
         return baseInfo;
       });
 
@@ -317,7 +321,7 @@ const DashboardPage = () => {
 
   // 로봇 상세 메시지 핸들러
   const handleRobotDetailsMessage = useCallback((data) => {
-    // console.log("로봇 상세 데이터 수신:", data);
+    console.log("로봇 상세 데이터 수신:", data);
 
     if (data && typeof data === 'object') {
       // 로봇 상세 데이터 업데이트
@@ -333,7 +337,7 @@ const DashboardPage = () => {
             let updatedRobot = { ...robot };
 
             if (robot.type === 'ALBABOT' && Array.isArray(data.albabots)) {
-              const matchingAlbabot = data.albabots.find(ab => ab["Albabot.robot_id"] === robot.robot_id);
+              const matchingAlbabot = data.albabots.find(albabot => albabot["Albabot.robot_id"] === robot.robot_id);
               if (matchingAlbabot) {
                 // console.log("매칭된 알바봇 데이터:", matchingAlbabot);
                 updatedRobot.status = matchingAlbabot["Albabot.status"] || robot.status;
@@ -348,7 +352,7 @@ const DashboardPage = () => {
             }
 
             if (robot.type === 'COOKBOT' && Array.isArray(data.cookbots)) {
-              const matchingCookbot = data.cookbots.find(cb => cb["Cookbot.robot_id"] === robot.robot_id);
+              const matchingCookbot = data.cookbots.find(cookbot => cookbot["Cookbot.robot_id"] === robot.robot_id);
               if (matchingCookbot) {
                 // console.log("매칭된 쿡봇 데이터:", matchingCookbot);
                 updatedRobot.status = matchingCookbot["Cookbot.status"] || robot.status;
@@ -371,7 +375,7 @@ const DashboardPage = () => {
   useEffect(() => {
     // 모든 데이터가 처리된 후에만 로깅 (조건 완화)
     if (robotsData.length > 0) {
-      console.log("로봇 데이터 상태 업데이트2:", robotsData);
+      // console.log("로봇 데이터 상태 업데이트2:", robotsData);
       
       // 완전한 데이터가 있는 경우에만 추가 로그 표시
       if (robotsData.some(robot => robot.position && robot.battery > 0)) {
@@ -464,46 +468,21 @@ const DashboardPage = () => {
   // 주문 데이터 수신 핸들러
   const handleOrdersMessage = useCallback((data) => {
     // console.log("주문 데이터 수신:", data);
-    
-    if (Array.isArray(data)) {
-      // 주문 데이터 포맷팅
-      const formattedOrders = data.map(order => {
-        // 기본 주문 정보
-        const orderData = {
-          id: order['Order.id'] || order.id,
-          customer_id: order['Order.customer_id'] || order.customer_id,
-          robot_id: order['Order.robot_id'] || order.robot_id,
-          kiosk_id: order['Order.kiosk_id'] || order.kiosk_id,
-          status: order['Order.status'] || order.status,
-          timestamp: order['Order.timestamp'] || order.timestamp,
-          served_at: order['Order.served_at'] || order.served_at,
-        };
-        
-        // KioskTerminal 테이블에서 테이블 번호 추출
-        const tableNumber = order['KioskTerminal.table_number'] || 
-                          (order.kioskterminal ? order.kioskterminal.table_number : null);
-        
-        // 주문 항목 및 가격 정보 (주문 항목 배열이 있는 경우)
-        const orderItems = order.orderItems || order.items || [];
-        const totalPrice = orderItems.reduce((sum, item) => {
-          const quantity = item.quantity || 1;
-          const price = item.price || (item.menu_item ? item.menu_item.price : 5000);
-          return sum + (quantity * price);
-        }, 0);
-        
-        return {
-          ...orderData,
-          tableNumber: tableNumber || 0,
-          itemCount: orderItems.length,
-          totalPrice: totalPrice,
-          items: orderItems
-        };
-      });
-      
-      setOrdersData(formattedOrders);
-      setLastUpdateTime(new Date());
-    }
-  }, []);
+    // console.log("주문 데이터:", data.orders);
+    // console.log("주문 항목 데이터:", data.orderitems);
+    // console.log("키오스크 데이터:", data.kioskterminals);
+    // console.log("메뉴 데이터:", data.menuitems)
+    const rawOrders = Array.isArray(data.orders)
+    ? data.orders.flat()
+    : [];
+    setOrdersData({
+    orders: rawOrders,
+    kioskterminals: data.kioskterminals,
+    orderItems: data.orderitems,
+    menuitems: data.menuitems
+  });
+}, []);
+  
 
   // 이벤트 데이터 수신 핸들러
   const handleEventsMessage = useCallback((data) => {
@@ -539,8 +518,6 @@ const DashboardPage = () => {
   const robotsWS = useWebSocket('robots', handleRobotsMessage);
   const tablesWS = useWebSocket('tables', handleTablesMessage);
   const eventsWS = useWebSocket('events', handleEventsMessage);
-  const ordersWS = useWebSocket('orders', handleOrdersMessage);
-  const poseWS = useWebSocket('pose', handlePoseMessage);
   
   // status 토픽에서 로봇 상세 정보와 위치 정보 수신
   const statusWS = useWebSocket('status', (data) => {
@@ -579,6 +556,19 @@ const DashboardPage = () => {
           handleRobotsMessage(data.robots);
         }
       }
+    }
+  });
+
+  const ordersWS = useWebSocket('orders', (data) => {
+    // console.log("주문 데이터 수신:", data);
+    
+    if (data && typeof data === 'object') {
+      handleOrdersMessage({
+        orders: data.orders || [],
+        orderitems: data.orderitems || [],
+        kioskterminals: data.kioskterminals || [],
+        menuitems: data.menuitems || []
+      });
     }
   });
 
@@ -642,27 +632,53 @@ const DashboardPage = () => {
 
   // UI에 표시할 주문 데이터 처리
   const processedOrders = useMemo(() => {
-    return ordersData.map(order => {
+    console.log("가공전 데이터:", ordersData);
+    return ordersData.orders.map(order => {
+      // 원본 ISO 문자열
+      const raw = order['Order.timestamp'];     // e.g. "2025-04-30T12:57:58.297108"
+      // 소수점(.) 이후 부분을 모두 잘라내고, "YYYY-MM-DDTHH:mm:ss" 형태로
+      const cleaned = raw ? raw.split('.')[0] : '';
+      
+      // 주문 항목과 메뉴 항목을 매칭
+      const matchingOderItem = ordersData.orderItems.find(i => i['OrderItem.order_id'] === order['Order.id']);
+      const mathchingMenuItem = ordersData.menuitems.find(i => i['MenuItem.id'] === matchingOderItem['OrderItem.menu_item_id']);
+      const matchingKiosk = ordersData.kioskterminals.find(i => i['KioskTerminal.id'] === order['Order.kiosk_id']);
+
+      // console.log("matchingOderItem:", matchingOderItem);
+      // console.log("mathchingMenuItem:", mathchingMenuItem);
+      // console.log("matchingKiosk:", matchingKiosk);
+      // console.log("menuid:", matchingOderItem['OrderItem.menu_item_id']);
+      // console.log("quantity:", matchingOderItem['OrderItem.quantity']);
+      // console.log("menuname:", mathchingMenuItem['MenuItem.name']);
+      // console.log("price:", mathchingMenuItem['MenuItem.price']);
+
       return {
-        id: order.id,
-        status: order.status,
-        timestamp: order.timestamp,
-        tableNumber: order.tableNumber,
-        items: order.items || [],
-        itemCount: order.itemCount || 1,
-        totalPrice: order.totalPrice || 5000,
-        robot_id: order.robot_id,
-        served_at: order.served_at
+        id:        order['Order.id'],
+        status:    order['Order.status'],
+        table:     order['Order.table_id'],
+        timestamp: cleaned,                     // 이제 "2025-04-30T12:57:58"
+        // items에 orderitem의 id, 수량과 menuitem의 이름, 가격을 포함
+        items:
+          matchingOderItem ? [{
+            id: matchingOderItem['OrderItem.menu_item_id'],
+            quantity: matchingOderItem['OrderItem.quantity'],
+            name: mathchingMenuItem ? mathchingMenuItem['MenuItem.name'] : 'Unknown',
+            price: mathchingMenuItem ? mathchingMenuItem['MenuItem.price'] : 0
+          }] : [],
+        // totalpric는 items의 가격 합계
+        totalPrice: matchingOderItem ? matchingOderItem['OrderItem.quantity'] * (mathchingMenuItem ? mathchingMenuItem['MenuItem.price'] : 0) : 0,
+        totalQuantity: matchingOderItem ? matchingOderItem['OrderItem.quantity'] : 0,
       };
     });
   }, [ordersData]);
 
   // 최근 주문 정렬 (시간순)
   const recentOrders = useMemo(() => {
+    console.log("가공된 주문 데이터:", processedOrders);
     return [...processedOrders].sort((a, b) => 
       new Date(b.timestamp) - new Date(a.timestamp)
-    ).slice(0, 10); // 최근 5개만 표시
-  }, [processedOrders]);
+    ).slice(0, 10); // 최근 10개의 주문만 표시
+ }, [processedOrders]);
 
   // UI에 표시할 이벤트 데이터 처리
   const processedEvents = useMemo(() => {

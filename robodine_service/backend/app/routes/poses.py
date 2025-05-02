@@ -2,7 +2,7 @@
 from typing import Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ class Pose6DData(BaseModel):
 @router.post("/create", summary="Log a new Pose6D record")
 def create_pose6d(
     data: Pose6DData,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     # set timestamp to now if not provided
@@ -48,14 +49,31 @@ def create_pose6d(
         pitch=data.pitch,
         yaw=data.yaw,
     )
+    
     db.add(pose)
     db.commit()
     db.refresh(pose)
 
-    return {
-        "message": "Pose6D logged successfully",
-        "pose6d": pose,
-    }
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "pose6d",
+        int(pose.entity_id)
+    )
+
+    return Pose6DData(
+        entity_type=pose.entity_type,
+        entity_id=pose.entity_id,
+        timestamp=pose.timestamp,
+        x=pose.x,
+        y=pose.y,
+        z=pose.z,
+        roll=pose.roll,
+        pitch=pose.pitch,
+        yaw=pose.yaw,
+    )
+
 
 # Optional endpoint for querying recent poses
 @router.get("/recent/{entity_id}", summary="Get recent poses for an entity")
