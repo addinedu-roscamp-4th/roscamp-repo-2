@@ -235,6 +235,8 @@ const DashboardPage = () => {
   });
   const [tablesData, setTablesData] = useState([]);
   const [eventsData, setEventsData] = useState([]);
+  // 시스템 로그 데이터 추가
+  const [systemLogsData, setSystemLogsData] = useState([]);
 
   const [ordersData, setOrdersData] = useState({
     orders: [], kioskterminals: [], orderItems: [], menuitems: []
@@ -256,8 +258,9 @@ const DashboardPage = () => {
     // console.log("테이블 데이터:", tablesData);
     console.log("주문 데이터:", ordersData);
     // console.log("이벤트 데이터:", eventsData);
+    // console.log("시스템 로그 데이터:", systemLogsData);
     // console.log("위치 데이터:", poseData);
-  }, [robotsData, robotDetailsData, tablesData, ordersData, eventsData, poseData]);
+  }, [robotsData, robotDetailsData, tablesData, ordersData, eventsData, systemLogsData, poseData]);
 
   // 로봇 상태 메시지 핸들러
   const handleRobotsMessage = useCallback((data) => {
@@ -514,10 +517,32 @@ const DashboardPage = () => {
     }
   }, []);
 
+  // 시스템 로그 데이터 수신 핸들러
+  const handleSystemLogsMessage = useCallback((data) => {
+    console.log("시스템 로그 데이터 수신:", data);
+    
+    if (Array.isArray(data)) {
+      // 시스템 로그 데이터 포맷팅
+      const formattedLogs = data.map(log => {
+        return {
+          id: log['SystemLog.id'] || log.id,
+          level: log['SystemLog.level'] || log.level,
+          message: log['SystemLog.message'] || log.message,
+          timestamp: log['SystemLog.timestamp'] || log.timestamp,
+        };
+      });
+      
+      setSystemLogsData(formattedLogs);
+      setLastUpdateTime(new Date());
+    }
+  }, []);
+
   // 웹소켓 연결 및 사용
   const robotsWS = useWebSocket('robots', handleRobotsMessage);
   const tablesWS = useWebSocket('tables', handleTablesMessage);
   const eventsWS = useWebSocket('events', handleEventsMessage);
+  // 시스템 로그 웹소켓 연결 추가
+  const systemLogsWS = useWebSocket('systemlogs', handleSystemLogsMessage);
   
   // status 토픽에서 로봇 상세 정보와 위치 정보 수신
   const statusWS = useWebSocket('status', (data) => {
@@ -703,6 +728,25 @@ const DashboardPage = () => {
     ).slice(0, 10); // 최근 10개만 표시
   }, [processedEvents]);
 
+  // UI에 표시할 시스템 로그 데이터 처리
+  const processedSystemLogs = useMemo(() => {
+    return systemLogsData.map(log => {
+      return {
+        id: log.id,
+        level: log.level || 'INFO',
+        message: log.message || '시스템 로그',
+        timestamp: log.timestamp
+      };
+    });
+  }, [systemLogsData]);
+
+  // 최근 시스템 로그 정렬 (시간순)
+  const recentSystemLogs = useMemo(() => {
+    return [...processedSystemLogs].sort((a, b) => 
+      new Date(b.timestamp) - new Date(a.timestamp)
+    ).slice(0, 30); // 최근 10개만 표시
+  }, [processedSystemLogs]);
+
   // 데이터 수동 갱신 요청
   const handleRefreshData = useCallback(() => {
     setIsLoading(true);
@@ -713,12 +757,13 @@ const DashboardPage = () => {
     eventsWS.reconnect();
     ordersWS.reconnect();
     statusWS.reconnect();
+    systemLogsWS.reconnect(); // 시스템 로그 웹소켓 재연결 추가
     
     // 2초 후 로딩 완료
     setTimeout(() => {
       setIsLoading(false);
     }, 2000);
-  }, [robotsWS, tablesWS, eventsWS, ordersWS, statusWS]);
+  }, [robotsWS, tablesWS, eventsWS, ordersWS, statusWS, systemLogsWS]);
 
   return (
     <Layout>
@@ -760,12 +805,12 @@ const DashboardPage = () => {
         isLoading={isLoading}
       />
     </section>
-    {/* 이벤트 타임라인 */}
+    {/* 시스템 로그 타임라인 */}
     <section className="col-span-12 lg:col-span-6 flex flex-col min-h-0">
     <EventTimeline
         className="flex-1 overflow-auto"
-        events={recentEvents}
-        error={eventsWS.error}
+        logs={recentSystemLogs}
+        error={systemLogsWS.error}
         isLoading={isLoading}
       />
     </section>

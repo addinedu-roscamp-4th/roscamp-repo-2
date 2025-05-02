@@ -19,7 +19,7 @@ WS_PING_INTERVAL = int(os.environ.get("WS_PING_INTERVAL", "30"))  # 초 단위
 # 웹소켓 메시지 프로토콜 정의
 class WSMessage(BaseModel):
     type: Literal["update", "error", "ping", "pong", "shutdown"]
-    topic: Literal["robots", "tables", "events", "orders", "status"]
+    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs"]
     data: Any
 
 # 연결 관리자 클래스
@@ -32,6 +32,7 @@ class ConnectionManager:
             "tables": [],  # 테이블 상태 업데이트용 연결
             "events": [],  # 이벤트 업데이트용 연결
             "orders": [],  # 주문 업데이트용 연결
+            "systemlogs": [], # 시스템 로그 업데이트용 연결
         }
         self.shutting_down = False
         self.max_connections_per_topic = WS_MAX_CONNECTIONS  # 환경 변수에서 가져온 값
@@ -111,7 +112,7 @@ class ConnectionManager:
     
     async def broadcast_update(self, 
                              data: Any, 
-                             topic: Literal["robots", "tables", "events", "orders"]):
+                             topic: Literal["robots", "tables", "events", "orders", "systemlogs"]):
         """데이터 객체를 JSON으로 직렬화하여 특정 토픽에 브로드캐스팅"""
         message = {
             "type": "update",
@@ -243,3 +244,7 @@ async def broadcast_events_update(events_data):
 async def broadcast_orders_update(orders_data):
     """주문 데이터 업데이트를 브로드캐스팅"""
     await manager.broadcast_update(orders_data, "orders")
+
+async def broadcast_systemlogs_update(logs_data):
+    """시스템 로그 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(logs_data, "systemlogs")

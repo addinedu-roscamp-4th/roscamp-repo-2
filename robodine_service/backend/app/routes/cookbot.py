@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 from app.core.db_config import get_db
 from app.models import Cookbot
-from app.models.enums import RobotStatus
+from app.models.enums import RobotStatus, LogLevel
+from app.models.event import SystemLog
 
 router = APIRouter()
 
@@ -64,6 +65,12 @@ def create_cookbot_status(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
+    # 이전 상태 조회
+    prev_status = None
+    prev_cookbot = db.query(Cookbot).filter(Cookbot.robot_id == str(cookbot_in.robot_id)).order_by(Cookbot.id.desc()).first()
+    if prev_cookbot:
+        prev_status = prev_cookbot.status
+
     # 새로운 Cookbot 상태 기록 생성
     new_cookbot = Cookbot(
         robot_id=str(cookbot_in.robot_id),
@@ -74,13 +81,58 @@ def create_cookbot_status(
     db.commit()
     db.refresh(new_cookbot)
 
+    # 시스템 로그 생성 (상태에 따라 다른 메시지와 레벨 설정)
+    log_level = LogLevel.INFO
+    status_changed = prev_status is not None and prev_status != cookbot_in.status
+    
+    if cookbot_in.status == RobotStatus.IDLE:
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 유휴 상태입니다."
+    elif cookbot_in.status == RobotStatus.COOKING:
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 요리 중입니다."
+    elif cookbot_in.status == RobotStatus.SERVING:
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 서빙 중입니다."
+    elif cookbot_in.status == RobotStatus.CLEANING:
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 청소 중입니다."
+    elif cookbot_in.status == RobotStatus.EMERGENCY:
+        log_level = LogLevel.ERROR
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 비상 상태입니다."
+    elif cookbot_in.status == RobotStatus.SECURITY:
+        log_level = LogLevel.WARNING
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 보안 모드입니다."
+    elif cookbot_in.status == RobotStatus.CHARGING:
+        log_message = f"쿡봇 #{cookbot_in.robot_id}가 충전 중입니다."
+    elif cookbot_in.status == RobotStatus.ERROR:
+        log_level = LogLevel.ERROR
+        log_message = f"쿡봇 #{cookbot_in.robot_id}에 오류가 발생했습니다."
+    else:
+        log_message = f"쿡봇 #{cookbot_in.robot_id}의 상태가 '{cookbot_in.status}'로 변경되었습니다."
+    
+    # 상태 변경 시 추가 텍스트
+    if status_changed:
+        log_message += f" (이전 상태: {prev_status})"
+    
+    log = SystemLog(
+        level=log_level,
+        message=log_message,
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
     # 모듈 초기화 이후 동적 import
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
     background_tasks.add_task(
         broadcast_entity_update,
         "cookbot",
-        int(new_cookbot.robot_id)
+        None
+    )
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
+        None
     )
 
     return CookbotStatusResponse(

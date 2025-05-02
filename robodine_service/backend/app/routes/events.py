@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.core.db_config import get_db
 from app.models import Event, SystemLog, User
-from app.models.enums import EventType, UserRole, EntityType
+from app.models.enums import EventType, UserRole, EntityType, LogLevel
 from app.routes.auth import get_current_user
 
 router = APIRouter()
@@ -145,22 +145,16 @@ def delete_event(
 def get_system_logs(
     level: Optional[str] = None,
     limit: Optional[int] = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    # Only admins can view system logs
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view system logs"
-        )
+    # 시스템 로그를 누구나 조회 가능하도록 인증 요구사항 제거
     
     # Build query
     query = db.query(SystemLog)
     
     # Filter by level if provided
     if level:
-        query = query.filter(SystemLog.level == level)
+        query = query.filter(SystemLog.level == level.upper())
     
     # Apply limit
     query = query.order_by(SystemLog.timestamp.desc()).limit(limit)
@@ -179,19 +173,21 @@ def get_system_logs(
 @router.post("/system-logs", response_model=dict)
 def create_system_log(
     log_data: SystemLogCreateRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    # Only admins can create system logs directly
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to create system logs"
-        )
+    # 로그 생성도 인증 없이 가능하도록 변경
+    
+    # 로그 레벨 대문자로 정규화
+    level = log_data.level.upper()
+    
+    # 로그 레벨 검증
+    valid_levels = ["INFO", "WARNING", "ERROR", "DEBUG"]
+    if level not in valid_levels:
+        level = "INFO"  # 기본값
     
     # Create new log
     new_log = SystemLog(
-        level=log_data.level,
+        level=level,
         message=log_data.message,
         timestamp=datetime.utcnow()
     )
@@ -204,4 +200,90 @@ def create_system_log(
         "id": new_log.id,
         "status": "success",
         "message": "로그가 생성되었습니다."
-    } 
+    }
+
+# SystemLog 로그 레벨별 유틸리티 함수들
+def log_info(db: Session, message: str, broadcast_tasks=None):
+    """INFO 레벨 로그 생성 및 옵션으로 브로드캐스팅"""
+    log = SystemLog(level=LogLevel.INFO, message=message, timestamp=datetime.utcnow())
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # 브로드캐스트 작업이 제공된 경우 예약
+    if broadcast_tasks:
+        from run import broadcast_entity_update
+        broadcast_tasks.add_task(
+            broadcast_entity_update,
+            "systemlog",
+            None
+        )
+    return log
+
+def log_warning(db: Session, message: str, broadcast_tasks=None):
+    """WARNING 레벨 로그 생성 및 옵션으로 브로드캐스팅"""
+    log = SystemLog(level=LogLevel.WARNING, message=message, timestamp=datetime.utcnow())
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # 브로드캐스트 작업이 제공된 경우 예약
+    if broadcast_tasks:
+        from run import broadcast_entity_update
+        broadcast_tasks.add_task(
+            broadcast_entity_update,
+            "systemlog",
+            None
+        )
+    return log
+
+def log_error(db: Session, message: str, broadcast_tasks=None):
+    """ERROR 레벨 로그 생성 및 옵션으로 브로드캐스팅"""
+    log = SystemLog(level=LogLevel.ERROR, message=message, timestamp=datetime.utcnow())
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # 브로드캐스트 작업이 제공된 경우 예약
+    if broadcast_tasks:
+        from run import broadcast_entity_update
+        broadcast_tasks.add_task(
+            broadcast_entity_update,
+            "systemlog",
+            None
+        )
+    return log
+
+def log_debug(db: Session, message: str, broadcast_tasks=None):
+    """DEBUG 레벨 로그 생성 및 옵션으로 브로드캐스팅"""
+    log = SystemLog(level=LogLevel.DEBUG, message=message, timestamp=datetime.utcnow())
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # 브로드캐스트 작업이 제공된 경우 예약
+    if broadcast_tasks:
+        from run import broadcast_entity_update
+        broadcast_tasks.add_task(
+            broadcast_entity_update,
+            "systemlog",
+            None
+        )
+    return log
+
+def create_system_log(db: Session, level: LogLevel, message: str, broadcast_tasks=None):
+    """지정된 레벨로 시스템 로그 생성 및 옵션으로 브로드캐스팅"""
+    log = SystemLog(level=level, message=message, timestamp=datetime.utcnow())
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # 브로드캐스트 작업이 제공된 경우 예약
+    if broadcast_tasks:
+        from run import broadcast_entity_update
+        broadcast_tasks.add_task(
+            broadcast_entity_update,
+            "systemlog",
+            None
+        )
+    return log 

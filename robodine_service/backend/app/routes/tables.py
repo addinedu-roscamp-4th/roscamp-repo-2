@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 from app.core.db_config import get_db
 from app.models import Table, GroupAssignment, Customer
-from app.models.enums import TableStatus
+from app.models.enums import TableStatus, LogLevel
+from app.models.event import SystemLog
 
 router = APIRouter()
 
@@ -59,9 +60,23 @@ def create_table(
     db.add(new_table)
     db.commit()
     db.refresh(new_table)
+    
+    # 시스템 로그 생성
+    log = SystemLog(
+        level=LogLevel.INFO,
+        message=f"새 테이블이 생성되었습니다. 테이블 번호: {new_table.table_number}, 최대 수용 인원: {new_table.max_customer}명",
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
     # trigger websocket broadcast
     from run import broadcast_entity_update
-    background_tasks.add_task(broadcast_entity_update, "table", new_table.id)
+    background_tasks.add_task(broadcast_entity_update, "table", None)
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(broadcast_entity_update, "systemlog", None)
+    
     return TableResponse(
         id=new_table.id,
         table_number=new_table.table_number,
@@ -99,9 +114,23 @@ def assign_table(
     db.add(assignment)
     db.add(table)
     db.commit()
+    
+    # 시스템 로그 생성
+    log = SystemLog(
+        level=LogLevel.INFO,
+        message=f"테이블이 할당되었습니다. 테이블 번호: {table.table_number}, 고객 ID: {assign_data.customer_id}, 인원 수: {customer.count}명",
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
     # websocket broadcast
     from run import broadcast_entity_update
-    background_tasks.add_task(broadcast_entity_update, "table", table.id)
+    background_tasks.add_task(broadcast_entity_update, "table", None)
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(broadcast_entity_update, "systemlog", None)
+    
     return TableResponse(
         id=table.id,
         table_number=table.table_number,
@@ -126,9 +155,23 @@ def release_table(
     table.status = TableStatus.AVAILABLE
     db.add(table)
     db.commit()
+    
+    # 시스템 로그 생성
+    log = SystemLog(
+        level=LogLevel.INFO,
+        message=f"테이블이 사용가능하게 되었습니다. 테이블 번호: {table.table_number}",
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
     # websocket broadcast
     from run import broadcast_entity_update
-    background_tasks.add_task(broadcast_entity_update, "table", table.id)
+    background_tasks.add_task(broadcast_entity_update, "table", None)
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(broadcast_entity_update, "systemlog", None)
+    
     return TableResponse(
         id=table.id,
         table_number=table.table_number,

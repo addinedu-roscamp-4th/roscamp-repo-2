@@ -28,7 +28,7 @@ from app.core.db_config import engine
 from app.core.database import get_session
 from app.models.robot import Robot
 from app.models.table import Table
-from app.models.event import Event
+from app.models.event import Event, SystemLog
 from app.models.order import Order, OrderItem, KioskTerminal
 from app.models.pose6d import Pose6D
 from app.models.albabot import Albabot
@@ -53,7 +53,8 @@ last_broadcast = {
     "tables": datetime.min,
     "events": datetime.min,
     "orders": datetime.min,
-    "status": datetime.min
+    "status": datetime.min,
+    "systemlogs": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -185,6 +186,15 @@ def serialize_menuitem(menuitem):
         "MenuItem.prepare_time": menuitem.prepare_time
     }
 
+def serialize_systemlog(log):
+    """SystemLog 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "SystemLog.id": log.id,
+        "SystemLog.level": log.level,
+        "SystemLog.message": log.message,
+        "SystemLog.timestamp": log.timestamp.isoformat() if log.timestamp else None
+    }
+
 # 서버 측에서 사용할 데이터 전송 함수들
 async def broadcast_robots_update(robots_data):
     """로봇 데이터 업데이트를 브로드캐스팅"""
@@ -215,6 +225,15 @@ async def broadcast_orders_update(orders_data):
         "data": orders_data
     }
     await manager.broadcast(message, "orders")
+
+async def broadcast_systemlogs_update(logs_data):
+    """시스템 로그 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "systemlogs",
+        "data": logs_data
+    }
+    await manager.broadcast(message, "systemlogs")
 
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
@@ -342,6 +361,18 @@ async def broadcast_entity_update(entity_type, entity_id):
                         .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
                     ).all()
+                # systemlog
+                elif entity_type == "systemlog":
+                    if entity_id:
+                        log = session.get(SystemLog, entity_id)
+                        out['data'] = [serialize_systemlog(log)] if log else []
+                    else:
+                        logs = session.exec(
+                            select(SystemLog)
+                            .order_by(SystemLog.timestamp.desc())
+                            .limit(30)
+                        ).all()
+                        out['data'] = [serialize_systemlog(log) for log in logs]
                 return out
 
         result = await anyio.to_thread.run_sync(_sync_db_work)
@@ -384,6 +415,9 @@ async def broadcast_entity_update(entity_type, entity_id):
             }
             await broadcast_status_update(combined)
             last_broadcast['status'] = now
+        elif entity == "systemlog":
+            await broadcast_systemlogs_update(result['data'])
+            last_broadcast['systemlogs'] = now
 
     except Exception as entity:
         logger.error(f"Error in broadcasting {entity_type} update: {entity}")
@@ -417,6 +451,9 @@ async def fallback_polling():
             if (now - last_broadcast["status"]).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("robot", None)   # robot→status 통합 로직 사용
             
+            # 시스템 로그 데이터 10초마다 갱신
+            if (now - last_broadcast["systemlogs"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("systemlog", None)
                 
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
@@ -443,6 +480,9 @@ async def lifespan(app: FastAPI):
     for url in get_stream_urls():
         # 이미 서비스 모듈에서 쓰레드를 띄우도록 설계했으니 단순 get만
         pass
+
+    # 마지막 브로드캐스트 시간에 systemlogs 추가
+    last_broadcast["systemlogs"] = datetime.min
 
     yield
     

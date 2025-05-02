@@ -432,10 +432,6 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
             <div className="w-3 h-3 mr-1 bg-red-200 border border-red-500"></div>
             <span>사용 중</span>
           </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 bg-yellow-200 border border-yellow-500"></div>
-            <span>예약됨</span>
-          </div>
           <div className="flex items-center ml-4">
             <div className="w-3 h-3 mr-1 rounded-full bg-green-400"></div>
             <span>대기</span>

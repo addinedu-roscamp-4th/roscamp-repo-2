@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
-import { Filter, Clock, AlertTriangle, AlertOctagon, AlertCircle, Server, PlusCircle } from 'react-feather';
+import { Filter, Clock, AlertTriangle, AlertOctagon, AlertCircle, Server, Info, CheckCircle } from 'react-feather';
 
-// EventTimeline 컴포넌트 - 최근 이벤트 타임라인 표시
-const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className = ''}) => {
+// EventTimeline 컴포넌트 - 최근 시스템 로그 타임라인 표시
+const EventTimeline = ({ logs = [], onSelectLog, error, isLoading, className = ''}) => {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [activeFilters, setActiveFilters] = useState(['ALL']);
 
-  // 이벤트 필터링 함수
-  const filterEvents = () => {
-    if (!events || events.length === 0) return [];
+  // 로그 필터링 함수
+  const filterLogs = () => {
+    if (!logs || logs.length === 0) return [];
     
     if (activeFilters.includes('ALL')) {
-      return events;
+      return logs;
     }
     
-    return events.filter(event => 
-      activeFilters.some(filter => event.type?.toUpperCase().includes(filter))
+    return logs.filter(log => 
+      activeFilters.some(filter => log.level?.toUpperCase().includes(filter))
     );
   };
 
@@ -41,38 +41,34 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
       setActiveFilters([...activeFilters, filterType]);
     }
   };
-  // WELCOME = "WELCOME"
-  // CALL = "CALL"
-  // BIRTHDAY = "BIRTHDAY"
-  // EMERGENCY = "EMERGENCY"
-  // CLEANING = "CLEANING"
-  // 이벤트 아이콘 가져오기
-  const getEventIcon = (eventType) => {
-    switch (eventType?.toUpperCase()) {
-      case 'CLEANING':
+
+  // 로그 아이콘 가져오기
+  const getLogIcon = (logLevel) => {
+    switch (logLevel?.toUpperCase()) {
+      case 'INFO':
+        return <Info className="text-blue-500" size={18} />;
+      case 'WARNING':
         return <AlertTriangle className="text-yellow-500" size={18} />;
-      case 'EMERGENCY':
+      case 'ERROR':
         return <AlertOctagon className="text-red-500" size={18} />;
-      case 'WELCOME':
-        return <Server className="text-blue-500" size={18} />;
-      case 'BIRTHDAY':
-        return <Server className="text-purple-500" size={18} />;
+      case 'DEBUG':
+        return <CheckCircle className="text-green-500" size={18} />;
       default:
-        return <PlusCircle className="text-gray-500" size={18} />;
+        return <AlertCircle className="text-gray-500" size={18} />;
     }
   };
 
-  // 이벤트 색상 가져오기
-  const getEventColor = (eventType) => {
-    switch (eventType?.toUpperCase()) {
-      case 'CLEANING':
-        return 'border-yellow-500';
-      case 'EMERGENCY':
-        return 'border-red-500';
-      case 'WELCOME':
+  // 로그 색상 가져오기
+  const getLogColor = (logLevel) => {
+    switch (logLevel?.toUpperCase()) {
+      case 'INFO':
         return 'border-blue-500';
-      case 'BIRTHDAY':
-        return 'border-purple-500';
+      case 'WARNING':
+        return 'border-yellow-500';
+      case 'ERROR':
+        return 'border-red-500';
+      case 'DEBUG':
+        return 'border-green-500';
       default:
         return 'border-gray-300';
     }
@@ -91,15 +87,15 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
     });
   };
 
-  // 필터링된 이벤트
-  const filteredEvents = filterEvents();
+  // 필터링된 로그
+  const filteredLogs = filterLogs();
 
   return (
     <div className={`bg-white … p-4 flex flex-col ${className}`}>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold text-gray-700 flex items-center">
           <Clock className="mr-2 text-blue-500" />
-          최근 이벤트
+          시스템 로그
         </h2>
         <div className="relative">
           <button 
@@ -118,7 +114,15 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
                   }`}
                   onClick={() => toggleFilter('ALL')}
                 >
-                  모든 이벤트
+                  모든 로그
+                </button>
+                <button 
+                  className={`w-full text-left px-4 py-2 text-sm ${
+                    activeFilters.includes('INFO') ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                  onClick={() => toggleFilter('INFO')}
+                >
+                  정보 (INFO)
                 </button>
                 <button 
                   className={`w-full text-left px-4 py-2 text-sm ${
@@ -126,7 +130,7 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
                   }`}
                   onClick={() => toggleFilter('WARNING')}
                 >
-                  경고
+                  경고 (WARNING)
                 </button>
                 <button 
                   className={`w-full text-left px-4 py-2 text-sm ${
@@ -134,23 +138,15 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
                   }`}
                   onClick={() => toggleFilter('ERROR')}
                 >
-                  오류
+                  오류 (ERROR)
                 </button>
                 <button 
                   className={`w-full text-left px-4 py-2 text-sm ${
-                    activeFilters.includes('SYSTEM') ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100'
+                    activeFilters.includes('DEBUG') ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100'
                   }`}
-                  onClick={() => toggleFilter('SYSTEM')}
+                  onClick={() => toggleFilter('DEBUG')}
                 >
-                  시스템
-                </button>
-                <button 
-                  className={`w-full text-left px-4 py-2 text-sm ${
-                    activeFilters.includes('ROBOT') ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                  onClick={() => toggleFilter('ROBOT')}
-                >
-                  로봇
+                  디버그 (DEBUG)
                 </button>
               </div>
             </div>
@@ -167,39 +163,37 @@ const EventTimeline = ({ events = [], onSelectEvent, error, isLoading, className
           <AlertOctagon className="mr-2" size={20} />
           <span>{error}</span>
         </div>
-      ) : filteredEvents.length === 0 ? (
+      ) : filteredLogs.length === 0 ? (
         <div className="text-center py-10">
           <Clock className="mx-auto h-10 w-10 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">이벤트 없음</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">로그 없음</h3>
           <p className="mt-1 text-sm text-gray-500">
             {activeFilters.includes('ALL') 
-              ? '아직 기록된 이벤트가 없습니다.' 
-              : '선택한 필터에 해당하는 이벤트가 없습니다.'}
+              ? '아직 기록된 시스템 로그가 없습니다.' 
+              : '선택한 필터에 해당하는 로그가 없습니다.'}
           </p>
         </div>
       ) : (
-        // 이벤트 목록
+        // 로그 목록
         <div className="space-y-4 overflow-y-auto pr-2 flex-1">
-          {filteredEvents.map((event) => (
+          {filteredLogs.map((log) => (
             <div 
-              key={event.id} 
-              className={`border-l-4 ${getEventColor(event.type)} pl-3 py-2 hover:bg-gray-50 rounded cursor-pointer`}
-              onClick={() => onSelectEvent && onSelectEvent(event)}
+              key={log.id} 
+              className={`border-l-4 ${getLogColor(log.level)} pl-3 py-2 hover:bg-gray-50 rounded cursor-pointer`}
+              onClick={() => onSelectLog && onSelectLog(log)}
             >
               <div className="flex justify-between items-start">
                 <div className="flex items-start">
                   <span className="mr-2 mt-0.5">
-                    {getEventIcon(event.type)}
+                    {getLogIcon(log.level)}
                   </span>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{event.message}</p>
-                    {event.robotId && (
-                      <p className="text-xs text-gray-500">로봇 ID: {event.robotId}</p>
-                    )}
+                    <p className="text-sm font-medium text-gray-900">{log.message}</p>
+                    <p className="text-xs text-gray-500">{log.level}</p>
                   </div>
                 </div>
                 <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                  {formatTimestamp(event.timestamp)}
+                  {formatTimestamp(log.timestamp)}
                 </span>
               </div>
             </div>

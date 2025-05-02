@@ -2,6 +2,12 @@ from enum import Enum
 from sqlalchemy import Enum as SQLEnum
 
 # ── ENUM 정의 ────────────────────────────────────────────────────────────────
+class LogLevel(str, Enum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    DEBUG = "DEBUG"
+
 class EntityType(str, Enum):
     COOKBOT = "COOKBOT"
     ALBABOT = "ALBABOT"
@@ -17,8 +23,10 @@ class RobotStatus(str, Enum):
     SERVING = "SERVING"
     CLEANING = "CLEANING"
     EMERGENCY = "EMERGENCY"
-    MAINTENANCE = "MAINTENANCE"
     SECURITY = "SECURITY"
+    CHARGING = "CHARGING"
+    ERROR = "ERROR"
+    MAINTENANCE = "MAINTENANCE"
 
 class CommandStatus(str, Enum):
     PENDING = "PENDING"

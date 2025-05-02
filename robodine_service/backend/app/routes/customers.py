@@ -1,5 +1,5 @@
 # app/routes/customers.py
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,6 +8,8 @@ from datetime import datetime
 
 from app.core.db_config import get_db
 from app.models.customer import Customer
+from app.models.event import SystemLog
+from app.models.enums import LogLevel
 
 router = APIRouter(
     prefix="/customers",
@@ -35,7 +37,9 @@ def list_customers(db: Session = Depends(get_db)):
     return db.query(Customer).all()
 
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
-def create_customer(request: CustomerCreateRequest, db: Session = Depends(get_db)):
+def create_customer(request: CustomerCreateRequest, 
+                     background_tasks: BackgroundTasks,
+                     db: Session = Depends(get_db)):
     """
     새로운 고객 그룹 생성
     """
@@ -43,4 +47,23 @@ def create_customer(request: CustomerCreateRequest, db: Session = Depends(get_db
     db.add(new_customer)
     db.commit()
     db.refresh(new_customer)
+    
+    # 시스템 로그 생성
+    log = SystemLog(
+        level=LogLevel.INFO,
+        message=f"새로운 손님이 입장했습니다. 인원 수: {request.count}명, 고객 ID: {new_customer.id}",
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
+    # 시스템 로그 브로드캐스트
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
+        None
+    )
+    
     return new_customer

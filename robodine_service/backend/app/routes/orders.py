@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.core.db_config import get_db
 from app.models import Order, OrderItem, Customer, Robot, KioskTerminal
 from app.models.enums import OrderStatus
+from app.models.event import SystemLog, LogLevel
 
 router = APIRouter()
 
@@ -131,14 +132,30 @@ def create_order(
         db.add(oi)
     db.commit()
 
-     # **1) 주문 항목을 직접 다시 조회합니다**
+    # 6) 시스템 로그 생성
+    log = SystemLog(
+        level=LogLevel.INFO,
+        message=f"새로운 주문이 생성되었습니다. 주문 ID: {new_o.id}, 테이블: {new_o.table_id or '없음'}, 품목 수: {len(data.items)}개",
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+
+    # **1) 주문 항목을 직접 다시 조회합니다**
     items = db.query(OrderItem).filter(OrderItem.order_id == new_o.id).all()
 
-    # 2) 웹소켓 브로드캐스트 예약 (entity_id=new_o.id 로 변경)
+    # 2) 웹소켓 브로드캐스트 예약
     from run import broadcast_entity_update
     background_tasks.add_task(
         broadcast_entity_update,
         "order",
+        None,
+    )
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
         None,
     )
 
@@ -167,12 +184,39 @@ def update_order_status(order_id: int,
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail=f"Order {order_id} not found")
 
+    old_status = o.status
     o.status = req.status
     if req.status == OrderStatus.SERVED:
         o.served_at = datetime.utcnow()
     db.add(o)
     db.commit()
     db.refresh(o)
+
+    # 시스템 로그 생성
+    log_level = LogLevel.INFO
+    if req.status == OrderStatus.SERVED:
+        log_level = LogLevel.INFO
+        log_message = f"주문이 서빙 완료되었습니다. 주문 ID: {order_id}, 테이블: {o.table_id or '없음'}"
+    elif req.status == OrderStatus.PREPARING:
+        log_level = LogLevel.INFO
+        log_message = f"주문이 준비 중입니다. 주문 ID: {order_id}, 테이블: {o.table_id or '없음'}"
+    elif req.status == OrderStatus.PLACED:
+        log_level = LogLevel.INFO
+        log_message = f"주문이 접수되었습니다. 주문 ID: {order_id}, 테이블: {o.table_id or '없음'}"
+    elif req.status == OrderStatus.CANCELLED:
+        log_level = LogLevel.WARNING
+        log_message = f"주문이 취소되었습니다. 주문 ID: {order_id}, 테이블: {o.table_id or '없음'}"
+    else:
+        log_message = f"주문 상태가 변경되었습니다. 주문 ID: {order_id}, {old_status} → {req.status}"
+
+    log = SystemLog(
+        level=log_level,
+        message=log_message,
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
 
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
     item_res = [
@@ -185,6 +229,12 @@ def update_order_status(order_id: int,
     background_tasks.add_task(
         broadcast_entity_update,
         "order",
+        None,
+    )
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
         None,
     )
 

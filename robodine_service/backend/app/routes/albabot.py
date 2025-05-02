@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 from app.core.db_config import get_db
 from app.models import Albabot
-from app.models.enums import RobotStatus
+from app.models.enums import RobotStatus, LogLevel
+from app.models.event import SystemLog
 
 router = APIRouter()
 
@@ -67,8 +68,14 @@ def create_albabot_status(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
     ):
-    # Check if Albabot with the same robot_id already exists
-    existing_albabot = db.query(Albabot).filter(Albabot.robot_id == str(albabot.robot_id)).first()
+    # 이전 상태 조회
+    prev_status = None
+    prev_battery = None
+    existing_albabot = db.query(Albabot).filter(Albabot.robot_id == str(albabot.robot_id)).order_by(Albabot.id.desc()).first()
+    if existing_albabot:
+        prev_status = existing_albabot.status
+        prev_battery = existing_albabot.battery_level
+    
     # Create new Albabot record
     new_albabot = Albabot(
         robot_id=str(albabot.robot_id),
@@ -81,17 +88,82 @@ def create_albabot_status(
     db.commit()
     db.refresh(new_albabot)
     
+    # 시스템 로그 생성 (상태와 배터리 레벨에 따라 다른 메시지와 레벨 설정)
+    log_level = LogLevel.INFO
+    status_changed = prev_status is not None and prev_status != albabot.status
+    battery_changed = prev_battery is not None and abs(float(prev_battery) - float(albabot.battery_level)) > 0.05
+    
+    # 상태 변경에 따른 로그 메시지
+    if status_changed:
+        if albabot.status == RobotStatus.IDLE:
+            log_message = f"알바봇 #{albabot.robot_id}가 대기 상태로 변경되었습니다."
+        elif albabot.status == RobotStatus.SERVING:
+            log_message = f"알바봇 #{albabot.robot_id}가 서빙 중입니다."
+        elif albabot.status == RobotStatus.CLEANING:
+            log_message = f"알바봇 #{albabot.robot_id}가 청소 중입니다."
+        elif albabot.status == RobotStatus.EMERGENCY:
+            log_level = LogLevel.ERROR
+            log_message = f"알바봇 #{albabot.robot_id}가 비상 상태입니다."
+        elif albabot.status == RobotStatus.SECURITY:
+            log_level = LogLevel.WARNING
+            log_message = f"알바봇 #{albabot.robot_id}가 보안 모드로 전환되었습니다."
+        elif albabot.status == RobotStatus.CHARGING:
+            log_message = f"알바봇 #{albabot.robot_id}가 충전 중입니다."
+        elif albabot.status == RobotStatus.ERROR:
+            log_level = LogLevel.ERROR
+            log_message = f"알바봇 #{albabot.robot_id}에 오류가 발생했습니다."
+        else:
+            log_message = f"알바봇 #{albabot.robot_id}의 상태가 '{albabot.status}'로 변경되었습니다."
+        
+        # 이전 상태 정보 추가
+        log_message += f" (이전 상태: {prev_status})"
+    # 배터리 변경에 따른 로그 메시지
+    elif battery_changed:
+        # 배터리 퍼센트로 변환 (0-1 범위이면 100 곱함)
+        battery_percent = float(albabot.battery_level)
+        if battery_percent <= 1:
+            battery_percent *= 100
+        
+        # 배터리 레벨에 따른 로그 레벨 조정
+        if battery_percent <= 30:
+            log_level = LogLevel.WARNING
+            log_message = f"알바봇 #{albabot.robot_id}의 배터리가 부족합니다. (배터리: {battery_percent:.0f}%)"
+        elif battery_percent <= 10:
+            log_level = LogLevel.ERROR
+            log_message = f"알바봇 #{albabot.robot_id}의 배터리가 심각하게 부족합니다. (배터리: {battery_percent:.0f}%)"
+        else:
+            log_message = f"알바봇 #{albabot.robot_id}의 배터리 레벨이 변경되었습니다. (배터리: {battery_percent:.0f}%)"
+    else:
+        # 특별한 변경이 없는 경우
+        log_message = f"알바봇 #{albabot.robot_id}의 상태가 업데이트되었습니다. (상태: {albabot.status})"
+    
+    # 시스템 로그 저장
+    log = SystemLog(
+        level=log_level,
+        message=log_message,
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
     background_tasks.add_task(
         broadcast_entity_update,
         "albabot",
-        int(new_albabot.robot_id)
+        None
+    )
+    # 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
+        None
     )
 
     return AlbabotStatusResponse(
         robot_id=int(new_albabot.robot_id),
         status=new_albabot.status,
-        battery_level=str(new_albabot.battery_level),
+        battery_level=int(new_albabot.battery_level),
         timestamp=new_albabot.timestamp
     )
