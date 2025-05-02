@@ -24,23 +24,26 @@ export const AuthProvider = ({ children }) => {
           const user = await apiCall('/api/auth/me');
           setCurrentUser(user);
           setIsTokenValid(true);
+          setLoading(false);
         } catch (err) {
           // 토큰이 유효하지 않으면 로컬 스토리지에서 제거
           console.error('Auth check failed:', err);
           localStorage.removeItem('token');
           setCurrentUser(null);
           setIsTokenValid(false);
+          setLoading(false);
           navigate('/login');
         }
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     checkAuth();
   }, [navigate]);
 
   // API 호출 유틸리티 함수
-  const apiCall = async (endpoint, options = {}) => {
+  const apiCall = async (endpoint, method = 'GET', body = null, customHeaders = {}) => {
     setError(null);
     const token = localStorage.getItem('token');
     const url = `${API_URL}${endpoint}`;
@@ -49,14 +52,20 @@ export const AuthProvider = ({ children }) => {
     const headers = {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
-      ...(options.headers || {})
+      ...customHeaders
     };
 
+    const options = {
+      method,
+      headers
+    };
+
+    if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      options.body = JSON.stringify(body);
+    }
+
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers
-      });
+      const response = await fetch(url, options);
 
       // 응답이 JSON이 아닌 경우 처리
       const contentType = response.headers.get('content-type');
@@ -144,10 +153,7 @@ export const AuthProvider = ({ children }) => {
   // 회원가입 처리
   const signup = async (userData) => {
     try {
-      const data = await apiCall('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(userData)
-      });
+      const data = await apiCall('/api/auth/register', 'POST', userData);
       
       return data;
     } catch (err) {
@@ -167,10 +173,7 @@ export const AuthProvider = ({ children }) => {
   // 프로필 정보 업데이트
   const updateProfile = async (userData) => {
     try {
-      const data = await apiCall('/api/users/me', {
-        method: 'PUT',
-        body: JSON.stringify(userData)
-      });
+      const data = await apiCall('/api/users/me', 'PUT', userData);
       
       setCurrentUser({ ...currentUser, ...data });
       return data;
@@ -196,7 +199,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

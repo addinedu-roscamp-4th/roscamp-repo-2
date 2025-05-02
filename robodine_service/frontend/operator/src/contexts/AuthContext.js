@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { API_BASE_URL } from '../App';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
 const AuthContext = createContext(null);
 
@@ -181,6 +181,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     apiCall
   };
+  
 
   return (
     <AuthContext.Provider value={value}>

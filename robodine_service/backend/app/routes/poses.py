@@ -56,11 +56,20 @@ def create_pose6d(
 
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
-    background_tasks.add_task(
-        broadcast_entity_update,
-        "pose6d",
-        int(pose.entity_id)
-    )
+    if pose.entity_type == EntityType.WORLD:
+        # Broadcast to all clients if the entity type is WORLD
+        background_tasks.add_task(
+            broadcast_entity_update,
+            "albabot",
+            None,
+        )
+    if pose.entity_type == EntityType.COOKBOT:
+        # Broadcast to all clients if the entity type is COOKBOT
+        background_tasks.add_task(
+            broadcast_entity_update,
+            "cookbot",
+            None,
+        )
 
     return Pose6DData(
         entity_type=pose.entity_type,

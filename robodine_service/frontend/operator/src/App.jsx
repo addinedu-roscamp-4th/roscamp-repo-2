@@ -1,141 +1,129 @@
+// src/App.jsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
-// 페이지 컴포넌트 import
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
+// Contexts
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import WebSocketProvider from './contexts/WebSocketContext';
+
+// Pages
 import DashboardPage from './pages/DashboardPage';
-import RobotAdminPage from './pages/RobotAdminPage';
-import CustomerPage from './pages/CustomerPage';
-import VideoStreamPage from './pages/VideoStreamPage';
-import EmergencyPage from './pages/EmergencyPage';
-import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/LoginPage';
 import OrdersPage from './pages/OrdersPage';
+import CustomerPage from './pages/CustomerPage';
+import StatsPage from './pages/StatsPage';
+import SystemPage from './pages/SystemPage';
+import SettingsPage from './pages/SettingsPage';
+import RobotAdminPage from './pages/RobotAdminPage';
+import VideoStreamPage from './pages/VideoStreamPage';
 import InventoryPage from './pages/InventoryPage';
 
-// 인증 확인 HOC
-const PrivateRoute = ({ children }) => {
-  const { currentUser, loading, isTokenValid } = useAuth();
-  
-  // 로딩 중일 때는 아무것도 표시하지 않음
-  if (loading) {
-    return <div className="flex items-center justify-center h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-    </div>;
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
-  
-  return isTokenValid ? children : <Navigate to="/login" />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  return children;
 };
 
-// 인증 래퍼 컴포넌트
-const AuthWrapper = () => {
-  return (
-    <Router>
-      <Routes>
-        {/* 인증 페이지 */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        
-        {/* 메인 대시보드 */}
-        <Route 
-          path="/" 
-          element={
-            <PrivateRoute>
-              <DashboardPage />
-            </PrivateRoute>
-          } 
-        />
-        <Route 
-          path="/dashboard" 
-          element={
-            <PrivateRoute>
-              <DashboardPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 로봇 관리 */}
-        <Route 
-          path="/robots" 
-          element={
-            <PrivateRoute>
-              <RobotAdminPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 고객/테이블 관리 */}
-        <Route 
-          path="/customers" 
-          element={
-            <PrivateRoute>
-              <CustomerPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 영상 스트리밍 */}
-        <Route 
-          path="/video-streams" 
-          element={
-            <PrivateRoute>
-              <VideoStreamPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 비상 상황 관리 */}
-        <Route 
-          path="/emergencies" 
-          element={
-            <PrivateRoute>
-              <EmergencyPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 주문/재고 관리 */}
-        <Route 
-          path="/orders" 
-          element={
-            <PrivateRoute>
-              <OrdersPage />
-            </PrivateRoute>
-          } 
-        />
-        <Route 
-          path="/inventory" 
-          element={
-            <PrivateRoute>
-              <InventoryPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 설정 */}
-        <Route 
-          path="/settings" 
-          element={
-            <PrivateRoute>
-              <SettingsPage />
-            </PrivateRoute>
-          } 
-        />
-        
-        {/* 404 - 홈으로 리다이렉트 */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Router>
-  );
-};
-
-const App = () => {
+function App() {
   return (
     <AuthProvider>
-      <AuthWrapper />
+      <WebSocketProvider>
+        <div className="App">
+          <Routes>
+            {/* Auth Route */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* Protected Routes */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/orders"
+              element={
+                <ProtectedRoute>
+                  <OrdersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/customers"
+              element={
+                <ProtectedRoute>
+                  <CustomerPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/stats"
+              element={
+                <ProtectedRoute>
+                  <StatsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/system"
+              element={
+                <ProtectedRoute>
+                  <SystemPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/robots"
+              element={
+                <ProtectedRoute>
+                  <RobotAdminPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/video-stream"
+              element={
+                <ProtectedRoute>
+                  <VideoStreamPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/inventory"
+              element={
+                <ProtectedRoute>
+                  <InventoryPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Redirect unknown paths to dashboard */}
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </div>
+      </WebSocketProvider>
     </AuthProvider>
   );
-};
+}
 
-export default App; 
+export default App;

@@ -167,7 +167,15 @@ async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
     if not connected:
         return  # 연결 실패 시 즉시 반환
         
-    try:
+    try:      
+        from run import broadcast_entity_update 
+        # 초기 브로드캐스트: 로봇 연결 시 전체 상태 즉시 전송
+        if topic == "robots":
+            try:
+                await broadcast_entity_update("robot", None)
+            except Exception as e:
+                logger.error(f"Initial robot broadcast failed: {e}")
+
         logger.info(f"{topic.capitalize()} connection established from {websocket.client.host}")
         
         # 클라이언트에 연결 확인 메시지 전송

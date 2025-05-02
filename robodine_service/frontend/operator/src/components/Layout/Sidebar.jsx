@@ -9,13 +9,17 @@ import {
   Settings, 
   Server,
   Video,
-  AlertTriangle
+  AlertTriangle,
+  Database,
+  Package
 } from 'react-feather';
 
 // Only include routes that are actually implemented
 const navItems = [
   { title: '대시보드', path: '/', icon: Home, isImplemented: true },
-  { title: '로봇 관리', path: '/robots', icon: Monitor, isImplemented: false },
+  { title: '로봇 관리', path: '/robots', icon: Monitor, isImplemented: true },
+  { title: '주문 관리', path: '/orders', icon: ShoppingCart, isImplemented: true },
+  { title: '재고 관리', path: '/inventory', icon: Database, isImplemented: true },
   { title: '영상 스트리밍', path: '/video-streams', icon: Video, isImplemented: false },
   { title: '고객·테이블 관리', path: '/customers', icon: Users, isImplemented: false },
   { title: '주문·재고 통계', path: '/stats', icon: BarChart2, isImplemented: false },

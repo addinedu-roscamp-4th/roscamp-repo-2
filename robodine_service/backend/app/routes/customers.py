@@ -34,7 +34,28 @@ def list_customers(db: Session = Depends(get_db)):
     """
     모든 고객 그룹 조회
     """
-    return db.query(Customer).all()
+    #     cookbot_records = (
+    #     db.query(Cookbot)
+    #     .order_by(Cookbot.robot_id, Cookbot.id.desc())
+    #     .distinct(Cookbot.robot_id)
+    #     .all()
+    # )
+    customers = (
+    db.query(Customer)
+    .order_by(Customer.id.desc())  # 최신 고객 그룹이 위에 오도록 정렬
+    .all()
+    )
+    for customer in customers:
+        customer.timestamp = customer.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        customer.count = customer.count
+        customer.id = customer.id
+    if not customers:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No customer records found"
+        )
+    
+    return customers
 
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
 def create_customer(request: CustomerCreateRequest, 
