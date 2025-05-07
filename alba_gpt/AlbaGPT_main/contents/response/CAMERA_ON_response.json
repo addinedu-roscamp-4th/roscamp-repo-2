@@ -1,24 +1,24 @@
 {
     "pinky_id": "",
     "pinky_task": "CAMREA_ON",
-    "pinky_response": "person이(가) 있어서 잠깐 멈춰 있을게요 🙏"
+    "pinky_response": "cup와 person이 앞을 막고 있어서 조금 곤란해요 😅"
 }
 
 {
     "pinky_id": "",
     "pinky_task": "CAMERA_ON",
-    "pinky_response": "컵과 물병이 제 앞을 가로막고 있어서 지나갈 수 없어요 😣"
+    "pinky_response": "컵과 사람이 길을 막고 있어서 지나가지 못해요 😢"
 }
 
 {
     "pinky_id": "",
     "pinky_task": "CAMERA_ON",
-    "pinky_response": "cup이(가) 제 앞을 가로막고 있어서 지나갈 수 없어요 😣"
+    "pinky_response": "person과 chair가 제 경로를 막고 있어요 😓"
 }
 
 {
     "pinky_id": "",
-    "pinky_task": "CAMERA_ON",
-    "pinky_response": "person, cup, dining table이(가) 있어서 조금 곤란해요 😅"
+    "pinky_task": "CAMREA_ON",
+    "pinky_response": "person이 제 앞을 가로막고 있어서 지나갈 수 없어요 😣"
 }
 

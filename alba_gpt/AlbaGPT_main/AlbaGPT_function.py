@@ -222,7 +222,7 @@ def generate_alba_work_response(user_query, chat_history, memory, work):
             "prompt": {user_query},
             "pinky_id": {인식된 핑키 id},
             "pinky_response": {},
-            "table_id": {인식된 핑키 id}
+            "table_id": {인식된 테이블 id}
         }}
     """
     work_example_csv_path = './contents/example/work_example.csv' # {alba_work_type} 상황에 대한 응답을 정리한 csv 파일
@@ -315,7 +315,7 @@ def generate_alba_work_response(user_query, chat_history, memory, work):
 
     return alba_work_response 
 
-def generate_alba_camera_on_response(chat_history, shared_data):
+def generate_alba_camera_on_response(chat_history, shared_dict, shared_data):
     """
     alba_task_discriminator 함수로 구분된 task가 'CAMERA_ON'인 경우 해당 알바 봇으로부터 수신되는 영상의 이미지 프레임을 토대로 상황을 해석하여 json으로 반환해주는 함수입니다.
 
@@ -332,7 +332,7 @@ def generate_alba_camera_on_response(chat_history, shared_data):
         os.makedirs(recieved_image_dir)
 
     recieved_image_path = os.path.join(recieved_image_dir, str(uuid.uuid4().hex) + '_' + time.strftime('%Y-%m-%d %H-%M-%S') + '.jpg')
-    detected_objects = shared_data.detected_object
+    detected_objects = shared_dict["detected_object"]
 
     detected_object_list = []
 
@@ -380,11 +380,10 @@ def generate_alba_camera_on_response(chat_history, shared_data):
     이 사물들은 경로를 가로막고 있습니다.
 
     당신의 임무는 다음과 같습니다:
-    1. 이 사물들에 대해 반드시 "{object_info} 이(가) 있어서 조금 곤란해요 😅" 와 같은 식으로 설명하여야 합니다.
-    2. {obstacle_meetup_example} 원소의 형식으로 재미있게 답변을 해야합니다.
-    3. 중복되는 {object_info}에 대해서는 한 번만 대답합니다.
-    4. {object_info}가 null인 경우 "아무 문제 없이 임무를 잘 수행하고 있어요 🤗"와 같은 식으로 설명하여야 .
-    5. 답변은 1-3문장 이내로 간결하게 수행합니다.
+    1. 이 사물들에 대해 반드시 "{object_info} {obstacle_meetup_example}" 와 같은 식으로 재미있게 설명하여야 합니다.
+    2. 중복되는 {object_info}에 대해서는 한 번만 대답합니다.
+    3. 만약 {object_info}가 null인 경우 "아무 문제 없이 임무를 잘 수행하고 있어요 🤗"와 같은 식으로 설명하여야 합니다.
+    4. 답변은 1-3문장 이내로 간결하게 수행합니다.
     """
 
     multimodal_system_prompt = f"""
@@ -397,7 +396,7 @@ def generate_alba_camera_on_response(chat_history, shared_data):
     '''json 같은 마크다운은 절대 포함하면 안됩니다.
 
     [조건]
-    1. pinky_id는 "X번 핑키!"에서의 X 입니다. 이때 X가 없으면 pinky_id는 비워두세요.
+    1. pinky_id는 "X번 핑키 카메라 켜봐"에서 X 입니다. 이때 X가 없으면 pinky_id는 비워두세요.
     2. pinky_task는 무조건 string형 "CAMERA_ON" 입니다.
     3. pinky_response는 아래 사용자 요청에 대한 string형 답변입니다.
     4. 출력은 반드시 JSON 형식의 텍스트만 반환해야 합니다.

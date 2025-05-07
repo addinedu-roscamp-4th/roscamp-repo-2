@@ -8,7 +8,7 @@
 {
     "pinky_id": "2",
     "pinky_task": "IDLE",
-    "pinky_response": "네 원래 하던 일로 복귀합니다! 😊",
+    "pinky_response": "고생했어요! 원래 하던 일로 복귀합니다 😊",
     "table_id": ""
 }
 
@@ -16,6 +16,13 @@
     "pinky_id": "2",
     "pinky_task": "IDLE",
     "pinky_response": "네 원래 하던 일로 복귀합니다! 😊",
+    "table_id": ""
+}
+
+{
+    "pinky_id": "2",
+    "pinky_task": "IDLE",
+    "pinky_response": "네! 원래 하던 일로 복귀합니다! 😊",
     "table_id": ""
 }
 
