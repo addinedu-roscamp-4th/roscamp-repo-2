@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
-const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs'];
+const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams'];
 
 const WebSocketContext = createContext(null);
 
@@ -23,7 +23,7 @@ export function useWebSockets() {
 export function WebSocketProvider({ children }) {
   const [connections, setConnections] = useState({});
   const [data, setData] = useState({
-    robots: [], tables: [], events: [], orders: {}, status: {}, systemlogs: []
+    robots: [], tables: [], events: [], orders: {}, status: {}, systemlogs: [], customers: {}, inventory: [], video_streams: []
   });
   const [errors, setErrors] = useState({});
   const [connected, setConnected] = useState({});
@@ -34,14 +34,14 @@ export function WebSocketProvider({ children }) {
     if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
       return;
     }
-    console.log(`WebSocket: connecting to ${topic}`);
+    // console.log(`WebSocket: connecting to ${topic}`);
     const ws = new WebSocket(`${WS_BASE_URL}/${topic}`);
     ws.onopen = () => {
       console.log(`WebSocket: ${topic} connected`);
       setConnected(prev => ({ ...prev, [topic]: true }));
     };
     ws.onmessage = (evt) => {
-      console.log(`WebSocket: ${topic} message`, evt.data);
+      // console.log(`WebSocket: ${topic} message`, evt.data);
       try {
         const msg = JSON.parse(evt.data);
         if (msg.type === 'update' && msg.topic === topic) {

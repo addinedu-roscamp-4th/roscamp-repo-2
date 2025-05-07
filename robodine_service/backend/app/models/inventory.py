@@ -17,6 +17,7 @@ class Inventory(SQLModel, table=True):
     ingredient_id: Optional[int] = Field(default=None)
     name : Optional[str] = Field(default=None, foreign_key="menuingredient.name")
     count: Optional[int] = None
+    max_count: Optional[int] = None
     status: Optional[InventoryStatus] = Field(
         sa_column=Column(SQLEnum(InventoryStatus, name="inventory_status"))
     )

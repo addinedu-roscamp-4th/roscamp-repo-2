@@ -8,11 +8,14 @@ import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 import anyio
+import os
 
 from fastapi import FastAPI, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlmodel import SQLModel, Session, select, case
+from sqlalchemy.orm import joinedload
 
 from app.routes import (
     poses, websockets, streaming, inventories,
@@ -21,7 +24,7 @@ from app.routes import (
     video_streams
 )
 from app.routes.websockets import router as websocket_router
-from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update
+from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update, broadcast_systemlogs_update, broadcast_customers_update
 from app.routes.websockets import manager
 from app.routes.streaming import router as streaming_router
 from app.core.db_config import engine
@@ -34,6 +37,9 @@ from app.models.pose6d import Pose6D
 from app.models.albabot import Albabot
 from app.models.cookbot import Cookbot
 from app.models.inventory import Inventory, MenuItem, MenuIngredient
+from app.models.customer import Customer
+from app.models.table import Table, GroupAssignment
+from app.models.admin_settings import AdminSettings
 from app.core.utils import dispatch_payload
 
 from app.services.streaming_service import get_stream_urls, add_stream_url
@@ -45,7 +51,10 @@ logger = logging.getLogger("robodine.run")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # 폴링 주기 설정 (비상 시 폴백용, 초 단위)
-POLLING_INTERVAL = 10
+POLLING_INTERVAL = 3
+
+# 비디오 저장 디렉토리
+VIDEOS_DIR = "videos"
 
 # 마지막 브로드캐스트 시간 추적 (중복 방지용)
 last_broadcast = {
@@ -54,7 +63,10 @@ last_broadcast = {
     "events": datetime.min,
     "orders": datetime.min,
     "status": datetime.min,
-    "systemlogs": datetime.min
+    "systemlogs": datetime.min,
+    "customers": datetime.min,
+    "inventory": datetime.min,
+    "video_streams": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -80,10 +92,31 @@ def serialize_table(table):
         table_status = table_status.replace('TableStatus.', '')
     return {
         "Table.id": table.id,
-        "Table.table_number": table.table_number,
         "Table.max_customer": table.max_customer,
         "Table.status": table_status,
-        "Table.updated_at": table.updated_at.isoformat() if table.updated_at else None
+        "Table.updated_at": table.updated_at.isoformat() if table.updated_at else None,
+        "Table.x": table.x,
+        "Table.y": table.y,
+        "Table.width": table.width,
+        "Table.height": table.height,
+    }
+
+def serialize_customer(customer):
+    """Customer 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "Customer.id": customer.id,
+        "Customer.count": customer.count,
+        "Customer.timestamp": customer.timestamp.isoformat() if customer.timestamp else None,
+    }
+
+def serialize_group_assignment(assignment):
+    """GroupAssignment 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "GroupAssignment.id": assignment.id,
+        "GroupAssignment.table_id": assignment.table_id,
+        "GroupAssignment.customer_id": assignment.customer_id,
+        "GroupAssignment.timestamp": assignment.timestamp.isoformat() if assignment.timestamp else None,
+        "GroupAssignment.released_at": assignment.released_at.isoformat() if assignment.released_at else None,
     }
 
 def serialize_event(event):
@@ -165,7 +198,7 @@ def serialize_kioskterminal(kioskterminal):
     """KioskTerminal 모델을 JSON 직렬화 가능한 형태로 변환"""
     return {
         "KioskTerminal.id": kioskterminal.id,
-        "KioskTerminal.table_number": kioskterminal.table_number,
+        "KioskTerminal.table_id": kioskterminal.table_id,
         "KioskTerminal.ip_address": kioskterminal.ip_address
     }
 
@@ -195,6 +228,49 @@ def serialize_systemlog(log):
         "SystemLog.timestamp": log.timestamp.isoformat() if log.timestamp else None
     }
 
+def serialize_inventory(item):
+    """Inventory 모델을 JSON 직렬화 가능한 형태로 변환"""
+    inventory_status = str(item.status) if item.status else None
+    if inventory_status:
+        inventory_status = inventory_status.replace('InventoryStatus.', '')
+    return {
+        "id": item.id,
+        "ingredient_id": item.ingredient_id,
+        "name": item.name,
+        "count": item.count,
+        "max_count": item.max_count,
+        "status": inventory_status,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None
+    }
+
+def serialize_admin_settings(settings):
+    """AdminSettings 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": settings.id,
+        "operation_start": settings.operation_start,
+        "operation_end": settings.operation_end,
+        "inventory_threshold": settings.inventory_threshold,
+        "alert_settings": settings.alert_settings
+    }
+
+def serialize_video_stream(stream):
+    """VideoStream 모델을 JSON 직렬화 가능한 형태로 변환"""
+    
+    stream_status = str(stream.status) if stream.status else None
+    if stream_status:
+        stream_status = stream_status.replace('StreamStatus.', '')
+    
+    return {
+        "id": stream.id,
+        "source_type": str(stream.source_type).replace('StreamSourceType.', '') if stream.source_type else None,
+        "source_id": stream.source_id,
+        "last_checked": stream.last_checked.isoformat() if stream.last_checked else None,
+        "status": stream_status,
+        "recording_path": stream.recording_path,
+        "recording_started_at": stream.recording_started_at.isoformat() if stream.recording_started_at else None,
+        "recording_ended_at": stream.recording_ended_at.isoformat() if stream.recording_ended_at else None,
+    }
+
 # 서버 측에서 사용할 데이터 전송 함수들
 async def broadcast_robots_update(robots_data):
     """로봇 데이터 업데이트를 브로드캐스팅"""
@@ -211,7 +287,12 @@ async def broadcast_status_update(status_data):
 
 async def broadcast_tables_update(tables_data):
     """테이블 데이터 업데이트를 브로드캐스팅"""
-    await manager.broadcast_update(tables_data, "tables")
+    message = {
+        "type": "update",
+        "topic": "tables",
+        "data": tables_data
+    }
+    await manager.broadcast(message, "tables")
 
 async def broadcast_events_update(events_data):
     """이벤트 데이터 업데이트를 브로드캐스팅"""
@@ -226,6 +307,15 @@ async def broadcast_orders_update(orders_data):
     }
     await manager.broadcast(message, "orders")
 
+async def broadcast_customers_update(customers_data):
+    """고객 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "customers",
+        "data": customers_data
+    }
+    await manager.broadcast(message, "customers")
+
 async def broadcast_systemlogs_update(logs_data):
     """시스템 로그 데이터 업데이트를 브로드캐스팅"""
     message = {
@@ -234,6 +324,24 @@ async def broadcast_systemlogs_update(logs_data):
         "data": logs_data
     }
     await manager.broadcast(message, "systemlogs")
+
+async def broadcast_inventory_update(inventory_data):
+    """재고 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "inventory",
+        "data": inventory_data
+    }
+    await manager.broadcast(message, "inventory")
+
+async def broadcast_video_streams_update(streams_data):
+    """비디오 스트림 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "video_streams",
+        "data": streams_data
+    }
+    await manager.broadcast(message, "video_streams")
 
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
@@ -279,10 +387,29 @@ async def broadcast_entity_update(entity_type, entity_id):
                 elif entity_type == "table":
                     if entity_id:
                         table = session.get(Table, entity_id)
-                        out['data'] = [serialize_table(table)] if table else []
+                        out['table'] = [serialize_table(table)] if table else []
                     else:
                         tables = session.exec(select(Table)).all()
-                        out['data'] = [serialize_table(table) for table in tables]
+                        out['table'] = [serialize_table(table) for table in tables]
+                    
+                    # GroupAssignment 데이터도 추가
+                    assignments = session.exec(
+                        select(GroupAssignment)
+                        .where(GroupAssignment.released_at == None)
+                    ).all()
+                    out['assignments'] = [serialize_group_assignment(a) for a in assignments]
+                # customer
+                elif entity_type == "customer":
+                    if entity_id:
+                        customer = session.get(Customer, entity_id)
+                        out['data'] = [serialize_customer(customer)] if customer else []
+                    else:
+                        customers = session.exec(
+                            select(Customer)
+                            .order_by(Customer.id.desc())
+                        ).all()
+                        out['data'] = [serialize_customer(customer) for customer in customers]
+
                 # event
                 elif entity_type == "event":
                     if entity_id:
@@ -373,6 +500,35 @@ async def broadcast_entity_update(entity_type, entity_id):
                             .limit(30)
                         ).all()
                         out['data'] = [serialize_systemlog(log) for log in logs]
+                # inventory - 재고 데이터 조회
+                elif entity_type == "inventory":
+                    if entity_id:
+                        inventory_item = session.get(Inventory, entity_id)
+                        out['data'] = [serialize_inventory(inventory_item)] if inventory_item else []
+                    else:
+                        inventory_items = session.exec(
+                            select(Inventory)
+                            .order_by(Inventory.id)
+                        ).all()
+                        out['data'] = [serialize_inventory(item) for item in inventory_items]
+                        
+                    # 관리자 설정도 함께 보내기 (재고 임계값)
+                    admin_settings = session.exec(select(AdminSettings)).first()
+                    if admin_settings:
+                        out['admin_settings'] = serialize_admin_settings(admin_settings)
+                # video_stream
+                elif entity_type == "video_stream":
+                    from app.models.video_stream import VideoStream
+                    
+                    if entity_id:
+                        stream = session.get(VideoStream, entity_id)
+                        out['data'] = [serialize_video_stream(stream)] if stream else []
+                    else:
+                        streams = session.exec(
+                            select(VideoStream)
+                            .order_by(VideoStream.id)
+                        ).all()
+                        out['data'] = [serialize_video_stream(stream) for stream in streams]
                 return out
 
         result = await anyio.to_thread.run_sync(_sync_db_work)
@@ -382,7 +538,6 @@ async def broadcast_entity_update(entity_type, entity_id):
         entity = result['entity']
         if entity == "robot":
             await broadcast_robots_update(result['data'])
-            last_broadcast['robots'] = now
             combined = {
                 'robots': result['data'],
                 'albabots': [serialize_albabot(albabots) for albabots in result['albabots']],
@@ -390,10 +545,18 @@ async def broadcast_entity_update(entity_type, entity_id):
                 'poses': [serialize_pose6d(poses) for poses in result['poses']],
             }
             await broadcast_status_update(combined)
+            last_broadcast['robots'] = now
             last_broadcast['status'] = now
         elif entity == "table":
-            await broadcast_tables_update(result['data'])
+            combined = {
+                'tables': result['table'],
+                'assignments': result['assignments']
+            }
+            await broadcast_tables_update(combined)
             last_broadcast['tables'] = now
+        elif entity == "customer":
+            await broadcast_customers_update(result['data'])
+            last_broadcast['customers'] = now
         elif entity == "event":
             await broadcast_events_update(result['data'])
             last_broadcast['events'] = now
@@ -418,6 +581,20 @@ async def broadcast_entity_update(entity_type, entity_id):
         elif entity == "systemlog":
             await broadcast_systemlogs_update(result['data'])
             last_broadcast['systemlogs'] = now
+        elif entity == "inventory":
+            # 재고 데이터 브로드캐스팅
+            inventory_data = result['data']
+            # 관리자 설정이 있으면 함께 보내기
+            if 'admin_settings' in result:
+                inventory_data = {
+                    'inventory': inventory_data,
+                    'admin_settings': result['admin_settings']
+                }
+            await broadcast_inventory_update(inventory_data)
+            last_broadcast['inventory'] = now
+        elif entity == "video_stream":
+            await broadcast_video_streams_update(result['data'])
+            last_broadcast['video_streams'] = now
 
     except Exception as entity:
         logger.error(f"Error in broadcasting {entity_type} update: {entity}")
@@ -439,6 +616,10 @@ async def fallback_polling():
             if (now - last_broadcast["tables"]).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("table", None)
                 
+            # 고객 데이터 10초마다 갱신
+            if (now - last_broadcast.get("customers", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("customer", None)
+                
             # 이벤트 데이터 10초마다 갱신
             if (now - last_broadcast["events"]).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("event", None)
@@ -454,6 +635,14 @@ async def fallback_polling():
             # 시스템 로그 데이터 10초마다 갱신
             if (now - last_broadcast["systemlogs"]).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("systemlog", None)
+            
+            # 재고 데이터 10초마다 갱신
+            if (now - last_broadcast["inventory"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("inventory", None)
+                
+            # 비디오 스트림 데이터 10초마다 갱신
+            if (now - last_broadcast.get("video_streams", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("video_stream", None)
                 
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
@@ -468,6 +657,10 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(bind=engine)
     logger.info("Database tables created successfully")
 
+    # 비디오 디렉토리 생성
+    os.makedirs(VIDEOS_DIR, exist_ok=True)
+    logger.info(f"Videos directory created at {VIDEOS_DIR}")
+
     # TCP 서버
     tcp_thread = threading.Thread(target=start_tcp_server, args=("0.0.0.0", 8001), daemon=True)
     tcp_thread.start()
@@ -481,8 +674,11 @@ async def lifespan(app: FastAPI):
         # 이미 서비스 모듈에서 쓰레드를 띄우도록 설계했으니 단순 get만
         pass
 
-    # 마지막 브로드캐스트 시간에 systemlogs 추가
+    # 마지막 브로드캐스트 시간 초기화
     last_broadcast["systemlogs"] = datetime.min
+    last_broadcast["customers"] = datetime.min
+    last_broadcast["inventory"] = datetime.min
+    last_broadcast["video_streams"] = datetime.min
 
     yield
     
@@ -496,7 +692,16 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application...")
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 모든 도메인에서 접근을 허용
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 HTTP 메서드를 허용
+    allow_headers=["*"],  # 모든 헤더를 허용
+)
+
+# 비디오 파일 정적 서비스
+app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
 
 # TCP 핸들러에서 웹소켓 브로드캐스팅 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):

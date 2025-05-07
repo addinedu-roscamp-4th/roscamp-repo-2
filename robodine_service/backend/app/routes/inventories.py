@@ -14,12 +14,14 @@ class InventoryResponse(BaseModel):
     ingredient_id: int
     name: str
     count: int
+    max_count: Optional[int] = None
     status: str
 
 class InventoryCreateRequest(BaseModel):
     ingredient_id: int
     name: str
     count: int
+    max_count: Optional[int] = None
     status: InventoryStatus
 
 class MenuItemData(BaseModel):
@@ -43,6 +45,7 @@ def get_inventory(db: Session = Depends(get_db)):
             ingredient_id=item.ingredient_id,
             name=item.name,
             count=item.count,
+            max_count=item.max_count,
             status=item.status
         ) for item in inventory_items
     ]
@@ -63,6 +66,7 @@ def create_inventory(inventory_data: InventoryCreateRequest, db: Session = Depen
         ingredient_id=inventory_data.ingredient_id,
         name=inventory_data.name,
         count=inventory_data.count,
+        max_count=inventory_data.max_count,
         status=inventory_data.status
     )
     
@@ -101,6 +105,7 @@ def update_inventory(inventory_id: int, inventory_data: InventoryCreateRequest, 
     inventory.ingredient_id = inventory_data.ingredient_id
     inventory.name = inventory_data.name
     inventory.count = inventory_data.count
+    inventory.max_count = inventory_data.max_count
     inventory.status = inventory_data.status
     
     db.add(inventory)
@@ -169,6 +174,7 @@ def update_inventory_endpoint(
         ingredient_id = data.ingredient_id,
         name          = data.name,
         count         = data.count,
+        max_count     = data.max_count,
         status        = data.status,
     )
     db.add(inv)

@@ -17,6 +17,7 @@ const formatDateTime = date =>
     weekday: 'long', hour: '2-digit', minute: '2-digit'
   });
 
+// 테이블 기본 위치 지정 - CustomerPage와 같은 좌표계 사용
 const TABLE_POSITIONS = {
   1: { x: 34, y: 59 }, 2: { x: 48, y: 59 },
   3: { x: 34, y: 67 }, 4: { x: 48, y: 67 },
@@ -29,6 +30,8 @@ export default function DashboardPage() {
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [poseLatencies, setPoseLatencies] = useState({});
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [isOrderDetailModalOpen, setIsOrderDetailModalOpen] = useState(false);
 
   // 로봇 데이터 처리
   const processedRobots = useMemo(() => {
@@ -85,16 +88,71 @@ export default function DashboardPage() {
     });
   }, [status, robots]);
 
-  // 테이블 데이터 처리
+  // 테이블 배정 정보 처리 (CustomerPage와 동일한 방식)
+  const processedAssignmentsData = useMemo(() => {
+    // 배정 정보 가져오기 (released_at이 null인 활성 배정만)
+    const tableAssignments = data?.tables?.assignments && Array.isArray(data.tables.assignments)
+      ? data.tables.assignments
+          .filter(a => a['GroupAssignment.released_at'] === null)
+          .map((a) => ({
+            id: a['GroupAssignment.id'],
+            table_id: a['GroupAssignment.table_id'],
+            customer_id: a['GroupAssignment.customer_id'],
+            timestamp: a['GroupAssignment.timestamp'],
+          }))
+      : [];
+    
+    const customerAssignments = data?.customers?.assignments && Array.isArray(data.customers.assignments)
+      ? data.customers.assignments
+          .filter(a => a['GroupAssignment.released_at'] === null)
+          .map((a) => ({
+            id: a['GroupAssignment.id'],
+            table_id: a['GroupAssignment.table_id'],
+            customer_id: a['GroupAssignment.customer_id'],
+            timestamp: a['GroupAssignment.timestamp'],
+          }))
+      : [];
+    
+    // 중복 제거
+    const merged = [...tableAssignments, ...customerAssignments];
+    const deduplicated = merged.filter((assignment, index, self) =>
+      index === self.findIndex((a) => a && a.id === assignment.id)
+    );
+    
+    return deduplicated;
+  }, [data]);
+
+  // 테이블 데이터 처리 (CustomerPage 방식으로 통일)
   const processedTables = useMemo(() => {
-    const list = Array.isArray(tables) ? tables : [];
-    return list.map(t => ({
-      id: t['Table.id'], tableNumber: t['Table.table_number'],
-      status: t['Table.status'], maxCustomer: t['Table.max_customer'],
-      updatedAt: t['Table.updated_at'],
-      position: TABLE_POSITIONS[t['Table.table_number']] || { x: 0, y: 0 }
+    // 테이블이 배열이 아닌 경우 빈 배열 반환
+    if (!data.tables || !Array.isArray(data.tables.tables)) return [];
+
+    const tables = data.tables.tables.map((t) => ({
+      id: t['Table.id'],
+      max_customer: t['Table.max_customer'],
+      status: t['Table.status'],
+      // 데이터베이스의 좌표와 크기 값 명시적으로 숫자형으로 변환
+      x: t['Table.x'] !== undefined ? Number(t['Table.x']) : undefined,
+      y: t['Table.y'] !== undefined ? Number(t['Table.y']) : undefined,
+      width: t['Table.width'] !== undefined ? Number(t['Table.width']) : undefined,
+      height: t['Table.height'] !== undefined ? Number(t['Table.height']) : undefined,
     }));
-  }, [tables]);
+
+    return tables.map((table) => {
+      const hasAssignment = processedAssignmentsData.some((a) => a.table_id === table.id);
+      return {
+        ...table,
+        status: hasAssignment ? 'OCCUPIED' : table.status || 'AVAILABLE',
+        customer_id: hasAssignment 
+          ? processedAssignmentsData.find((a) => a.table_id === table.id)?.customer_id 
+          : null,
+        // 데이터베이스 값 우선, 없는 경우에만 기본 위치 사용
+        position: (table.x !== undefined && table.y !== undefined) 
+          ? { x: table.x, y: table.y } 
+          : TABLE_POSITIONS[table.id] || { x: 0, y: 0 }
+      };
+    });
+  }, [data, processedAssignmentsData]);
 
   // 주문 데이터 처리
   const processedOrders = useMemo(() => {
@@ -117,7 +175,8 @@ export default function DashboardPage() {
           quantity: item['OrderItem.quantity'],
           price: menu?.['MenuItem.price'] || 0
         }] : [],
-        totalPrice: item ? item['OrderItem.quantity'] * (menu?.['MenuItem.price'] || 0) : 0
+        totalPrice: item ? item['OrderItem.quantity'] * (menu?.['MenuItem.price'] || 0) : 0,
+        totalQuantity: item ? item['OrderItem.quantity'] : 0,
       };
     });
   }, [orders]);
@@ -172,6 +231,18 @@ export default function DashboardPage() {
     setIsLoading(false);
   }, [robots, tables, events, orders, status, systemlogs]);
 
+  // 주문 상세 정보 보기 함수
+  const handleViewOrder = useCallback((orderId) => {
+    setSelectedOrderId(orderId);
+    setIsOrderDetailModalOpen(true);
+  }, []);
+
+  // 주문 상세 정보 모달 닫기
+  const handleCloseOrderModal = useCallback(() => {
+    setIsOrderDetailModalOpen(false);
+    setSelectedOrderId(null);
+  }, []);
+
   return (
     <Layout>
       <div className="h-full w-full flex flex-col">
@@ -192,9 +263,12 @@ export default function DashboardPage() {
           <section className="col-span-12 lg:col-span-8 h-full">
             <StoreMap
               tables={processedTables}
+              assignments={processedAssignmentsData}
               robots={processedRobots.map(r => ({ ...r, latency: poseLatencies[r.id] }))}
               isLoading={isLoading}
               wsConnected={connected.robots}
+              tablesError={errors.tables}
+              robotsError={errors.robots}
             />
           </section>
           <section className="col-span-12 lg:col-span-4 flex flex-col min-h-0">
@@ -215,11 +289,94 @@ export default function DashboardPage() {
           </section>
           <section className="col-span-12 lg:col-span-6 flex flex-col min-h-0">
             <div className="flex-1 overflow-y-auto">
-              <RecentOrders orders={recentOrders} />
+              <RecentOrders 
+                orders={recentOrders} 
+                onViewOrder={handleViewOrder}
+              />
             </div>
           </section>
         </main>
       </div>
+
+      {/* 주문 상세 정보 모달 */}
+      {isOrderDetailModalOpen && selectedOrderId && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-800">
+                주문 #{selectedOrderId} 상세 정보
+              </h2>
+              <button 
+                onClick={handleCloseOrderModal}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            
+            <div className="px-6 py-4">
+              {processedOrders.find(order => order.id === selectedOrderId) ? (
+                <div>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-500 mb-1">테이블 번호</p>
+                    <p className="text-lg font-medium">
+                      테이블 {processedOrders.find(order => order.id === selectedOrderId).table || '정보 없음'}
+                    </p>
+                  </div>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-500 mb-1">주문 시간</p>
+                    <p className="text-lg font-medium">
+                      {new Date(processedOrders.find(order => order.id === selectedOrderId).timestamp).toLocaleString('ko-KR')}
+                    </p>
+                  </div>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-500 mb-1">주문 상태</p>
+                    <p className="text-lg font-medium">
+                      {processedOrders.find(order => order.id === selectedOrderId).status}
+                    </p>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <h3 className="text-lg font-medium border-b pb-2 mb-3">주문 항목</h3>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <table className="min-w-full">
+                        <thead>
+                          <tr>
+                            <th className="pb-2 text-left text-sm font-semibold text-gray-500">메뉴 이름</th>
+                            <th className="pb-2 text-center text-sm font-semibold text-gray-500">수량</th>
+                            <th className="pb-2 text-right text-sm font-semibold text-gray-500">가격</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {processedOrders.find(order => order.id === selectedOrderId).items.map((item, index) => (
+                            <tr key={index} className="border-t border-gray-200">
+                              <td className="py-2 text-sm">{item.name}</td>
+                              <td className="py-2 text-sm text-center">{item.quantity}개</td>
+                              <td className="py-2 text-sm text-right">{(item.price * item.quantity).toLocaleString()}원</td>
+                            </tr>
+                          ))}
+                          <tr className="border-t border-gray-200 font-bold">
+                            <td className="pt-3 text-sm">총계</td>
+                            <td className="pt-3 text-sm text-center">{processedOrders.find(order => order.id === selectedOrderId).totalQuantity}개</td>
+                            <td className="pt-3 text-sm text-right">{processedOrders.find(order => order.id === selectedOrderId).totalPrice.toLocaleString()}원</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>주문 정보를 찾을 수 없습니다.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

@@ -13,11 +13,11 @@ router = APIRouter()
 # --- Kiosk Models ---
 class KioskResponse(BaseModel):
     id: int
-    table_number: Optional[int]
+    table_id: Optional[int]
     ip_address: str
 
 class KioskCreateRequest(BaseModel):
-    table_number: Optional[int]
+    table_id: Optional[int]
     ip_address: str
 
 # --- Router Endpoints ---
@@ -27,7 +27,7 @@ def get_kiosks(db: Session = Depends(get_db)):
     return [
         KioskResponse(
             id=kiosk.id,
-            table_number=kiosk.table_number,
+            table_id=kiosk.table_id,
             ip_address=kiosk.ip_address
         ) for kiosk in kiosks
     ]
@@ -36,7 +36,7 @@ def get_kiosks(db: Session = Depends(get_db)):
 def create_kiosk(kiosk_data: KioskCreateRequest, db: Session = Depends(get_db)):
     # Create new kiosk
     new_kiosk = KioskTerminal(
-        table_number=kiosk_data.table_number,
+        table_id=kiosk_data.table_id,
         ip_address=kiosk_data.ip_address
     )
     

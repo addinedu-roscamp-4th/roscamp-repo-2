@@ -157,11 +157,10 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const location = useLocation();
   
   const menuItems = [
-    { name: '대시보드', icon: Home, path: '/dashboard' },
+    { name: '대시보드', icon: Home, path: '/' },
     { name: '로봇 관리', icon: CloudLightning, path: '/robots' },
     { name: '고객 관리', icon: Users, path: '/customers' },
-    { name: '영상 보기', icon: Video, path: '/video-streams' },
-    { name: '비상 상황', icon: AlertTriangle, path: '/emergencies' },
+    { name: '영상 보기', icon: Video, path: '/video-stream' },
     { name: '주문 관리', icon: ShoppingCart, path: '/orders' },
     { name: '재고 관리', icon: Package, path: '/inventory' },
     { name: '설정', icon: Settings, path: '/settings' },

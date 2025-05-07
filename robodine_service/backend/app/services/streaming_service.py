@@ -15,19 +15,26 @@ _stream_urls: list[str] = []
 def get_stream_urls() -> list[str]:
     return _stream_urls
 
-def add_stream_url(url: str):
+def add_stream_url(url: str, path: str = None):
     if url not in _stream_urls:
         _stream_urls.append(url)
-        threading.Thread(target=record_stream, args=(url,), daemon=True).start()
+        threading.Thread(target=record_stream, args=(url,path), daemon=True).start()
 
 def remove_stream_url(url: str):
     _stream_urls.remove(url)
 
-def record_stream(rtsp_url: str):
+
+def get_file_path(rtsp_url: str, path: str = None) -> str:
     ip = rtsp_url.split("//")[1].split(":")[0]
     base_dir = os.path.join("videos", ip)
     os.makedirs(base_dir, exist_ok=True)
+    # path를 이용한 파일 이름 생성
+    file_name = os.path.basename(path)
+    return os.path.join(base_dir, file_name)
 
+
+def record_stream(rtsp_url: str, path: str = None):
+    ip = rtsp_url.split("//")[1].split(":")[0]
     while rtsp_url in _stream_urls:
         cap = cv2.VideoCapture(rtsp_url)
         if not cap.isOpened():
@@ -38,8 +45,7 @@ def record_stream(rtsp_url: str):
         width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps    = cap.get(cv2.CAP_PROP_FPS) or 20.0
-        ts     = datetime.now().strftime("%Y%m%d%H%M%S")
-        out_path = os.path.join(base_dir, f"stream_{ts}.mp4")
+        out_path = get_file_path(rtsp_url, path)
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
@@ -56,3 +62,5 @@ def record_stream(rtsp_url: str):
         writer.release()
         logger.info(f"[RTSP:{ip}] Finished {out_path}")
         time.sleep(1)
+
+    

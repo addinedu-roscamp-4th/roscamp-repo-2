@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class KioskTerminal(SQLModel, table=True):
     __tablename__ = "kioskterminal"
     id: Optional[int] = Field(default=None, primary_key=True)
-    table_number: Optional[int] = Field(default=None)
+    table_id: Optional[int] = Field(default=None)
     ip_address: Optional[str] = None
 
 

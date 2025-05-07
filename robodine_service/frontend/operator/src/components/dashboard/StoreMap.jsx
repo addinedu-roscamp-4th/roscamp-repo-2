@@ -3,7 +3,7 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw, AlertTriangle, Wifi } from 'react-feather';
 
-const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesError, selectedEvent, wsConnected, className = ''}) => {
+const StoreMap = ({ tables = [], robots = [], assignments = [], isLoading, robotsError, tablesError, selectedEvent, wsConnected, className = ''}) => {
   // 식당 영역 좌표 (최상단에 정의하여 다른 계산에 사용)
   const restaurantArea = {
     topLeft: { x: 21, y: 51 },
@@ -30,17 +30,20 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   const MAP_WIDTH = 99;  // 픽셀
   const MAP_HEIGHT = 100; // 픽셀
 
+  // 테이블 및 로봇 시각화 크기 설정
+  const TABLE_SIZE = 4; // 테이블 크기 (픽셀)
+  const ROBOT_SIZE = 3;  // 로봇 크기 (픽셀)
+
   // 컴포넌트 마운트 시 식당 영역이 중앙에 오도록 위치 초기화
-    // 페인팅 이전에 동기적으로 실행되어 깜빡임 제거
-    useLayoutEffect(() => {
-      if (!mapContainerRef.current || isLoading) return;
-      // 이 안에 바로 쓰는 대신, animation frame으로 늦춰서
-      requestAnimationFrame(() => {
-        const W = mapContainerRef.current.clientWidth;
-        const H = mapContainerRef.current.clientHeight;
-        setPosition({ x: W/2 - centerX*scale, y: H/2 - centerY*scale });
-      });
-    }, [centerX, centerY, scale, isLoading]);
+  useLayoutEffect(() => {
+    if (!mapContainerRef.current || isLoading) return;
+    // 이 안에 바로 쓰는 대신, animation frame으로 늦춰서
+    requestAnimationFrame(() => {
+      const W = mapContainerRef.current.clientWidth;
+      const H = mapContainerRef.current.clientHeight;
+      setPosition({ x: W/2 - centerX*scale, y: H/2 - centerY*scale });
+    });
+  }, [centerX, centerY, scale, isLoading]);
 
   const zoomIn = () => {
     setScale(prev => Math.min(prev + 2, 25)); // 최대 확대 레벨 증가
@@ -51,16 +54,16 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   };
 
   const resetZoom = () => {
-        const newScale = 15;
-        setScale(newScale);
-        // 똑같은 픽셀 기준 계산
-        if (mapContainerRef.current) {
-          const W = mapContainerRef.current.clientWidth;
-          const H = mapContainerRef.current.clientHeight;
-          const x = W / 2 - centerX * newScale;
-          const y = H / 2 - centerY * newScale;
-          setPosition({ x, y });
-        }
+    const newScale = 15;
+    setScale(newScale);
+    // 똑같은 픽셀 기준 계산
+    if (mapContainerRef.current) {
+      const W = mapContainerRef.current.clientWidth;
+      const H = mapContainerRef.current.clientHeight;
+      const x = W / 2 - centerX * newScale;
+      const y = H / 2 - centerY * newScale;
+      setPosition({ x, y });
+    }
   };
 
   // 드래그 시작 핸들러
@@ -110,6 +113,7 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
     };
   }, [isDragging, dragStart]);
 
+  // 테이블 상태에 따른 색상 클래스
   const getTableColor = (status) => {
     switch (status) {
       case 'OCCUPIED':
@@ -175,6 +179,62 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
     return { x: baseX, y: baseY };
   };
 
+  // 테이블 위치 정보 (좌표 계산)
+  const getTablePosition = (table, index) => {
+    // 데이터베이스에서 x, y 값이 있는 경우 우선적으로 사용
+    if (table.x !== undefined && table.y !== undefined) {
+      return { x: table.x, y: table.y };
+    }
+    // 객체에 position 속성이 있는 경우 사용
+    else if (table.position) {
+      return table.position;
+    }
+    
+    // 식당 내 테이블 위치 계산 (2x2 그리드로 배치)
+    const tableSpacingX = (restaurantArea.topRight.x - restaurantArea.topLeft.x) / 3;
+    const tableSpacingY = (restaurantArea.bottomLeft.y - restaurantArea.topLeft.y) / 3;
+    
+    // 테이블 번호에 따라 위치 계산
+    const tableNum = table.id || (index + 1);
+    
+    switch (tableNum % 4) {
+      case 1:
+        return {
+          x: restaurantArea.topLeft.x + tableSpacingX,
+          y: restaurantArea.topLeft.y + tableSpacingY
+        };
+      case 2:
+        return {
+          x: restaurantArea.topRight.x - tableSpacingX,
+          y: restaurantArea.topLeft.y + tableSpacingY
+        };
+      case 3:
+        return {
+          x: restaurantArea.topLeft.x + tableSpacingX,
+          y: restaurantArea.bottomLeft.y - tableSpacingY
+        };
+      case 0:
+        return {
+          x: restaurantArea.topRight.x - tableSpacingX,
+          y: restaurantArea.bottomLeft.y - tableSpacingY
+        };
+      default:
+        return {
+          x: centerX,
+          y: centerY
+        };
+    }
+  };
+
+  // 테이블의 배정 상태 확인
+  const getTableStatus = (tableId) => {
+    const assignment = assignments.find(a => a.table_id === tableId);
+    if (assignment) {
+      return 'OCCUPIED';
+    }
+    return 'AVAILABLE';
+  };
+
   // 항목이 하이라이트 되어야 하는지 확인
   const isHighlighted = (item) => {
     if (!selectedEvent || !selectedEvent.location || !item.position) return false;
@@ -193,45 +253,6 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
   // 맵에 표시할 유효한 테이블과 로봇 필터링
   const validTables = tables.filter(table => table && (table.position || table.id));
   const validRobots = robots.filter(robot => robot && (robot.position || robot.id));
-
-  // 테이블 기본 위치 (고정) - 좌표 1:1 변환 (식당 영역 내 균등 분포)
-  const tablePositions = {};
-  
-  // 식당 내 테이블 위치 계산 (2x2 그리드로 배치)
-  const tableSpacingX = (restaurantArea.topRight.x - restaurantArea.topLeft.x) / 3;
-  const tableSpacingY = (restaurantArea.bottomLeft.y - restaurantArea.topLeft.y) / 3;
-  
-  // 4개의 테이블만 배치
-  tablePositions[1] = {
-    x: restaurantArea.topLeft.x + tableSpacingX,
-    y: restaurantArea.topLeft.y + tableSpacingY
-  };
-  tablePositions[2] = {
-    x: restaurantArea.topRight.x - tableSpacingX,
-    y: restaurantArea.topLeft.y + tableSpacingY
-  };
-  tablePositions[3] = {
-    x: restaurantArea.topLeft.x + tableSpacingX,
-    y: restaurantArea.bottomLeft.y - tableSpacingY
-  };
-  tablePositions[4] = {
-    x: restaurantArea.topRight.x - tableSpacingX,
-    y: restaurantArea.bottomLeft.y - tableSpacingY
-  };
-
-  // 테이블 및 로봇 시각화 크기 설정
-  // TIP: 아래 값을 수정하여 테이블과 로봇의 크기를 조절할 수 있습니다.
-  const TABLE_SIZE = 4; // 테이블 크기 (픽셀) - 식당 영역에 맞게 조정
-  const ROBOT_SIZE = 3;  // 로봇 크기 (픽셀) - 더 크게 설정
-
-  // 임시로 테이블 데이터 추가 (디버깅용)
-  // console.log("Tables:", validTables);
-  const debugTables = Array.from({ length: 4 }, (_, i) => ({
-    id: i + 1,
-    tableNumber: i + 1,
-    status: i % 3 === 0 ? 'AVAILABLE' : i % 3 === 1 ? 'OCCUPIED' : 'RESERVED',
-    position: tablePositions[i + 1]
-  }));
 
   return (
     <div className={`bg-white rounded-lg shadow p-4 ${className}`}>
@@ -292,20 +313,20 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
           style={{ height: '400px', cursor: isDragging ? 'grabbing' : 'grab' }}
           onMouseDown={handleMouseDown}
         >
-       {/* position이 null일 땐 숨겨두기 */}
-        <div
-          className="absolute inset-0"
-          style={{
-            visibility: position ? 'visible' : 'hidden',
-            transformOrigin: '0 0',
-            transform: position 
-              ? `scale(${scale}) translate(${position.x/scale}px, ${position.y/scale}px)` 
-              : undefined,
-            transition: isDragging ? 'none' : 'transform 0.3s ease',
-            width: `${MAP_WIDTH}px`,
-            height: `${MAP_HEIGHT}px`
-          }}
-            >
+          {/* position이 null일 땐 숨겨두기 */}
+          <div
+            className="absolute inset-0"
+            style={{
+              visibility: position ? 'visible' : 'hidden',
+              transformOrigin: '0 0',
+              transform: position 
+                ? `scale(${scale}) translate(${position.x/scale}px, ${position.y/scale}px)` 
+                : undefined,
+              transition: isDragging ? 'none' : 'transform 0.3s ease',
+              width: `${MAP_WIDTH}px`,
+              height: `${MAP_HEIGHT}px`
+            }}
+          >
             {/* 격자 배경 */}
             <div className="absolute inset-0">
               {Array.from({ length: Math.floor(MAP_HEIGHT / 2) }).map((_, y) => (
@@ -328,35 +349,36 @@ const StoreMap = ({ tables = [], robots = [], isLoading, robotsError, tablesErro
             />
             
             {/* 테이블 */}
-            {/* TIP: style 내의 width와 height를 수정하여 테이블 크기 조절 가능 */}
-            {(validTables.length > 0 ? validTables : debugTables).map(table => {
-              // 1~4번 테이블만 표시
-              if (table.tableNumber > 4) return null;
+            {validTables.map((table, index) => {
+              // 테이블 상태 확인 - CustomerPage와 동일 방식
+              const status = table.status || getTableStatus(table.id);
               
-              const position = table.position || tablePositions[table.tableNumber] || getDefaultPosition(table.id || 0, 'table');
+              // 테이블 위치 및 크기 정보
+              const position = getTablePosition(table, index);
+              
+              // 테이블 크기가 데이터베이스에 정의되어 있는 경우 우선적으로 사용
+              const tableWidth = table.width || TABLE_SIZE;
+              const tableHeight = table.height || TABLE_SIZE;
+              
               return (
                 <div
                   key={`table-${table.id}`}
-                  className={`absolute border-[0.1px] flex items-center justify-center transition-all ${getTableColor(table.status)} ${isHighlighted(table) ? 'ring-1 ring-blue-500 z-10' : ''}`}
+                  className={`absolute border-[1px] cursor-pointer flex items-center justify-center transition-all ${getTableColor(status)} ${isHighlighted(table) ? 'ring-1 ring-blue-500 z-10' : ''}`}
                   style={{
                     left: `${position.x}px`,
                     top: `${position.y}px`,
-                    width: `${TABLE_SIZE}px`,
-                    height: `${TABLE_SIZE}px`,
+                    width: `${tableWidth}px`,
+                    height: `${tableHeight}px`,
                     transform: 'translate(-50%, -50%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
                   }}
-                  title={`테이블 ${table.tableNumber || table.id} - ${table.status || '상태 없음'}`}
+                  title={`테이블 ${table.id} - ${status === 'OCCUPIED' ? '사용 중' : '사용 가능'}`}
                 >
-                  <span className="absolute font-semibold text-[3px] text-gray-900 text-center" style={{ lineHeight: '1px' }}>{table.tableNumber || table.id}</span>
+                  <span className="absolute font-semibold text-[3px] text-gray-900 text-center" style={{ lineHeight: '1px' }}>{table.id}</span>
                 </div>
               );
             })}
             
             {/* 로봇 */}
-            {/* TIP: style 내의 width와 height를 수정하여 로봇 크기 조절 가능 */}
             {validRobots.map(robot => {
               const position = robot.position || getDefaultPosition(robot.id || 0, 'robot');
               return (

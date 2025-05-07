@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
+import { useWebSockets } from '../contexts/WebSocketContext';
 import { 
   ShoppingCart, 
   Search, 
@@ -13,176 +14,324 @@ import {
   XCircle,
   CheckCircle,
   Coffee,
-  Truck
+  Truck,
+  DollarSign,
+  RefreshCw
 } from 'lucide-react';
 
-const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
-
-// 웹소켓 연결 함수
-const useWebSocket = (topic, onMessageReceived) => {
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState(null);
-  
-  useEffect(() => {
-    const ws = new WebSocket(`${WS_BASE_URL}/${topic}`);
-    
-    ws.onopen = () => {
-      console.log(`${topic} 웹소켓 연결됨`);
-      setConnected(true);
-      setError(null);
-    };
-    
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'update' && data.topic === topic) {
-          onMessageReceived(data.data);
-        }
-      } catch (error) {
-        console.error(`${topic} 웹소켓 메시지 처리 오류:`, error);
-      }
-    };
-    
-    ws.onclose = () => {
-      console.log(`${topic} 웹소켓 연결 종료`);
-      setConnected(false);
-    };
-    
-    ws.onerror = (error) => {
-      console.error(`${topic} 웹소켓 오류:`, error);
-      setError(`연결 오류: ${error.message || '알 수 없는 오류'}`);
-    };
-    
-    return () => {
-      ws.close();
-    };
-  }, [topic, onMessageReceived]);
-  
-  return { connected, error };
-};
-
 const OrdersPage = () => {
-  const [orders, setOrders] = useState([]);
-  const [ordersDetailData, setOrdersDetailData] = useState({
-    orders: [], kioskterminals: [], orderItems: [], menuitems: []
-  });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [selectedSort, setSelectedSort] = useState('RECENT'); // RECENT, STATUS, PRICE
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const { apiCall } = useAuth();
+  
+  // 현재 주문 데이터를 저장할 ref
+  const ordersDataRef = useRef({
+    orders: [],
+    orderItems: [],
+    menuitems: []
+  });
+  
+  // 로딩 상태를 별도로 관리
+  const [isManualLoading, setIsManualLoading] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [localError, setLocalError] = useState(null);
+  
+  // 웹소켓 컨텍스트에서 데이터 가져오기
+  const { data, errors, connected, refreshTopic } = useWebSockets();
+  
+  const isLoading = !initialLoadDone || isManualLoading;
+  const error = localError || errors.orders;
 
-  // 주문 상세 정보 조회
-  const fetchOrderDetails = useCallback(async (orderId) => {
-    try {
-      const data = await apiCall(`/api/orders/${orderId}`);
-      return data;
-    } catch (err) {
-      console.error(`주문 ID ${orderId}의 상세 정보를 불러오는 중 오류가 발생했습니다:`, err);
-      return null;
-    }
-  }, [apiCall]);
+  // 정렬 옵션 라벨 맵핑
+  const sortLabels = {
+    RECENT: '최신순',
+    STATUS: '상태순',
+    PRICE: '금액순',
+    TABLE: '테이블 번호순',
+  };
 
-  // 초기 주문 데이터 로딩
+  // 데이터 새로고침 시 현재 데이터와 비교하여 변경사항만 업데이트
   useEffect(() => {
-    const fetchOrders = async () => {
-      setIsLoading(true);
-      setError(null);
-
+    if (data.orders) {
       try {
-        const data = await apiCall('/api/orders');
-        setOrders(data);
-      } catch (err) {
-        console.error('주문 정보를 불러오는 중 오류가 발생했습니다:', err);
-        setError('주문 정보를 불러올 수 없습니다.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchOrders();
-  }, [apiCall]);
-
-  // 웹소켓을 통한 주문 데이터 실시간 업데이트
-  const handleOrdersMessage = useCallback((data) => {
-    console.log("주문 데이터 수신:", data);
-    
-    if (data && typeof data === 'object') {
-      setOrdersDetailData({
-        orders: data.orders || [],
-        orderItems: data.orderitems || [],
-        kioskterminals: data.kioskterminals || [],
-        menuitems: data.menuitems || []
-      });
-      
-      // 기존 주문 목록 업데이트
-      if (Array.isArray(data.orders) && data.orders.length > 0) {
-        // API에서 받은 형식으로 변환
-        const updatedOrders = data.orders.flat().map(order => {
-          return {
-            id: order['Order.id'],
-            customer_id: order['Order.customer_id'],
-            robot_id: order['Order.robot_id'],
-            table_id: order['Order.table_id'],
-            status: order['Order.status'],
-            timestamp: order['Order.timestamp'],
-            served_at: order['Order.served_at']
-          };
-        });
+        // console.log('WebSocket 데이터 구조 분석:', {
+        //   orders: data.orders.orders ? `${data.orders.orders.length}개` : '없음',
+        //   orderitems: data.orders.orderitems ? `${data.orders.orderitems.length}개` : '없음',
+        //   menuitems: data.orders.menuitems ? `${data.orders.menuitems.length}개` : '없음'
+        // });
+  
+        // 데이터가 비어있는지 확인
+        const isEmpty = 
+          (!data.orders.orders || data.orders.orders.length === 0) &&
+          (!data.orders.orderitems || data.orders.orderitems.length === 0) &&
+          (!data.orders.menuitems || data.orders.menuitems.length === 0);
+          
+        if (isEmpty && initialLoadDone) {
+          console.log('수신된 데이터가 비어있습니다. 기존 데이터를 유지합니다.');
+          setIsManualLoading(false);
+          return;
+        }
+  
+        // 데이터 구조 검증 후 일관된 형식으로 변환
+        const newOrdersData = {
+          orders: Array.isArray(data.orders.orders) ? data.orders.orders : [],
+          orderItems: Array.isArray(data.orders.orderitems) ? data.orders.orderitems : [],
+          menuitems: Array.isArray(data.orders.menuitems) ? data.orders.menuitems : []
+        };
+  
+        // console.log('수신된 주문 데이터:', newOrdersData);
+  
+        // 첫 로드 시 데이터 저장
+        if (!initialLoadDone) {
+          // console.log('첫 로드: 데이터 전체 저장');
+          ordersDataRef.current = newOrdersData;
+          setInitialLoadDone(true);
+          setIsManualLoading(false);
+          setLocalError(null); // 첫 로드 성공 시 에러 초기화
+          return;
+        }
+  
+        // 데이터 병합
+        // 주문 데이터 병합
+        if (newOrdersData.orders.length > 0) {
+          newOrdersData.orders = newOrdersData.orders[0]
+          // console.log(`주문 데이터 ${newOrdersData.orders.length}개 병합`);
+          
+          const existingOrdersMap = new Map();
+          ordersDataRef.current.orders.forEach(order => {
+            const orderId = order['Order.id'] || order.id;
+            if (orderId) {
+              existingOrdersMap.set(orderId.toString(), order);
+            }
+          });
+  
+          newOrdersData.orders.forEach(order => {
+            const orderId = order['Order.id'] || order.id;
+            if (orderId) {
+              existingOrdersMap.set(orderId.toString(), order);
+            }
+          });
+  
+          ordersDataRef.current.orders = Array.from(existingOrdersMap.values());
+          // console.log(`병합 후 주문 개수: ${ordersDataRef.current.orders.length}`);
+        }
+  
+        // 주문 항목 데이터 병합
+        if (newOrdersData.orderItems.length > 0) {
+          // console.log(`주문 항목 데이터 ${newOrdersData.orderItems.length}개 병합`);
+          const existingOrderItemsMap = new Map();
+  
+          ordersDataRef.current.orderItems.forEach(item => {
+            const itemId = item['OrderItem.id'] || item.id;
+            const orderId = item['OrderItem.order_id'] || item.order_id;
+            if (itemId) {
+              existingOrderItemsMap.set(`${orderId}-${itemId}`, item);
+            } else if (orderId) {
+              // ID가 없으면 주문ID-메뉴ID 조합으로 유일키 생성
+              const menuItemId = item['OrderItem.menu_item_id'] || item.menu_item_id;
+              existingOrderItemsMap.set(`${orderId}-${menuItemId}`, item);
+            }
+          });
+  
+          newOrdersData.orderItems.forEach(item => {
+            const itemId = item['OrderItem.id'] || item.id;
+            const orderId = item['OrderItem.order_id'] || item.order_id;
+            if (itemId) {
+              existingOrderItemsMap.set(`${orderId}-${itemId}`, item);
+            } else if (orderId) {
+              // ID가 없으면 주문ID-메뉴ID 조합으로 유일키 생성
+              const menuItemId = item['OrderItem.menu_item_id'] || item.menu_item_id;
+              existingOrderItemsMap.set(`${orderId}-${menuItemId}`, item);
+            }
+          });
+  
+          ordersDataRef.current.orderItems = Array.from(existingOrderItemsMap.values());
+        }
+  
+        // 메뉴 항목 데이터 병합
+        if (newOrdersData.menuitems.length > 0) {
+          // console.log(`메뉴 항목 데이터 ${newOrdersData.menuitems.length}개 병합`);
+          const existingMenuItemsMap = new Map();
+  
+          ordersDataRef.current.menuitems.forEach(item => {
+            const menuId = item['MenuItem.id'] || item.id;
+            if (menuId !== undefined) {
+              existingMenuItemsMap.set(menuId.toString(), item);
+            }
+          });
+  
+          newOrdersData.menuitems.forEach(item => {
+            const menuId = item['MenuItem.id'] || item.id;
+            if (menuId !== undefined) {
+              existingMenuItemsMap.set(menuId.toString(), item);
+            }
+          });
+  
+          ordersDataRef.current.menuitems = Array.from(existingMenuItemsMap.values());
+        }
+  
+        // console.log('데이터 병합 완료');
+        // console.log('현재 저장된 데이터:', {
+        //   orders: ordersDataRef.current.orders.length,
+        //   orderItems: ordersDataRef.current.orderItems.length,
+        //   menuitems: ordersDataRef.current.menuitems.length
+        // });
         
-        // 기존 주문 목록과 병합 (중복 제거)
-        setOrders(prevOrders => {
-          const orderMap = new Map();
-          
-          // 기존 주문 맵에 추가
-          prevOrders.forEach(order => {
-            orderMap.set(order.id, order);
-          });
-          
-          // 새 주문 정보로 업데이트
-          updatedOrders.forEach(order => {
-            orderMap.set(order.id, order);
-          });
-          
-          // 맵에서 다시 배열로 변환
-          return Array.from(orderMap.values());
-        });
+        setLocalError(null); // 데이터 로드 성공 시 에러 초기화
+      } catch (error) {
+        console.error('데이터 처리 중 오류 발생:', error);
+        setLocalError('데이터 처리 중 오류가 발생했습니다.');
+      } finally {
+        setIsManualLoading(false);
       }
     }
-  }, []);
+  }, [data.orders, initialLoadDone]);
+  
 
-  // 웹소켓 연결
-  const ordersWS = useWebSocket('orders', handleOrdersMessage);
+  // 주문 데이터 처리 - 현재 저장된 데이터 기반
+  const processedOrders = useMemo(() => {
+    const rawOrders = ordersDataRef.current.orders || [];
+    // console.log(`주문 데이터 처리 시작 - ${rawOrders.length}개 주문 처리 중`);
+    
+    const processed = rawOrders.map(o => {
+      const orderId = o['Order.id'] || o.id;
+      const status = o['Order.status'] || o.status;
+      const tableId = o['Order.table_id'] || o.table_id;
+      const customerId = o['Order.customer_id'] || o.customer_id;
+      const robotId = o['Order.robot_id'] || o.robot_id;
+      const servedAt = o['Order.served_at'] || o.served_at;
+      const tsRaw = o['Order.timestamp'] || o.timestamp || '';
+      const timestamp = tsRaw.split('.')[0];
+  
+      // 주문 항목 찾기 - 객체 키 접근 방식 개선
+      const orderItems = ordersDataRef.current.orderItems
+        ? ordersDataRef.current.orderItems.filter(item => {
+            const itemOrderId = item['OrderItem.order_id'] !== undefined 
+              ? item['OrderItem.order_id'] 
+              : (item.order_id !== undefined ? item.order_id : null);
+            return itemOrderId === orderId;
+          })
+        : [];
+  
+      // 주문 항목의 총 수량과 가격 계산
+      let totalQuantity = 0;
+      let totalPrice = 0;
+      const items = [];
+      
+      orderItems.forEach(item => {
+        const itemId = item['OrderItem.id'] !== undefined ? item['OrderItem.id'] : (item.id !== undefined ? item.id : null);
+        const menuItemId = item['OrderItem.menu_item_id'] !== undefined 
+          ? item['OrderItem.menu_item_id'] 
+          : (item.menu_item_id !== undefined ? item.menu_item_id : null);
+        const quantity = item['OrderItem.quantity'] !== undefined 
+          ? item['OrderItem.quantity'] 
+          : (item.quantity !== undefined ? item.quantity : 0);
+          
+        totalQuantity += quantity;
+  
+        const menuItem = ordersDataRef.current.menuitems
+          ? ordersDataRef.current.menuitems.find(menu => {
+              const menuId = menu['MenuItem.id'] !== undefined 
+                ? menu['MenuItem.id'] 
+                : (menu.id !== undefined ? menu.id : null);
+              return menuId === menuItemId;
+            })
+          : null;
+  
+        if (menuItem) {
+          const price = menuItem['MenuItem.price'] !== undefined 
+            ? menuItem['MenuItem.price'] 
+            : (menuItem.price !== undefined ? menuItem.price : 0);
+          const name = menuItem['MenuItem.name'] !== undefined 
+            ? menuItem['MenuItem.name'] 
+            : (menuItem.name !== undefined ? menuItem.name : `메뉴 #${menuItemId}`);
+          totalPrice += quantity * price;
+  
+          items.push({
+            id: itemId,
+            menu_item_id: menuItemId,
+            name: name,
+            quantity: quantity,
+            price: price
+          });
+        }
+      });
+  
+      return {
+        id: orderId, 
+        status: status,
+        table: tableId, 
+        tableNumber: tableId,
+        table_id: tableId,
+        customer_id: customerId,
+        robot_id: robotId,
+        served_at: servedAt,
+        timestamp,
+        items,
+        itemCount: totalQuantity,
+        totalPrice,
+        totalQuantity
+      };
+    });
+  
+    // console.log(`주문 데이터 처리 완료 - ${processed.length}개 주문`);
+    return processed;
+  }, [ordersDataRef.current.orders, ordersDataRef.current.orderItems, ordersDataRef.current.menuitems]);
+  
+
+  // 최초 접속 시 데이터 로드
+  useEffect(() => {
+    if (!initialLoadDone && connected.orders) {
+      refreshTopic('orders');
+    }
+    
+    // 1분마다 자동 새로고침 (더 긴 간격)
+    const refreshInterval = setInterval(() => {
+      refreshTopic('orders');
+    }, 60000);
+    
+    return () => clearInterval(refreshInterval);
+  }, [refreshTopic, connected.orders, initialLoadDone]);
+
+  // 수동 새로고침 핸들러
+  const handleRefreshData = useCallback(() => {
+    setIsManualLoading(true);
+    refreshTopic('orders');
+  }, [refreshTopic]);
 
   // 주문 상태 업데이트 함수
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      await apiCall(`/api/orders/${orderId}/status`, 'PUT', { status: newStatus });
+      setIsManualLoading(true);
+      // console.log(`주문 상태 업데이트 요청: ID=${orderId}, 상태=${newStatus}`);
       
-      // 상태 업데이트 후 주문 목록 갱신
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId ? { ...order, status: newStatus } : order
-        )
-      );
+      // API 경로를 수정하여 직접 /api/orders 경로 사용 (로깅 목적으로 수정)
+      const response = await apiCall(`/api/orders/${orderId}/status`, 'PUT', { status: newStatus });
+      // console.log('주문 상태 업데이트 응답:', response);
       
-      // 현재 선택된 주문이 있고, 해당 주문의 상태가 변경된 경우 선택된 주문도 업데이트
+      // 선택된 주문도 업데이트
       if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+        setSelectedOrder({...selectedOrder, status: newStatus});
       }
       
+      // 상태 업데이트 후 주문 목록 새로고침
+      refreshTopic('orders');
       return true;
     } catch (err) {
       console.error(`주문 상태 업데이트 중 오류가 발생했습니다:`, err);
+      setIsManualLoading(false);
+      setLocalError(`주문 상태 업데이트 중 오류가 발생했습니다. (${err.message || '알 수 없는 오류'})`);
       return false;
     }
   };
 
   // 주문 상세 정보 보기 함수
-  const handleViewDetails = async (orderId) => {
-    const orderDetails = await fetchOrderDetails(orderId);
+  const handleViewDetails = (orderId) => {
+    const orderDetails = processedOrders.find(order => order.id === orderId);
     if (orderDetails) {
       setSelectedOrder(orderDetails);
       setIsDetailModalOpen(true);
@@ -191,16 +340,27 @@ const OrdersPage = () => {
 
   // 상태 표시 함수
   const getStatusBadge = (status) => {
+    const statusLabels = {
+      PENDING: '대기중',
+      PLACED: '접수됨',
+      PREPARING: '준비중',
+      SERVING: '서빙중',
+      SERVED: '완료',
+      COMPLETED: '완료',
+      CANCELLED: '취소됨'
+    };
+    
     const statusConfig = {
-      PENDING: { label: '대기중', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: <Clock size={14} className="mr-1" /> },
-      PLACED: { label: '접수됨', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: <CheckCircle size={14} className="mr-1" /> },
-      PREPARING: { label: '준비중', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', icon: <Coffee size={14} className="mr-1" /> },
-      DELIVERING: { label: '배달중', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: <Truck size={14} className="mr-1" /> },
-      SERVED: { label: '완료', color: 'bg-green-100 text-green-800 border-green-200', icon: <Check size={14} className="mr-1" /> },
-      CANCELLED: { label: '취소됨', color: 'bg-red-100 text-red-800 border-red-200', icon: <XCircle size={14} className="mr-1" /> },
+      PENDING: { label: statusLabels[status] || '대기중', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: <Clock size={14} className="mr-1" /> },
+      PLACED: { label: statusLabels[status] || '접수됨', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: <CheckCircle size={14} className="mr-1" /> },
+      PREPARING: { label: statusLabels[status] || '준비중', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', icon: <Coffee size={14} className="mr-1" /> },
+      SERVING: { label: statusLabels[status] || '서빙중', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: <Truck size={14} className="mr-1" /> },
+      SERVED: { label: statusLabels[status] || '완료', color: 'bg-green-100 text-green-800 border-green-200', icon: <Check size={14} className="mr-1" /> },
+      COMPLETED: { label: statusLabels[status] || '완료', color: 'bg-green-100 text-green-800 border-green-200', icon: <Check size={14} className="mr-1" /> },
+      CANCELLED: { label: statusLabels[status] || '취소됨', color: 'bg-red-100 text-red-800 border-red-200', icon: <XCircle size={14} className="mr-1" /> },
     };
 
-    const config = statusConfig[status] || { label: status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
+    const config = statusConfig[status] || { label: statusLabels[status] || status, color: 'bg-gray-100 text-gray-800 border-gray-200' };
 
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.color}`}>
@@ -214,67 +374,77 @@ const OrdersPage = () => {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Intl.DateTimeFormat('ko-KR', {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(date);
   };
 
-  // 주문 데이터 처리 - 테이블 번호, 주문 항목 수, 총 가격 계산
-  const processedOrders = orders.map(order => {
-    // 주문 항목 정보 찾기
-    const orderItems = ordersDetailData.orderItems.filter(item => 
-      item['OrderItem.order_id'] === order.id
-    );
+  // 정렬된 주문 리스트 계산
+  const sortedOrders = useMemo(() => {
+    if (!processedOrders || processedOrders.length === 0) return [];
     
-    // 주문 항목의 총 수량과 가격 계산
-    let totalQuantity = 0;
-    let totalPrice = 0;
-    
-    orderItems.forEach(item => {
-      const quantity = item['OrderItem.quantity'] || 0;
-      totalQuantity += quantity;
-      
-      // 메뉴 항목 찾기
-      const menuItem = ordersDetailData.menuitems.find(menu => 
-        menu['MenuItem.id'] === item['OrderItem.menu_item_id']
-      );
-      
-      if (menuItem) {
-        totalPrice += quantity * (menuItem['MenuItem.price'] || 0);
-      }
-    });
-    
-    return {
-      ...order,
-      tableNumber: order.table_id,
-      itemCount: totalQuantity,
-      totalPrice: totalPrice
-    };
-  });
-
-  // 주문 필터링
-  const filteredOrders = processedOrders
-    .filter(order => 
+    const filtered = processedOrders.filter(order => 
       (statusFilter === 'ALL' || order.status === statusFilter) &&
       (searchTerm === '' || 
         order.id.toString().includes(searchTerm) || 
         (order.tableNumber && order.tableNumber.toString().includes(searchTerm)))
-    )
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    );
+    
+    const copy = [...filtered];
+    
+    switch (selectedSort) {
+      case 'STATUS':
+        return copy.sort((a, b) => {
+          // PREPARING 상태 우선
+          if (a.status === 'PREPARING' && b.status !== 'PREPARING') return -1;
+          if (a.status !== 'PREPARING' && b.status === 'PREPARING') return 1;
+          // PLACED 상태 그 다음
+          if (a.status === 'PLACED' && b.status !== 'PLACED') return -1;
+          if (a.status !== 'PLACED' && b.status === 'PLACED') return 1;
+          // 이후 시간순
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        });
+      case 'PRICE':
+        return copy.sort((a, b) => b.totalPrice - a.totalPrice);
+      case 'TABLE':
+        return copy.sort((a, b) => {
+          if (!a.tableNumber) return 1;
+          if (!b.tableNumber) return -1;
+          return a.tableNumber - b.tableNumber;
+        });
+      case 'RECENT':
+      default:
+        return copy.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+  }, [processedOrders, statusFilter, searchTerm, selectedSort]);
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('ko-KR', {
+      style: 'currency',
+      currency: 'KRW',
+      minimumFractionDigits: 0
+    }).format(price);
+  };
 
   return (
     <Layout>
       <div className="container mx-auto p-4 sm:p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-            <ShoppingCart className="mr-2" />
-            주문 관리
-          </h1>
-          <p className="text-gray-600">모든 주문 정보를 확인하고 관리합니다.</p>
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center">
+              <ShoppingCart className="mr-2" />
+              주문 관리
+            </h1>
+            <p className="text-gray-600">모든 주문 정보를 확인하고 관리합니다.</p>
+          </div>
+          <button
+            onClick={handleRefreshData}
+            className="p-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-2"
+            disabled={isLoading}
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+            {isLoading ? "로딩 중" : "새로고침"}
+          </button>
         </div>
 
         {/* 필터 및 검색 */}
@@ -306,12 +476,39 @@ const OrdersPage = () => {
                   <option value="PENDING">대기중</option>
                   <option value="PLACED">접수됨</option>
                   <option value="PREPARING">준비중</option>
-                  <option value="DELIVERING">배달중</option>
                   <option value="SERVED">완료</option>
                   <option value="CANCELLED">취소됨</option>
                 </select>
                 <Filter className="absolute left-3 top-2.5 text-gray-400" size={18} />
                 <ChevronDown className="absolute right-3 top-2.5 text-gray-400" size={18} />
+              </div>
+            </div>
+            
+            <div className="w-full md:w-1/3">
+              <label className="text-sm font-medium text-gray-700 mb-1 block">정렬 순서</label>
+              <div className="relative">
+                <button
+                  className="flex items-center justify-between pl-10 pr-4 py-2 border border-gray-300 rounded-md w-full hover:bg-gray-50"
+                  onClick={() => setShowSortMenu(!showSortMenu)}
+                >
+                  {sortLabels[selectedSort]}
+                  <ChevronDown size={16} className="ml-1" />
+                </button>
+                <DollarSign className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                
+                {showSortMenu && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-md shadow-lg z-20 border border-gray-200">
+                    {Object.entries(sortLabels).map(([key, label]) => (
+                      <button
+                        key={key}
+                        className={`w-full text-left px-4 py-2 text-sm ${selectedSort === key ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-100'}`}
+                        onClick={() => { setSelectedSort(key); setShowSortMenu(false); }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -327,10 +524,10 @@ const OrdersPage = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="bg-red-50 text-red-700 p-4 rounded-md flex items-center">
               <AlertTriangle className="mr-2" size={20} />
-              <span>{error}</span>
+              <span>{error} (웹소켓을 통해 데이터를 불러옵니다)</span>
             </div>
           </div>
-        ) : filteredOrders.length === 0 ? (
+        ) : sortedOrders.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <ShoppingCart className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900">주문 내역이 없습니다</h3>
@@ -370,23 +567,23 @@ const OrdersPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredOrders.map((order) => (
+                  {sortedOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         #{order.id}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.tableNumber ? `테이블 ${order.tableNumber}` : '-'}
+                        {order.table ? `테이블 ${order.table}` : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(order.timestamp)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.itemCount || '-'}
+                        {order.itemCount || 0}개
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {order.totalPrice 
-                          ? `${order.totalPrice.toLocaleString()}원` 
+                          ? formatPrice(order.totalPrice) 
                           : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -443,10 +640,6 @@ const OrdersPage = () => {
                       {selectedOrder.table_id ? `테이블 ${selectedOrder.table_id}` : '없음'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">고객 ID</p>
-                    <p className="text-lg font-medium">#{selectedOrder.customer_id}</p>
-                  </div>
                   {selectedOrder.served_at && (
                     <div>
                       <p className="text-sm text-gray-500 mb-1">서빙 완료 시간</p>
@@ -463,35 +656,43 @@ const OrdersPage = () => {
                 
                 <div className="mb-6">
                   <h3 className="text-lg font-medium border-b pb-2 mb-3">주문 항목</h3>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead>
-                        <tr>
-                          <th className="pb-2 text-left text-sm font-semibold text-gray-500">메뉴 ID</th>
-                          <th className="pb-2 text-left text-sm font-semibold text-gray-500">수량</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {selectedOrder.items.map((item, idx) => {
-                          // 메뉴 항목 정보 찾기
-                          const menuItem = ordersDetailData.menuitems.find(menu => 
-                            menu['MenuItem.id'] === item.menu_item_id
-                          );
-                          
-                          return (
+                  {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead>
+                          <tr>
+                            <th className="pb-2 text-left text-sm font-semibold text-gray-500">메뉴 이름</th>
+                            <th className="pb-2 text-center text-sm font-semibold text-gray-500">수량</th>
+                            <th className="pb-2 text-right text-sm font-semibold text-gray-500">가격</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {selectedOrder.items.map((item, idx) => (
                             <tr key={idx}>
-                              <td className="py-2 text-sm">
-                                {menuItem 
-                                  ? `${menuItem['MenuItem.name']} (${menuItem['MenuItem.price']}원)` 
-                                  : `메뉴 #${item.menu_item_id}`}
-                              </td>
-                              <td className="py-2 text-sm">{item.quantity}개</td>
+                              <td className="py-2 text-sm">{item.name}</td>
+                              <td className="py-2 text-sm text-center">{item.quantity}개</td>
+                              <td className="py-2 text-sm text-right">{formatPrice(item.price * item.quantity)}</td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                          
+                          {/* 총계 행 */}
+                          <tr className="border-t border-gray-300">
+                            <td className="py-2 text-sm font-bold">총계</td>
+                            <td className="py-2 text-sm font-bold text-center">
+                              {selectedOrder.totalQuantity}개
+                            </td>
+                            <td className="py-2 text-sm font-bold text-right">
+                              {formatPrice(selectedOrder.totalPrice)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-4 text-center text-gray-500">
+                      주문 항목 정보가 없습니다.
+                    </div>
+                  )}
                 </div>
                 
                 {/* 상태 업데이트 버튼 */}
@@ -513,14 +714,6 @@ const OrdersPage = () => {
                     >
                       <Coffee size={16} className="mr-1" />
                       준비중
-                    </button>
-                    <button
-                      onClick={() => updateOrderStatus(selectedOrder.id, 'DELIVERING')}
-                      disabled={selectedOrder.status === 'DELIVERING'}
-                      className="px-3 py-2 bg-purple-100 text-purple-800 rounded-md text-sm font-medium hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                    >
-                      <Truck size={16} className="mr-1" />
-                      배달중
                     </button>
                     <button
                       onClick={() => updateOrderStatus(selectedOrder.id, 'SERVED')}

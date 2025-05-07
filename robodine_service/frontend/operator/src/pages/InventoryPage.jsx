@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
+import { useWebSockets } from '../contexts/WebSocketContext';
 
 // 웹소켓 연결 설정
 const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
@@ -61,98 +62,107 @@ const InventoryPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [adminSettings, setAdminSettings] = useState({
+    inventory_threshold: 10 // 기본값
+  });
   const { apiCall } = useAuth();
+  const { data, connected } = useWebSockets();
 
-  const categories = ['음료', '메인 요리', '사이드 메뉴', '디저트', '소스', '기타'];
-  const statusOptions = ['정상', '부족', '없음'];
+  const statusOptions = ['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK'];
 
-  // 재고 데이터 로딩
-  const fetchInventory = useCallback(async () => {
+  // 초기 데이터 및 설정 로딩
+  const fetchInitialData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // 재고 데이터 가져오기
-      const inventoryData = await apiCall('/api/inventory');
-      
       // 메뉴 항목 데이터 가져오기
       const menuItemsData = await apiCall('/api/menu/items');
+      setMenuItems(menuItemsData);
       
       // 메뉴 재료 데이터 가져오기
       const menuIngredientsData = await apiCall('/api/menu/ingredients');
-      
-      // 데이터 설정
-      setInventory(inventoryData);
-      setMenuItems(menuItemsData);
       setMenuIngredients(menuIngredientsData);
+
+      // 관리자 설정 가져오기 (재고 임계값)
+      const settings = await apiCall('/api/settings');
+      setAdminSettings(settings);
       
-      // 데이터 처리 및 가공
-      const processedInventory = inventoryData.map(item => {
-        // 연관된 메뉴 재료 찾기
-        const ingredient = menuIngredientsData.find(ing => ing.id === item.ingredient_id);
-        
-        // 연관된 메뉴 항목 찾기
-        let menuItem = null;
-        if (ingredient && ingredient.menu_item_id) {
-          menuItem = menuItemsData.find(menu => menu.id === ingredient.menu_item_id);
-        }
-        
-        // 카테고리 결정 - 메뉴 항목에 따라 다르게
-        let category = '기타';
-        if (menuItem) {
-          // 예시) 가격에 따라 카테고리 구분 (실제 로직은 다를 수 있음)
-          if (menuItem.price >= 8000) category = '메인 요리';
-          else if (menuItem.price >= 5000) category = '사이드 메뉴';
-          else if (menuItem.price >= 3000) category = '음료';
-          else category = '소스';
-        }
-        
-        return {
-          ...item,
-          ingredient,
-          menuItem,
-          category,
-          // 재고 임계값은 MenuIngredient.quantity_required의 3배로 가정
-          threshold: ingredient ? ingredient.quantity_required * 3 : 10,
-          price: menuItem ? menuItem.price : 0
-        };
-      });
-      
-      setInventory(processedInventory);
+      setIsLoading(false);
     } catch (err) {
-      console.error('Failed to load inventory:', err);
-      setError('재고 정보를 불러올 수 없습니다');
-    } finally {
+      console.error('초기 데이터 로드 실패:', err);
+      setError('데이터를 불러올 수 없습니다');
       setIsLoading(false);
     }
   }, [apiCall]);
 
   // 초기 데이터 로딩
   useEffect(() => {
-    fetchInventory();
-  }, [fetchInventory]);
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  // 웹소켓 데이터 처리
+  useEffect(() => {
+    console.log("웹소켓 데이터 수신:", data.inventory);
+    
+    if (data.inventory) {
+      setIsLoading(false);
+      
+      // 데이터 형식에 따라 처리
+      let inventoryItems = [];
+      if (Array.isArray(data.inventory)) {
+        inventoryItems = data.inventory;
+      } else if (data.inventory.inventory && Array.isArray(data.inventory.inventory)) {
+        inventoryItems = data.inventory.inventory;
+        
+        // Admin 설정이 있으면 저장
+        if (data.inventory.admin_settings) {
+          setAdminSettings(data.inventory.admin_settings);
+        }
+      }
+      
+      // 인벤토리 데이터 처리
+      if (inventoryItems.length > 0) {
+        const processedInventory = inventoryItems.map(item => {
+          // 연관된 메뉴 재료 찾기
+          const ingredient = menuIngredients.find(ing => ing.id === item.ingredient_id);
+          
+          // 연관된 메뉴 항목 찾기
+          let menuItem = null;
+          if (ingredient && ingredient.menu_item_id) {
+            menuItem = menuItems.find(menu => menu.id === ingredient.menu_item_id);
+          }
+          
+          return {
+            ...item,
+            ingredient,
+            menuItem,
+            // 재고 임계값은 max_count 또는 관리자 설정에서 가져옴
+            threshold: item.max_count || adminSettings.inventory_threshold || 10,
+            price: menuItem ? menuItem.price : 0
+          };
+        });
+        
+        setInventory(processedInventory);
+      }
+    }
+  }, [data.inventory, menuIngredients, menuItems, adminSettings]);
 
   // 필터링 및 정렬 적용
   useEffect(() => {
-    // 검색어와 카테고리 필터 적용
+    // 검색어 필터 적용
     let result = [...inventory];
     
     if (searchTerm) {
       result = result.filter(item => 
         (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()))
+        (item.ingredient && item.ingredient.name && item.ingredient.name.toLowerCase().includes(searchTerm.toLowerCase()))
       );
-    }
-    
-    if (categoryFilter !== 'all') {
-      result = result.filter(item => item.category === categoryFilter);
     }
     
     // 정렬 적용
@@ -169,7 +179,7 @@ const InventoryPage = () => {
     }
     
     setFilteredInventory(result);
-  }, [inventory, searchTerm, categoryFilter, sortConfig]);
+  }, [inventory, searchTerm, sortConfig]);
 
   // 정렬 처리
   const handleSort = (key) => {
@@ -194,8 +204,8 @@ const InventoryPage = () => {
       ingredient_id: 0,
       name: '',
       count: 0,
-      status: 'NORMAL',
-      category: '기타'
+      max_count: adminSettings.inventory_threshold || 10,
+      status: 'IN_STOCK'
     });
     setIsModalOpen(true);
   };
@@ -207,8 +217,8 @@ const InventoryPage = () => {
       ingredient_id: item.ingredient_id,
       name: item.name,
       count: item.count,
-      status: item.status,
-      category: item.category
+      max_count: item.max_count || item.threshold,
+      status: item.status
     });
     setIsModalOpen(true);
   };
@@ -225,13 +235,11 @@ const InventoryPage = () => {
     
     try {
       await apiCall(`/api/inventory/${itemToDelete.id}`, 'DELETE');
-      
-      // 성공적으로 삭제 후 목록 갱신
-      setInventory(inventory.filter(item => item.id !== itemToDelete.id));
       setIsDeleteModalOpen(false);
       setItemToDelete(null);
+      // 삭제 후 웹소켓으로 자동 갱신됨
     } catch (error) {
-      console.error(`Failed to delete inventory item ${itemToDelete.id}:`, error);
+      console.error(`아이템 삭제 실패 (ID: ${itemToDelete.id}):`, error);
       setError('아이템 삭제 중 오류가 발생했습니다');
     }
   };
@@ -239,40 +247,28 @@ const InventoryPage = () => {
   // 재고 항목 저장 (추가/수정)
   const handleSaveItem = async () => {
     try {
+      const payload = {
+        ingredient_id: currentItem.ingredient_id,
+        name: currentItem.name,
+        count: parseInt(currentItem.count),
+        max_count: parseInt(currentItem.max_count),
+        status: currentItem.status
+      };
+      
       if (currentItem.id) {
         // 기존 항목 수정
-        await apiCall(`/api/inventory/${currentItem.id}`, 'PUT', {
-          ingredient_id: currentItem.ingredient_id,
-          name: currentItem.name,
-          count: currentItem.count,
-          status: currentItem.status
-        });
-        
-        // 목록 갱신
-        setInventory(inventory.map(item => 
-          item.id === currentItem.id ? { ...item, ...currentItem } : item
-        ));
+        await apiCall(`/api/inventory/${currentItem.id}`, 'PUT', payload);
       } else {
         // 새 항목 추가
-        const response = await apiCall('/api/inventory', 'POST', {
-          ingredient_id: parseInt(currentItem.ingredient_id),
-          name: currentItem.name,
-          count: parseInt(currentItem.count),
-          status: currentItem.status
-        });
-        
-        // 응답에서 ID 가져오기
-        const newItemId = response.id;
-        
-        // 목록에 새 항목 추가
-        setInventory([...inventory, { ...currentItem, id: newItemId }]);
+        await apiCall('/api/inventory', 'POST', payload);
       }
       
       // 모달 닫기
       setIsModalOpen(false);
       setCurrentItem(null);
+      // 저장 후 웹소켓으로 자동 갱신됨
     } catch (error) {
-      console.error('Failed to save inventory item:', error);
+      console.error('아이템 저장 실패:', error);
       setError('아이템 저장 중 오류가 발생했습니다');
     }
   };
@@ -280,16 +276,16 @@ const InventoryPage = () => {
   // CSV 내보내기
   const exportToCSV = () => {
     // CSV 헤더 생성
-    const headers = ['ID', '이름', '카테고리', '재고량', '상태', '단가'];
+    const headers = ['ID', '재료명', '이름', '재고량', '최대재고량', '상태'];
     
     // 데이터 행 생성
     const rows = filteredInventory.map(item => [
       item.id,
+      item.ingredient?.name || '-',
       item.name,
-      item.category,
       item.count,
-      item.status,
-      item.price ? `${item.price}원` : '-'
+      item.max_count || item.threshold,
+      item.status
     ]);
     
     // CSV 문자열 생성
@@ -321,6 +317,7 @@ const InventoryPage = () => {
           <h1 className="text-2xl font-bold text-gray-800 flex items-center">
             <Database className="text-blue-600 mr-2" size={28} />
             재고 관리
+            {connected.inventory && <span className="ml-2 text-xs bg-green-100 text-green-800 py-1 px-2 rounded-full">실시간</span>}
           </h1>
           
           <div className="flex space-x-2">
@@ -366,24 +363,8 @@ const InventoryPage = () => {
             
             {/* 필터 */}
             <div className="flex space-x-2">
-              <div className="relative">
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 appearance-none"
-                >
-                  <option value="all">모든 카테고리</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-                  <Filter size={18} className="text-gray-400" />
-                </div>
-              </div>
-              
               <button 
-                onClick={fetchInventory}
+                onClick={fetchInitialData}
                 className="p-2 border border-gray-300 rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50"
                 title="새로고침"
               >
@@ -401,7 +382,7 @@ const InventoryPage = () => {
               <Database className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">재고 없음</h3>
               <p className="mt-1 text-sm text-gray-500">
-                {searchTerm || categoryFilter !== 'all' 
+                {searchTerm 
                   ? '검색 조건에 맞는 재고 항목이 없습니다.' 
                   : '등록된 재고 항목이 없습니다.'}
               </p>
@@ -432,18 +413,7 @@ const InventoryPage = () => {
                       )}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      설명
-                    </th>
-                    <th
-                      onClick={() => handleSort('category')}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      카테고리
-                      {sortConfig.key === 'category' && (
-                        <span className="ml-1">
-                          {sortConfig.direction === 'ascending' ? '↑' : '↓'}
-                        </span>
-                      )}
+                      재료명
                     </th>
                     <th
                       onClick={() => handleSort('count')}
@@ -456,16 +426,8 @@ const InventoryPage = () => {
                         </span>
                       )}
                     </th>
-                    <th
-                      onClick={() => handleSort('price')}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      가격
-                      {sortConfig.key === 'price' && (
-                        <span className="ml-1">
-                          {sortConfig.direction === 'ascending' ? '↑' : '↓'}
-                        </span>
-                      )}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      상태
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       작업
@@ -481,16 +443,15 @@ const InventoryPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {item.ingredient?.name || '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.category}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStockStatusClass(item.count, item.threshold)}`}>
-                          {item.count} / {item.threshold}
+                          {item.count} / {item.max_count || item.threshold}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.price ? `${item.price.toLocaleString()}원` : '-'}
+                        {item.status === 'IN_STOCK' && '정상'}
+                        {item.status === 'LOW_STOCK' && '부족'}
+                        {item.status === 'OUT_OF_STOCK' && '없음'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex space-x-2 justify-end">
@@ -566,22 +527,7 @@ const InventoryPage = () => {
               
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  카테고리
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  value={currentItem.category}
-                  onChange={(e) => setCurrentItem({...currentItem, category: e.target.value})}
-                >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  재고량
+                  현재 재고량
                 </label>
                 <input
                   type="number"
@@ -594,6 +540,19 @@ const InventoryPage = () => {
               
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  최대 재고량
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  value={currentItem.max_count}
+                  onChange={(e) => setCurrentItem({...currentItem, max_count: parseInt(e.target.value)})}
+                />
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   상태
                 </label>
                 <select
@@ -601,8 +560,8 @@ const InventoryPage = () => {
                   value={currentItem.status}
                   onChange={(e) => setCurrentItem({...currentItem, status: e.target.value})}
                 >
-                  <option value="NORMAL">정상</option>
-                  <option value="LOW">부족</option>
+                  <option value="IN_STOCK">정상</option>
+                  <option value="LOW_STOCK">부족</option>
                   <option value="OUT_OF_STOCK">없음</option>
                 </select>
               </div>

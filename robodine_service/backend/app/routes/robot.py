@@ -112,6 +112,51 @@ def get_robot(robot_id: int, db: Session = Depends(get_db)):
         timestamp=robot.timestamp
     )
 
+@router.put("/{robot_id}", response_model=RobotResponse)
+def update_robot(robot_id: int, robot_data: RobotRegisterRequest, db: Session = Depends(get_db)):
+    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
+    
+    if not robot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Robot with ID {robot_id} not found"
+        )
+    
+    # Update robot details
+    robot.type = robot_data.robot_type
+    robot.mac_address = robot_data.mac_address
+    robot.ip_address = robot_data.ip_address
+    robot.timestamp = datetime.utcnow()
+    
+    db.add(robot)
+    db.commit()
+    
+    return RobotResponse(
+        robot_id=int(robot.robot_id),
+        robot_type=robot.type,
+        mac_address=robot.mac_address,
+        ip_address=robot.ip_address,
+        timestamp=robot.timestamp
+    )
+
+@router.delete("/{robot_id}", response_model=dict)
+def delete_robot(robot_id: int, db: Session = Depends(get_db)):
+    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
+    
+    if not robot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Robot with ID {robot_id} not found"
+        )
+    
+    db.delete(robot)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "로봇 정보가 성공적으로 삭제되었습니다."
+    }
+
 @router.post("/commands/{robot_id}/command", response_model=CommandResponse)
 def send_command(robot_id: int, command_data: CommandRequest, db: Session = Depends(get_db)):
     # Check if robot exists
@@ -184,3 +229,25 @@ def get_commands(robot_id: int, db: Session = Depends(get_db)):
             status=cmd.status
         ) for cmd in commands
     ] 
+
+@router.get("/commands", response_model=List[CommandListResponse])
+def get_all_commands(db: Session = Depends(get_db)):
+    # Get all commands
+    commands = (
+        db.query(RobotCommand)
+        .order_by(RobotCommand.id.desc())
+        .all()
+    )
+    if not commands:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No commands found"
+        )
+    
+    return [
+        CommandListResponse(
+            id=cmd.id,
+            command=cmd.command,
+            status=cmd.status
+        ) for cmd in commands
+    ]

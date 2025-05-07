@@ -19,7 +19,7 @@ WS_PING_INTERVAL = int(os.environ.get("WS_PING_INTERVAL", "30"))  # 초 단위
 # 웹소켓 메시지 프로토콜 정의
 class WSMessage(BaseModel):
     type: Literal["update", "error", "ping", "pong", "shutdown"]
-    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs"]
+    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams"]
     data: Any
 
 # 연결 관리자 클래스
@@ -27,12 +27,15 @@ class ConnectionManager:
     def __init__(self):
         # 토픽별 활성 연결 저장
         self.active_connections: Dict[str, List[WebSocket]] = {
-            "status": [],  # 일반 상태 메시지용 연결
-            "robots": [],  # 로봇 상태 업데이트용 연결
-            "tables": [],  # 테이블 상태 업데이트용 연결
-            "events": [],  # 이벤트 업데이트용 연결
-            "orders": [],  # 주문 업데이트용 연결
-            "systemlogs": [], # 시스템 로그 업데이트용 연결
+            "robots": [],
+            "tables": [],
+            "events": [],
+            "orders": [],
+            "status": [],
+            "systemlogs": [],
+            "customers": [],
+            "inventory": [],
+            "video_streams": []
         }
         self.shutting_down = False
         self.max_connections_per_topic = WS_MAX_CONNECTIONS  # 환경 변수에서 가져온 값
@@ -112,7 +115,7 @@ class ConnectionManager:
     
     async def broadcast_update(self, 
                              data: Any, 
-                             topic: Literal["robots", "tables", "events", "orders", "systemlogs"]):
+                             topic: Literal["robots", "tables", "events", "orders", "systemlogs", "customers", "inventory"]):
         """데이터 객체를 JSON으로 직렬화하여 특정 토픽에 브로드캐스팅"""
         message = {
             "type": "update",
@@ -157,9 +160,10 @@ ping_task = None
 async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
     """단일 통합 웹소켓 엔드포인트 - 토픽은 URL 경로 파라미터로 지정"""
     # 지원되는 토픽 확인
-    if topic not in manager.active_connections:
-        logger.warning(f"Connection attempt to unsupported topic: {topic}")
-        await websocket.close(code=1003, reason=f"Unsupported topic: {topic}")
+    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams"]
+    if topic not in valid_topics:
+        logger.warning(f"Client attempted to connect to invalid topic: {topic}")
+        await websocket.close(code=1003)  # 1003 = Unsupported data
         return
         
     # 연결 처리
@@ -175,6 +179,13 @@ async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
                 await broadcast_entity_update("robot", None)
             except Exception as e:
                 logger.error(f"Initial robot broadcast failed: {e}")
+        
+        # 초기 브로드캐스트: 재고 연결 시 전체 재고 즉시 전송
+        elif topic == "inventory":
+            try:
+                await broadcast_entity_update("inventory", None)
+            except Exception as e:
+                logger.error(f"Initial inventory broadcast failed: {e}")
 
         logger.info(f"{topic.capitalize()} connection established from {websocket.client.host}")
         
@@ -252,6 +263,10 @@ async def broadcast_events_update(events_data):
 async def broadcast_orders_update(orders_data):
     """주문 데이터 업데이트를 브로드캐스팅"""
     await manager.broadcast_update(orders_data, "orders")
+
+async def broadcast_customers_update(customers_data):
+    """고객 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(customers_data, "customers")
 
 async def broadcast_systemlogs_update(logs_data):
     """시스템 로그 데이터 업데이트를 브로드캐스팅"""
