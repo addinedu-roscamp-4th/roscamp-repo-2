@@ -5,30 +5,24 @@ from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
 from langchain_teddynote.models import MultiModal
 from dotenv import load_dotenv
+from AlbaGPT_main import alba_task_type_list, dynamic_object_list
 
 import json
 import csv
 import cv2
 import os
-import sys
 import numpy as np
 import uuid
 import time
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from AlbaGPT_communication import AlbaGPT_UDP
-
 load_dotenv()
-
-alba_work_type_list = ["CLEANING", "SERVING", "MAINTENANCE", "EMERGENCY", "IDLE"]
-alba_task_type_list = alba_work_type_list + ["GREETINGS", "CAMERA_ON"]
 
 def alba_task_discriminator(user_query, alba_task_type_list=alba_task_type_list):
     """
     알바봇에게 입력된 프롬프트가 어떤 type의 명령인지 구분해주는 함수입니다.
     
     Returns : 
-        CLEANING, SERVING, MAINTENANCE, EMERGENCY, GREETINGS, CAMERA_ON, none 중 하나
+        MAINTENANCE, GREETINGS, CAMERA_ON, none 중 하나
     """
     task_example_csv_path = './contents/example/task_example.csv' # 유저 프롬프트에 따른 분류된 task를 정리한 csv 파일
     fields = []
@@ -213,23 +207,22 @@ def generate_alba_greetings_response(user_query, chat_history, memory):
     csvfile.close()
     return alba_greetings_response
 
-def generate_alba_work_response(user_query, chat_history, memory, work):
+def generate_alba_maintenance_response(user_query, chat_history, memory):
     """
-    alba_task_discriminator 함수로 구분된 task가 {alba_work_type_list}의 원소 중 하나인 경우 user_query에 대해 대답을 생성하여 json으로 반환해주는 함수입니다.
+    alba_task_discriminator 함수로 구분된 task가 'MAINTENANCE'인 경우 user_query에 대해 대답을 생성하여 json으로 반환해주는 함수입니다.
 
     Returns : JSON outputs
         {{
-            "prompt": {user_query},
-            "pinky_id": {인식된 핑키 id},
-            "pinky_response": {},
-            "table_id": {인식된 테이블 id}
+            "pinky_id": {pinky_id},
+            "pinky_task": MAINTENANCE
+            "pinky_response": {alba_maintenance_response},
         }}
     """
-    work_example_csv_path = './contents/example/work_example.csv' # {alba_work_type} 상황에 대한 응답을 정리한 csv 파일
+    maintenance_example_csv_path = './contents/example/maintenance_example.csv' # maintenance 상황에 대한 응답을 정리한 csv 파일
     fields = []
-    work_example_list = []
+    maintenance_example_list = []
 
-    with open(work_example_csv_path, 'r') as csvfile:
+    with open(maintenance_example_csv_path, 'r') as csvfile:
         # creating a csv reader object
         csvreader = csv.reader(csvfile)
         
@@ -238,52 +231,50 @@ def generate_alba_work_response(user_query, chat_history, memory, work):
     
         # extracting each data row one by one
         for row in csvreader:
-            work_example_list.append({
+            maintenance_example_list.append({
             "prompt": row[0],
             "pinky_id": row[1],
-            "pinky_response": row[2],
-            "table_id": row[3]
+            "pinky_task": row[2],
+            "pinky_response": row[3],
         })
             
-    work_example = "\n".join(
-        f'{{"prompt": "{work["prompt"]}", "pinky_id": "{work["pinky_id"]}", "pinky_response": "{work["pinky_response"]}", "table_id": "{work["table_id"]}"}}'
-        for work in work_example_list
+    maintenance_example = "\n".join(
+        f'{{"prompt": "{maintenance["prompt"]}", "pinky_id": "{maintenance["pinky_id"]}", "pinky_task": "{maintenance["pinky_task"]}", "pinky_response": "{maintenance["pinky_response"]}"}}'
+        for maintenance in maintenance_example_list
     )
 
-    alba_work_prompt = """
+    alba_maintenance_prompt = """
     당신은 레스토랑에서 업무를 하는 '핑키'라는 이름을 가진 모바일 로봇입니다
     지금까지 당신과 레스토랑 오너가 나눈 대화는 다음과 같습니다 : {chat_history}
 
-    당신은 레스토랑 오너의 {user_query}에 대해 {chat_history}와 연관이 있다면 참고하여 {work}라는 업무를 수행하는 것입니다.
+    당신은 레스토랑 오너의 {user_query}에 대해 {chat_history}와 연관이 있다면 참고하여 "MAINTENANCE"라는 업무를 수행하는 것입니다.
     당신은 {user_query}에 대해서 1~3줄 이내로 짧고 간결하게 답변하여야 합니다.
 
     출력 예시:
-    {work_example}
+    {maintenance_example}
 
     아래의 [조건]에 맞게 [탬플릿] 형식으로 JSON 답변을 생성해주세요:
 
     [조건]
     1. pinky_id는 "X번 핑키!"에서의 X 입니다. 이때 X가 없으면 pinky_id는 비워두세요.
-    2. pinky_task는 무조건 string형 {work} 입니다.
+    2. pinky_task는 무조건 string형 "MAINTENANCE" 입니다.
     3. pinky_response는 {user_query}에 대한 string형 답변입니다.
-    4. table_id는 "X번 테이블"에서의 X 입니다. 반드시 X 이외의 다른 문장이 오면 안됩니다. 이때 X가 없으면 table_id는 비워두세요.
-    5. 출력은 반드시 JSON 형식의 텍스트만 반환해야 합니다.
-    6. 절대 마크다운 형식(예: ```json, ``` 또는 ''' 등)을 사용하지 마세요.
-    7. JSON 객체만 출력하세요. 문자열 앞뒤 공백 외에는 아무것도 포함하지 마세요.
-    8. 위의 조건 이외에 다른 정수, 단어, 문장은 생성하지 않습니다.
+    4. 출력은 반드시 JSON 형식의 텍스트만 반환해야 합니다.
+    5. 절대 마크다운 형식(예: ```json, ``` 또는 ''' 등)을 사용하지 마세요.
+    6. JSON 객체만 출력하세요. 문자열 앞뒤 공백 외에는 아무것도 포함하지 마세요.
+    7. 위의 조건 이외에 다른 정수, 단어, 문장은 생성하지 않습니다.
 
     [탬플릿] : 반드시 큰따옴표로 감싸서 문자열 형태로 출력해야 합니다. 반드시 문자열 이외의 형식은 출력하지 않습니다. '''json 같은 마크다운은 절대 포함하면 안됩니다.
     {{
         "pinky_id": "",
-        "pinky_task": "",
+        "pinky_task": "MAINTENANCE",
         "pinky_response": "",
-        "table_id": ""
     }}
     """
 
-    alba_work_template = PromptTemplate(
-        template=alba_work_prompt,
-        input_variables=["user_query", "chat_history", "work_example", "work"]
+    alba_maintenance_template = PromptTemplate(
+        template=alba_maintenance_prompt,
+        input_variables=["user_query", "chat_history", "maintenance_example"]
     )
 
     # 객체 생성
@@ -295,27 +286,26 @@ def generate_alba_work_response(user_query, chat_history, memory, work):
 
     chain = LLMChain(
         llm=llm,
-        prompt=alba_work_template,
+        prompt=alba_maintenance_template,
         memory=memory,
         verbose=True
     )
 
-    alba_work_response = chain.invoke({
+    alba_maintenance_response = chain.invoke({
         "user_query": user_query,
         "chat_history": chat_history,
-        "work" : work,
-        "work_example" : work_example
+        "maintenance_example" : maintenance_example
     })['text']
 
 
     try:
-        alba_work_response = json.loads(alba_work_response)
+        alba_maintenance_response = json.loads(alba_maintenance_response)
     except json.JSONDecodeError:
-        raise ValueError(f"❌ Invalid JSON format: {alba_work_response}")
+        raise ValueError(f"❌ Invalid JSON format: {alba_maintenance_response}")
 
-    return alba_work_response 
+    return alba_maintenance_response 
 
-def generate_alba_camera_on_response(chat_history, shared_dict, shared_data):
+def generate_alba_camera_on_response(chat_history, shared_dict):
     """
     alba_task_discriminator 함수로 구분된 task가 'CAMERA_ON'인 경우 해당 알바 봇으로부터 수신되는 영상의 이미지 프레임을 토대로 상황을 해석하여 json으로 반환해주는 함수입니다.
 
@@ -333,6 +323,7 @@ def generate_alba_camera_on_response(chat_history, shared_dict, shared_data):
 
     recieved_image_path = os.path.join(recieved_image_dir, str(uuid.uuid4().hex) + '_' + time.strftime('%Y-%m-%d %H-%M-%S') + '.jpg')
     detected_objects = shared_dict["detected_object"]
+    latest_frame = shared_dict["latest_frame"]
 
     detected_object_list = []
 
@@ -340,9 +331,9 @@ def generate_alba_camera_on_response(chat_history, shared_dict, shared_data):
         detected = detected_object.categories[0].category_name
         detected_object_list.append(detected)
 
-    print(discriminate_obstacle(detected_object_list, shared_data))
+    print(discriminate_obstacle(detected_object_list))
 
-    np_data = np.frombuffer(shared_data.detected_frame, dtype=np.uint8)
+    np_data = np.frombuffer(latest_frame, dtype=np.uint8)
     decoded_detected_image = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
 
     if decoded_detected_image is None:
@@ -353,7 +344,7 @@ def generate_alba_camera_on_response(chat_history, shared_dict, shared_data):
 
     object_info = ', '.join(detected_object_list)
 
-    obstacle_example_csv_path = './contents/example/obstacle_example.csv' # {alba_work_type} 상황에 대한 응답을 정리한 csv 파일
+    obstacle_example_csv_path = './contents/example/obstacle_example.csv' # CAMREA ON 상황에 대한 응답을 정리한 csv 파일
     fields = []
     obstacle_response_example_list = []
 
@@ -433,7 +424,7 @@ def generate_alba_camera_on_response(chat_history, shared_dict, shared_data):
 
     return alba_camera_on_response
 
-def discriminate_obstacle(detected_object_list, shared_data) :
+def discriminate_obstacle(detected_object_list) :
     """
     검출된 장애물이 동적 장애물인지, 정적 장애물인지 판별하여 json으로 반환해주는 함수입니다.
 
@@ -442,8 +433,6 @@ def discriminate_obstacle(detected_object_list, shared_data) :
             "type": "dynamic / static"
         }}
     """
-    
-    dynamic_object_list = shared_data.dynamic_object_list
 
     if not detected_object_list:
         return {"type": ""}  # 아무것도 없으면 빈 문자열
@@ -456,7 +445,7 @@ def discriminate_obstacle(detected_object_list, shared_data) :
 
 def save_alba_response(task, alba_response) :
     """
-    AlbaGPT가 내놓은 json형 응답을 response 디렉토리에 텍스트 파일로 저장하는 함수입니다. 
+    AlbaGPT가 내놓은 json형 응답을 response 디렉토리에 json 파일로 저장하는 함수입니다. 
     """
 
     alba_response_dir = './contents/response'
@@ -485,15 +474,12 @@ def save_alba_response(task, alba_response) :
         json_writer.close()
     
     else :
-        for work in alba_work_type_list :
-            if task == work :
-                work_file_path = os.path.join(alba_response_dir, task + '_response.json')
+        maintenance_file_path = os.path.join(alba_response_dir, 'MAINTENANCE' + '_response.json')
 
-                with open(work_file_path, 'a', encoding="UTF-8") as json_writer:
-                    json.dump(alba_response, json_writer, indent=4, ensure_ascii=False)
-                    json_writer.write('\n\n')
-                    print(f"⭕️ Alba response successfully saved to {work_file_path}")
-                
-                json_writer.close()        
-    
+        with open(maintenance_file_path, 'a', encoding="UTF-8") as json_writer:
+            json.dump(alba_response, json_writer, indent=4, ensure_ascii=False)
+            json_writer.write('\n\n')
+            print(f"⭕️ Alba response successfully saved to {maintenance_file_path}")
+        
+        json_writer.close()        
     return

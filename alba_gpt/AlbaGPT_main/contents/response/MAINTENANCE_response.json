@@ -1,49 +1,6 @@
 {
     "pinky_id": "3",
     "pinky_task": "MAINTENANCE",
-    "pinky_response": "충전이 필요하다는 신호를 받았어요. 이동합니다! 🔌",
-    "table_id": ""
-}
-
-{
-    "pinky_id": "3",
-    "pinky_task": "MAINTENANCE",
-    "pinky_response": "베터리가 부족합니다. 충전 스테이션으로 이동하겠습니다 🔌",
-    "table_id": ""
-}
-
-{
-    "pinky_id": "3",
-    "pinky_task": "MAINTENANCE",
-    "pinky_response": "충전이 필요하다는 신호를 받았어요. 이동합니다! 🚧",
-    "table_id": ""
-}
-
-{
-    "pinky_id": "3",
-    "pinky_task": "MAINTENANCE",
-    "pinky_response": "충전이 필요하다는 신호를 받았어요. 이동합니다! 🚧",
-    "table_id": ""
-}
-
-{
-    "pinky_id": "3",
-    "pinky_task": "MAINTENANCE",
-    "pinky_response": "충전이 필요하다는 신호를 받았어요. 이동합니다! 🛠️",
-    "table_id": ""
-}
-
-{
-    "pinky_id": "3",
-    "pinky_task": "MAINTENANCE",
-    "pinky_response": "충전이 필요하다는 신호를 받았어요. 이동합니다! 🔌",
-    "table_id": ""
-}
-
-{
-    "pinky_id": "3",
-    "pinky_task": "MAINTENANCE",
-    "pinky_response": "베터리가 부족합니다. 충전 스테이션으로 이동하겠습니다 ⚡",
-    "table_id": ""
+    "pinky_response": "네! 충전 스테이션으로 이동하겠습니다 🔌"
 }
 
