@@ -1,314 +1,365 @@
-# RoboDine 운영자 대시보드
+# 🖥️ RoboDine 운영자 대시보드
 
-RoboDine 운영자 대시보드는 레스토랑 로봇 관리 시스템의 관리자용 웹 인터페이스입니다. 이 대시보드를 통해 로봇 상태 모니터링, 주문 관리, 시스템 이벤트 추적 등을 할 수 있습니다.
+## 📌 개요
 
-## 목차
+RoboDine 운영자 대시보드는 로봇 레스토랑의 전체 운영을 위한 중앙 관제 시스템입니다. 로봇 상태 모니터링, 주문 관리, 매장 관리, 재고 관리 등 레스토랑 운영에 필요한 모든 기능을 통합된 웹 인터페이스로 제공합니다.
 
-- [설치 및 설정](#설치-및-설정)
-- [실행 방법](#실행-방법)
-- [폴더 구조](#폴더-구조)
-- [페이지 구성](#페이지-구성)
-- [데이터 흐름](#데이터-흐름)
-- [컴포넌트 수정 가이드](#컴포넌트-수정-가이드)
-- [API 엔드포인트](#api-엔드포인트)
+![대시보드 미리보기](/docs/images/operator_dashboard.png)
 
-## 설치 및 설정
+## 🚀 주요 기능
 
-### 요구 사항
+- **실시간 로봇 상태 모니터링**: 각 로봇의 위치, 배터리 상태, 동작 상태 관제
+- **주문 관리 시스템**: 주문 접수, 상태 변경 및 이력 조회
+- **매장 맵**: 테이블과 로봇의 실시간 위치 시각화
+- **이벤트 모니터링**: 시스템 이벤트 실시간 추적 및 알림
+- **재고 관리**: 실시간 재고 현황 및 자동 발주 설정
+- **비디오 스트리밍**: 녹화된 로봇 카메라 및 매장 CCTV 모니터링
+- **분석 대시보드**: 매출, 고객 데이터 분석 및 시각화
+- **설정 및 시스템 관리**: 시스템 파라미터 및 사용자 권한 관리
 
-- Node.js (v14+)
-- npm 또는 yarn
+## 💡 기술적 특징
 
-### 설치 과정
+- **WebSocket 기반 실시간 업데이트**: 백엔드 이벤트 즉시 반영
+- **반응형 레이아웃**: 데스크톱부터 태블릿까지 다양한 화면 크기 지원
+- **컴포넌트 기반 설계**: 재사용 가능한 React 컴포넌트로 구성
+- **토큰 기반 인증**: JWT를 활용한 안전한 사용자 인증
+- **상태 관리 최적화**: React Context API를 활용한 상태 관리
+- **차트 및 데이터 시각화**: 직관적인 데이터 시각화 도구 활용
+- **보호된 라우팅**: 인증된 사용자만 접근 가능한 보안 구조
 
-1. 저장소 클론하기:
-```bash
-git clone [repository-url]
-cd roscamp-repo-2/robodine_service/frontend/operator
-```
+## 🛠️ 기술 스택
 
-2. 의존성 설치:
-```bash
-npm install
-# 또는
-yarn install
-```
+- **프론트엔드**: React.js, Tailwind CSS
+- **차트 및 데이터 시각화**: Chart.js, D3.js
+- **지도 및 위치 시각화**: react-map-gl
+- **실시간 통신**: WebSocket
+- **HTTP 클라이언트**: Axios
+- **인증**: JWT
+- **라우팅**: React Router v6
 
-## 실행 방법
+## 📊 애플리케이션 구조 및 라우팅
 
-### 개발 환경
+대시보드는 다음과 같은 페이지 구조로 구성되어 있습니다:
 
-개발 모드로 애플리케이션을 실행하려면:
+| 경로 | 페이지 컴포넌트 | 설명 |
+|------|--------------|------|
+| `/` | `DashboardPage` | 메인 대시보드 (종합 상황판) |
+| `/login` | `LoginPage` | 로그인 화면 (비인증 접근 가능) |
+| `/orders` | `OrdersPage` | 주문 관리 및 추적 |
+| `/customers` | `CustomerPage` | 고객 및 테이블 관리 |
+| `/stats` | `StatsPage` | 통계 및 데이터 분석 |
+| `/system` | `SystemPage` | 시스템 이벤트 및 로그 |
+| `/settings` | `SettingsPage` | 시스템 설정 관리 |
+| `/robots` | `RobotAdminPage` | 로봇 관리 및 제어 |
+| `/video-stream` | `VideoStreamPage` | 비디오 스트리밍 관리 |
+| `/inventory` | `InventoryPage` | 재고 관리 시스템 |
 
-```bash
-npm start
-# 또는
-yarn start
-```
+모든 경로(로그인 페이지 제외)는 `ProtectedRoute` 컴포넌트로 보호되어 인증된 사용자만 접근 가능합니다.
 
-개발 서버가 시작되며 기본적으로 `http://localhost:3000`에서 접근할 수 있습니다.
+## 📊 주요 페이지 기능
 
-### 프로덕션 빌드
+### 1. 메인 대시보드 (DashboardPage)
 
-프로덕션용 빌드를 생성하려면:
+- **로봇 상태 패널**: 모든 로봇의 실시간 상태 표시
+- **매장 맵**: 테이블과 로봇의 실시간 위치 시각화
+- **최근 주문**: 최신 주문 내역 및 상태
+- **시스템 상태**: 주요 시스템 구성 요소 상태 표시
+- **이벤트 타임라인**: 중요 이벤트 실시간 표시
 
-```bash
-npm run build
-# 또는
-yarn build
-```
+### 2. 로봇 관리 (RobotAdminPage)
 
-빌드 후, 생성된 정적 파일은 `build` 디렉토리에 저장됩니다. 이 파일들을 원하는 웹 서버에 배포할 수 있습니다.
+- **로봇 목록**: 모든 로봇의 상세 정보 및 상태
+- **로봇 제어**: 원격 명령 전송 및 설정 변경
+- **작업 이력**: 로봇별 작업 및 이동 이력
+- **유지보수**: 로봇 정비 일정 및 이력 관리
 
-## 폴더 구조
+### 3. 주문 관리 (OrdersPage)
+
+- **주문 대시보드**: 현재 활성화된 모든 주문 관리
+- **주문 상태 변경**: 주문 상태 업데이트 및 처리
+- **주문 이력**: 과거 주문 내역 및 검색
+- **주문 상세 정보**: 각 주문의 상세 내용 및 메뉴 확인
+
+### 4. 고객 및 테이블 관리 (CustomerPage)
+
+- **테이블 상태**: 현재 테이블 사용 상황 모니터링
+- **고객 관리**: 현재 매장 내 고객 정보 관리
+- **테이블 할당**: 고객 그룹에 테이블 할당 기능
+- **대기 관리**: 대기 고객 목록 및 알림
+
+### 5. 재고 관리 (InventoryPage)
+
+- **재고 현황**: 실시간 재고 수준 모니터링
+- **부족 재고 알림**: 임계치 이하 재고 표시
+- **발주 관리**: 자동 및 수동 발주 시스템
+- **사용량 추적**: 재료별 사용량 분석
+
+### 6. 비디오 스트리밍 (VideoStreamPage)
+
+- **실시간 모니터링**: 로봇 카메라 및 매장 CCTV 영상
+- **녹화 관리**: 녹화 영상 검색 및 재생
+- **이벤트 연동**: 특정 이벤트 발생 시 관련 영상 확인
+- **카메라 설정**: 카메라 각도 및 설정 관리
+
+### 7. 통계 및 분석 (StatsPage)
+
+- **매출 대시보드**: 일별/주별/월별 매출 추이
+- **인기 메뉴**: 주문량 기준 메뉴 랭킹
+- **피크 타임**: 시간대별 주문량 분석
+- **고객 분석**: 방문 패턴 및 선호도 분석
+
+
+### 8. 설정 (SettingsPage)
+
+- **사용자 관리**: 직원 계정 및 권한 설정
+- **시스템 설정**: 운영 시간, 알림 설정 등
+- **백업 및 복원**: 데이터 백업 및 복원 관리
+
+## 📂 코드 구조
 
 ```
 operator/
-├── public/             # 정적 파일
-├── src/                # 소스 코드
-│   ├── components/     # 재사용 가능한 컴포넌트
-│   │   ├── dashboard/  # 대시보드 관련 컴포넌트
-│   │   └── Layout.jsx  # 레이아웃 컴포넌트
-│   ├── contexts/       # React 컨텍스트 (상태 관리)
-│   ├── pages/          # 페이지 컴포넌트
-│   ├── App.js          # 애플리케이션의 진입점
-│   ├── index.js        # React DOM 렌더링
-│   ├── index.css       # 전역 스타일
-│   └── mockData.js     # 개발용 더미 데이터
-├── package.json        # 프로젝트 의존성 및 스크립트
-├── tailwind.config.js  # Tailwind CSS 설정
-└── README.md           # 프로젝트 문서
+├── public/              # 정적 파일
+├── src/                 # 소스 코드
+│   ├── components/      # 재사용 가능한 컴포넌트
+│   │   ├── dashboard/   # 대시보드 관련 컴포넌트
+│   │   │   ├── RobotStatusPanel.jsx  # 로봇 상태 패널
+│   │   │   ├── StoreMap.jsx          # 매장 맵
+│   │   │   ├── EventTimeline.jsx     # 이벤트 타임라인
+│   │   │   ├── RecentOrders.jsx      # 최근 주문
+│   │   │   └── SystemStatus.jsx      # 시스템 상태
+│   │   ├── layout/      # 레이아웃 관련 컴포넌트
+│   │   │   ├── Sidebar.jsx           # 사이드바 네비게이션
+│   │   │   ├── Header.jsx            # 상단 헤더
+│   │   │   └── Footer.jsx            # 하단 푸터
+│   │   ├── robot/       # 로봇 관련 컴포넌트
+│   │   ├── order/       # 주문 관련 컴포넌트 
+│   │   ├── inventory/   # 재고 관련 컴포넌트
+│   │   ├── customer/    # 고객 관련 컴포넌트
+│   │   ├── video/       # 비디오 관련 컴포넌트
+│   │   ├── common/      # 공통 UI 컴포넌트
+│   │   └── charts/      # 차트 및 데이터 시각화 컴포넌트
+│   ├── contexts/        # React 컨텍스트 (상태 관리)
+│   │   ├── AuthContext.jsx       # 인증 관련 상태
+│   │   ├── RobotContext.jsx      # 로봇 상태 관리
+│   │   ├── OrderContext.jsx      # 주문 상태 관리
+│   │   ├── WebSocketContext.jsx  # 웹소켓 연결 관리
+│   │   └── ThemeContext.jsx      # UI 테마 관리
+│   ├── pages/           # 페이지 컴포넌트
+│   │   ├── DashboardPage.jsx     # 메인 대시보드
+│   │   ├── LoginPage.jsx         # 로그인 화면
+│   │   ├── RobotAdminPage.jsx    # 로봇 관리
+│   │   ├── OrdersPage.jsx        # 주문 관리
+│   │   ├── InventoryPage.jsx     # 재고 관리
+│   │   ├── CustomerPage.jsx      # 고객/테이블 관리
+│   │   ├── VideoStreamPage.jsx   # 영상 스트리밍
+│   │   ├── StatsPage.jsx         # 통계 및 분석
+│   │   ├── SystemPage.jsx        # 시스템 관리
+│   │   └── SettingsPage.jsx      # 설정
+│   ├── services/        # API 서비스
+│   │   ├── api.js       # API 클라이언트 설정
+│   │   ├── authService.js  # 인증 관련 API
+│   │   ├── robotService.js # 로봇 관련 API
+│   │   ├── orderService.js # 주문 관련 API
+│   │   ├── inventoryService.js # 재고 관련 API
+│   │   ├── customerService.js # 고객 관련 API
+│   │   ├── videoService.js  # 비디오 관련 API
+│   │   └── websocket.js    # WebSocket 연결 관리
+│   ├── utils/           # 유틸리티 함수
+│   │   ├── formatters.js  # 데이터 포맷팅
+│   │   ├── validators.js  # 입력 검증
+│   │   ├── dateUtils.js   # 날짜/시간 관련
+│   │   └── storageUtils.js # 로컬 스토리지 관리
+│   ├── config/          # 설정 파일
+│   │   ├── apiConfig.js   # API 엔드포인트 설정
+│   │   └── constants.js   # 상수 및 열거형
+│   ├── styles/          # 스타일 관련 파일
+│   │   ├── tailwind.css   # Tailwind 스타일
+│   │   └── custom.css     # 커스텀 스타일
+│   ├── App.jsx          # 앱 진입점 및 라우팅
+│   ├── index.jsx        # React 렌더링
+│   └── index.css        # 전역 스타일
+├── package.json         # 프로젝트 의존성 및 스크립트
+└── tailwind.config.js   # Tailwind CSS 설정
 ```
 
-## 페이지 구성
+## 🔄 데이터 흐름
 
-대시보드는 다음과 같은 페이지로 구성됩니다:
+### React 컴포넌트 구조
 
-### 1. 대시보드 (DashboardPage)
-- 로봇 상태 패널: 모든 로봇의 현재 상태를 표시합니다.
-- 매장 맵: 테이블과 로봇의 실시간 위치를 시각화합니다.
-- 이벤트 타임라인: 시스템 이벤트를 시간순으로 표시합니다.
-- 최근 주문: 최근 주문 내역을 표시하고 주문 상태를 색상으로 구분합니다.
+```mermaid
+graph TD
+    A[App] --> B[Routes]
+    B --> C[ProtectedRoute]
+    C --> D[Layout]
+    
+    D --> E[DashboardPage]
+    D --> F[RobotAdminPage]
+    D --> G[OrdersPage]
+    D --> H[InventoryPage]
+    D --> I[CustomerPage]
+    D --> J[VideoStreamPage]
+    D --> K[StatsPage]
+    D --> L[SystemPage]
+    D --> M[SettingsPage]
+    
+    B --> N[LoginPage]
+    
+    E --> O[RobotStatusPanel]
+    E --> P[StoreMap]
+    E --> Q[EventTimeline]
+    E --> R[RecentOrders]
+    E --> S[SystemStatus]
+```
 
-### 2. 영상 스트리밍 (VideoStreamPage)
-- 로봇 및 매장 카메라의 실시간 영상 스트림을 제공합니다.
-- 글로벌 카메라, 요리 로봇, 서빙 로봇 등 다양한 소스별 영상을 보여줍니다.
+### 인증 흐름
 
-### 3. 로봇 관리 (RobotAdminPage)
-- 로봇 목록 조회 및 관리
-- 로봇 상태 변경 및 명령 전송
-- 로봇 상세 정보 및 명령 이력 조회
+```mermaid
+graph TD
+    A[사용자] -->|로그인 정보 입력| B[LoginPage]
+    B -->|인증 요청| C[authService]
+    C -->|JWT 토큰 요청| D[백엔드 API]
+    D -->|토큰 발급| C
+    C -->|토큰 저장| E[AuthContext]
+    E -->|인증 상태 변경| F[ProtectedRoute]
+    F -->|인증됨| G[보호된 페이지]
+    F -->|인증 안됨| H[리디렉션: Login]
+```
 
-### 4. 고객/테이블 관리 (CustomerPage)
-- 테이블 상태 모니터링
-- 고객 정보 관리
-- 테이블 할당 및 해제
+### WebSocket 통신 구조
 
-### 5. 주문/재고 통계 (StatsPage)
-- 판매 통계 및 차트
-- 재고 현황 및 경고 알림
-- 기간별 매출 보고서
+```mermaid
+sequenceDiagram
+    participant Dashboard as 대시보드
+    participant WebSocket as WebSocket 서비스
+    participant Backend as 백엔드 서버
+    participant Robot as 로봇
+    
+    Dashboard->>WebSocket: 연결 (topic: robots, orders, events)
+    WebSocket->>Backend: 구독 등록
+    Robot->>Backend: 상태 업데이트
+    Backend->>WebSocket: 이벤트 브로드캐스트
+    WebSocket->>Dashboard: 실시간 업데이트
+```
 
-### 6. 이벤트/로그 (SystemPage)
-- 시스템 이벤트 로그
-- 오류 및 경고 메시지
-- 로그 데이터 내보내기
+### 상태 관리 흐름
 
-### 7. 설정 (SettingsPage)
-- 시스템 운영 시간 설정
-- 재고 경고 임계값 설정
-- 알림 설정 관리
+```mermaid
+graph LR
+    A[백엔드 API] --> B[API 서비스]
+    C[WebSocket 서버] --> D[WebSocket 서비스]
+    
+    B --> E[Context API]
+    D --> E
+    
+    E --> F[컴포넌트]
+    F --> G[사용자 액션]
+    G --> B
+```
 
-## 대시보드의 주요 컴포넌트
+## 📊 주요 컴포넌트 설명
 
-### RecentOrders
-- 주문 ID, 테이블 번호, 주문 시간, 주문 항목 수, 총 금액, 주문 상태를 테이블 형식으로 표시
-- 주문 상태별로 다른 아이콘과 색상으로 시각화(완료, 취소, 대기 중, 처리 중)
-- 각 주문에 대한 상세 보기 버튼 제공
-- 한국어 날짜/시간 형식 및 원화 표시 지원
+### 로봇 상태 패널 (RobotStatusPanel)
 
-### SystemStatus
-- 서버, 로봇, 배터리, 네트워크 등 다양한 시스템 구성 요소의 상태 표시
-- 각 시스템 유형별 적절한 아이콘으로 시각화
-- 상태(온라인, 경고, 오프라인)에 따른 색상 구분
-- 마지막 업데이트 시간 표시
+로봇의 현재 상태를 직관적으로 표시하는 대시보드 컴포넌트:
+- 배터리 수준 시각화 (색상 코드 및 퍼센트)
+- 현재 작업 상태 표시 (대기, 이동 중, 서빙 중, 충전 중, 오류)
+- 로봇 유형별 아이콘 및 색상 구분 (서빙 로봇, 조리 로봇)
+- 마지막 통신 시간 및 연결 상태 표시
+- 상세 정보 팝업 제공 (로봇 ID, MAC 주소, IP 주소)
 
-### EventTimeline
-- 시스템 이벤트를 시간순으로 정렬하여 표시
-- 이벤트 유형(경고, 오류, 시스템, 로봇, 비상)별 필터링 기능
+### 매장 맵 (StoreMap)
+
+매장의 테이블과 로봇 위치를 실시간으로 시각화:
+- 확대/축소 가능한 인터랙티브 맵
+- 테이블 상태(빈 테이블/사용 중/예약됨) 색상 구분
+- 로봇 실시간 위치 추적 및 이동 경로 표시
+
+### 이벤트 타임라인 (EventTimeline)
+
+시스템 이벤트를 시간순으로 표시:
+- 이벤트 유형별 필터링 (로봇, 주문, 시스템, 고객, 비상)
+- 심각도에 따른 색상 구분 (정보, 경고, 오류, 중요)
 - 타임라인 형식의 시각적 표현
-- 이벤트 선택 시 맵에 해당 위치 하이라이트 기능
+- 실시간 업데이트 및 알림
 
-### RobotStatusPanel
-- 로봇 상태, 배터리 수준, IP 주소, 최근 활동 시간 등 표시
-- 로봇 유형별 아이콘 제공
-- 상태별 색상 코드로 시각화
-- 상세 정보 모달을 통한 추가 정보 제공
+### 주문 관리 (OrderManagement)
 
-### StoreMap
-- 테이블과 로봇의 실시간 위치 시각화
-- 줌 인/아웃 및 리셋 기능
-- 테이블 상태(사용 가능/사용 중)에 따른 색상 구분
-- 선택된 이벤트 발생 위치 하이라이트
+주문 처리 및 추적을 위한 기능:
+- 현재 주문 상태 실시간 모니터링
+- 주문 상태 변경 (접수, 준비 중, 서빙 중, 완료, 취소)
+- 테이블별/고객별 주문 필터링
+- 주문 상세 정보 조회 (메뉴, 수량, 가격)
+- 주문 이력 조회 및 검색
 
-## 데이터 흐름
+### 인증 및 권한 관리 (AuthContext)
 
-### 컴포넌트 구조
+사용자 인증 및 권한 관리:
+- JWT 기반 인증 관리
+- 보호된 라우트 처리
+- 자동 로그인 및 세션 유지
+- 권한별 기능 접근 제어
+- 타임아웃 및 자동 로그아웃
 
-```
-App
-├── Router (BrowserRouter)
-│   └── Routes
-│       ├── DashboardPage
-│       │   ├── Layout
-│       │   │   ├── Sidebar
-│       │   │   └── Header
-│       │   ├── RobotStatusPanel
-│       │   ├── StoreMap
-│       │   ├── EventTimeline
-│       │   ├── RecentOrders
-│       │   └── SystemStatus
-│       ├── VideoStreamPage
-│       ├── RobotAdminPage
-│       ├── CustomerPage
-│       ├── StatsPage
-│       ├── SystemPage
-│       └── SettingsPage
-└── Contexts (추가 예정)
-```
+## 🔧 개발 환경 및 도구
 
-### 데이터 관리
 
-1. **API 통신**
-   - 각 페이지에서 `fetch` API를 사용하여 백엔드 서버와 통신합니다.
-   - 주요 API 경로는 `/api/` 접두사로 시작합니다.
-   - 개발 환경에서는 `mockData.js`의 더미 데이터를 사용합니다.
+### 코드 품질 관리
 
-2. **실시간 업데이트**
-   - `useEffect`와 `setInterval`을 사용하여 주기적으로 데이터를 폴링합니다.
-   - 대시보드의 경우 30초마다 데이터를 자동으로 새로고침합니다.
+- **ESLint**: JavaScript/JSX 코드 품질 및 스타일 검사
+- **Prettier**: 코드 포맷팅 표준화
+- **Jest**: 단위 테스트 프레임워크
+- **React Testing Library**: 컴포넌트 테스트
 
-3. **데이터 흐름 예시: 대시보드**
-   - `DashboardPage` 컴포넌트에서 데이터를 불러와 하위 컴포넌트에 전달
-   - 각 하위 컴포넌트(RobotStatusPanel, StoreMap, EventTimeline 등)는 전달받은 데이터를 표시
-   - 사용자 상호작용(예: 이벤트 선택)은 콜백을 통해 상위 컴포넌트로 전달
+### 버전 관리 규칙
 
-## 컴포넌트 수정 가이드
+- 브랜치 전략: Git Flow 채택 (master, develop, feature/*, release/*, hotfix/*)
+- 커밋 메시지 형식: 영역(컴포넌트): 변경내용
+- PR 규칙: 코드 리뷰 및 테스트 통과 필수
 
-### 대시보드 컴포넌트 수정
+## 🚀 배포 프로세스
 
-1. **EventTimeline 컴포넌트** (`src/components/dashboard/EventTimeline.jsx`)
-   - 이벤트 필터링 로직: `filter` 상태와 `filteredEvents` 변수를 수정하여 이벤트 필터링 방식을 변경할 수 있습니다.
-   - 이벤트 유형별 아이콘/색상: `getEventIcon` 및 `getEventColor` 함수를 통해 이벤트 시각화를 변경할 수 있습니다.
+1. 코드 테스트 및 PR 검토
+2. develop 브랜치 병합
+3. 스테이징 환경 검증
+4. release 브랜치 생성
+5. 최종 테스트 및 QA
+6. master 브랜치 병합 및 배포
 
-2. **RecentOrders 컴포넌트** (`src/components/dashboard/RecentOrders.jsx`)
-   - 주문 상태별 스타일: `getStatusIcon` 및 `getStatusClass` 함수를 통해 주문 상태 시각화를 변경할 수 있습니다.
-   - 날짜/시간 형식: `formatTimestamp` 함수를 수정하여 시간 표시 형식을 변경할 수 있습니다.
-   - 가격 형식: `formatPrice` 함수를 통해 가격 표시 형식을 변경할 수 있습니다.
-   - 테이블 컬럼 구성: 테이블 헤더와 각 행의 내용을 수정하여 표시되는 정보를 변경할 수 있습니다.
+## 📱 스크린샷
 
-3. **SystemStatus 컴포넌트** (`src/components/dashboard/SystemStatus.jsx`)
-   - 시스템 유형별 아이콘: `getSystemIcon` 함수를 통해 시스템 유형별 아이콘을 변경할 수 있습니다.
-   - 상태별 스타일: `getStatusIcon` 및 `getStatusClass` 함수를 통해 상태 표시 스타일을 변경할 수 있습니다.
-   - 시스템 정보 표시: 각 시스템 항목의 표시 형식을 수정하여 추가 정보를 표시할 수 있습니다.
+### 메인 대시보드
+![메인 대시보드](/docs/images/operator_dashboard.png)
 
-4. **RobotStatusPanel 컴포넌트** (`src/components/dashboard/RobotStatusPanel.jsx`)
-   - 로봇 유형별 아이콘: `getRobotIcon` 함수를 수정하여 로봇 유형별 아이콘을 변경할 수 있습니다.
-   - 상태별 색상: `getStatusColor` 함수를 통해 로봇 상태별 색상을 변경할 수 있습니다.
+### 영상 스트리밍
+![영상 스트리밍](/docs/images/operator_streaming.png)
+### 로봇 관리 화면
+![로봇 관리](/docs/images/robot_manager.png)
+### 고객, 테이블 관리 화면
+![고객, 테이블 관리](/docs/images/customer.png)
+### 주문 관리 화면
+![주문 모니터링](/docs/images/order.png)
+### 재고 관리 화면
+![재고 관리](/docs/images/inventory.png)
+### 설정 화면
+![설정](/docs/images/setting.png)
 
-5. **StoreMap 컴포넌트** (`src/components/dashboard/StoreMap.jsx`)
-   - 테이블 위치: 테이블과 로봇의 위치 정보를 수정하여 맵에서의 표시 위치를 조정할 수 있습니다.
-   - 로봇 및 테이블 색상: `getRobotColor` 및 `getTableColor` 함수를 통해 색상을 변경할 수 있습니다.
+## 📃 문제 해결 및 FAQ
 
-### 새 컴포넌트 추가
+### 자주 발생하는 문제
 
-새로운 대시보드 컴포넌트를 추가하려면:
+1. **웹소켓 연결 끊김 현상**
+   - 해결책: 자동 재연결 메커니즘 확인 및 네트워크 상태 점검
 
-1. `src/components/dashboard` 디렉토리에 새 컴포넌트 파일을 생성합니다.
-2. 컴포넌트를 구현합니다.
-3. `src/pages/DashboardPage.jsx`에서 import하고 렌더링 부분에 추가합니다.
+2. **데이터 지연 문제**
+   - 해결책: 폴링 간격 조정 및 백엔드 성능 최적화
 
-예:
-```jsx
-// 새 컴포넌트 import
-import NewComponent from '../components/dashboard/NewComponent';
+3. **차트 렌더링 성능 저하**
+   - 해결책: 데이터 포인트 수 제한 및 메모이제이션 활용
 
-// 렌더링 부분에 추가
-<div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
-  <div className="lg:col-span-2">
-    <div className="grid grid-cols-1 gap-4">
-      <RobotStatusPanel robots={robots} />
-      <RecentOrders orders={orders} onViewOrder={handleViewOrder} />
-      <NewComponent data={someData} />
-    </div>
-  </div>
-  {/* ... */}
-</div>
-```
+### 성능 최적화 팁
 
-### 페이지 레이아웃 수정
-
-레이아웃을 수정하려면 `src/components/Layout.jsx` 파일을 수정하세요:
-
-- **네비게이션 메뉴**: `navItems` 배열을 변경하여 사이드바 메뉴를 수정할 수 있습니다.
-- **헤더 내용**: 헤더 부분을 수정하여 로고, 사용자 정보, 추가 버튼 등을 변경할 수 있습니다.
-- **레이아웃 스타일**: 클래스를 수정하여 전체 레이아웃 스타일을 변경할 수 있습니다.
-
-## API 엔드포인트
-
-대시보드는 다음과 같은 API 엔드포인트와 통신합니다:
-
-### 대시보드 데이터
-- `GET /api/robots`: 로봇 정보 조회
-- `GET /api/tables`: 테이블 정보 조회
-- `GET /api/events`: 이벤트 데이터 조회
-- `GET /api/robot/:id/position`: 로봇 위치 조회
-- `GET /api/orders`: 주문 정보 조회
-- `GET /api/systems`: 시스템 상태 정보 조회
-
-### 로봇 관리
-- `GET /api/robot/commands/:id`: 로봇 명령 이력 조회
-- `POST /api/robot/commands/:id/command`: 로봇에 명령 전송
-
-### 영상 스트림
-- `GET /api/video-streams`: 영상 스트림 목록 조회
-- `PUT /api/video-streams/:id/refresh`: 스트림 새로고침
-
-### 설정
-- `GET /api/settings`: 시스템 설정 조회
-- `PUT /api/settings`: 시스템 설정 업데이트
-
-## 개발 환경에서의 더미 데이터
-
-개발 환경에서는 백엔드 API가 없어도 애플리케이션을 테스트할 수 있도록 더미 데이터를 제공합니다. 더미 데이터는 `src/mockData.js` 파일에 정의되어 있으며, 필요에 따라 수정할 수 있습니다.
-
-실제 백엔드 API와 연동하려면 `src/App.js` 파일에서 mock API 설정 부분을 제거하거나 수정하세요:
-
-```jsx
-// 이 부분을 제거하거나 실제 백엔드 URL로 변경
-if (process.env.NODE_ENV === 'development') {
-  window.fetch = (url) => {
-    // mock API 구현...
-  };
-}
-```
-
-## 추가 개발 시 참고사항
-
-1. **새로운 페이지 추가**
-   - `src/pages` 디렉토리에 페이지 컴포넌트를 생성합니다.
-   - `src/App.js`의 Route 설정에 해당 페이지를 추가합니다.
-
-2. **스타일링**
-   - 애플리케이션은 Tailwind CSS를 사용하여 스타일링됩니다.
-   - 커스텀 스타일은 CSS 모듈이나 Tailwind 설정을 통해 추가할 수 있습니다.
-
-3. **컨텍스트 추가**
-   - 전역 상태 관리가 필요한 경우 `src/contexts` 디렉토리에 새 컨텍스트를 생성할 수 있습니다.
-   - React Context API 또는 Redux 등을 사용하여 상태 관리를 구현할 수 있습니다.
-
-## 문제 해결
-
-- **"API 응답 없음" 오류**: 개발 환경에서는 기본적으로 더미 데이터를 사용합니다. 이 오류가 발생한다면 더미 데이터 설정을 확인하세요.
-- **컴포넌트 렌더링 문제**: React DevTools를 사용하여 컴포넌트 트리와 props를 검사하세요.
-- **스타일 문제**: 브라우저 개발자 도구를 사용하여 적용된 스타일을 검사하세요. 
+- React.memo()를 활용한 불필요한 리렌더링 방지
+- 대용량 목록에 virtualization 적용
+- 이미지 최적화 및 지연 로딩 구현
+- 중요 데이터 캐싱 및 로컬 스토리지 활용
