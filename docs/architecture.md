@@ -18,8 +18,8 @@ graph TB
     end
     
     subgraph "로봇 제어 시스템"
-        H[Alba Planner<br>서빙 로봇 제어] <--> I[서빙 로봇(Pinky)<br>ROS2]
-        J[Cook Planner<br>조리 로봇 제어] <--> K[조리 로봇(myCobot280)<br>ROS2]
+        H[Alba Planner<br>서빙 로봇 제어] <--> I["서빙 로봇(Pinky)<br>ROS2"]
+        J[Cook Planner<br>조리 로봇 제어] <--> K["조리 로봇(myCobot280)<br>ROS2"]
     end
     
     subgraph "AI 처리 시스템"
