@@ -103,20 +103,15 @@ backend/
 
 ## 📚 추가 문서
 
-- [FastAPI 아키텍처 문서](../../docs/fastapi_architecture.md)
-- [WebSocket 아키텍처 문서](../../docs/websocket_architecture.md)
-- [네트워크 통신 문서](../../docs/network_communication.md)
 - [API 엔드포인트 문서](../../docs/api_endpoints.md)
 - [데이터베이스 스키마](../../docs/database_schema.md)
 - [오류 코드 참조](../../docs/error_codes.md)
+- [자주 묻는 질문(FAQ)](../../docs/faq.md)
+- [인터페이스 명세서](../../docs/interface_specification.md)
 
 ## 🚀 성능 최적화 팁
 
 - 인덱스 최적화를 통한 데이터베이스 쿼리 성능 향상
 - WebSocket 연결 풀링을 통한 리소스 사용 최적화
 - 백그라운드 작업을 위한 Celery 작업 큐 활용
-- Redis 캐싱을 통한 반복 요청 응답 시간 단축 
-
-## 🔧 문제 해결
-
-일반적인 오류 및 해결 방법은 [FAQ](../../docs/faq.md)를 참조하세요. 
+- Redis 캐싱을 통한 반복 요청 응답 시간 단축

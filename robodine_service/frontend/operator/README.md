@@ -115,73 +115,6 @@ RoboDine 운영자 대시보드는 로봇 레스토랑의 전체 운영을 위�
 - **시스템 설정**: 운영 시간, 알림 설정 등
 - **백업 및 복원**: 데이터 백업 및 복원 관리
 
-## 📂 코드 구조
-
-```
-operator/
-├── public/              # 정적 파일
-├── src/                 # 소스 코드
-│   ├── components/      # 재사용 가능한 컴포넌트
-│   │   ├── dashboard/   # 대시보드 관련 컴포넌트
-│   │   │   ├── RobotStatusPanel.jsx  # 로봇 상태 패널
-│   │   │   ├── StoreMap.jsx          # 매장 맵
-│   │   │   ├── EventTimeline.jsx     # 이벤트 타임라인
-│   │   │   ├── RecentOrders.jsx      # 최근 주문
-│   │   │   └── SystemStatus.jsx      # 시스템 상태
-│   │   ├── layout/      # 레이아웃 관련 컴포넌트
-│   │   │   ├── Sidebar.jsx           # 사이드바 네비게이션
-│   │   │   ├── Header.jsx            # 상단 헤더
-│   │   │   └── Footer.jsx            # 하단 푸터
-│   │   ├── robot/       # 로봇 관련 컴포넌트
-│   │   ├── order/       # 주문 관련 컴포넌트 
-│   │   ├── inventory/   # 재고 관련 컴포넌트
-│   │   ├── customer/    # 고객 관련 컴포넌트
-│   │   ├── video/       # 비디오 관련 컴포넌트
-│   │   ├── common/      # 공통 UI 컴포넌트
-│   │   └── charts/      # 차트 및 데이터 시각화 컴포넌트
-│   ├── contexts/        # React 컨텍스트 (상태 관리)
-│   │   ├── AuthContext.jsx       # 인증 관련 상태
-│   │   ├── RobotContext.jsx      # 로봇 상태 관리
-│   │   ├── OrderContext.jsx      # 주문 상태 관리
-│   │   ├── WebSocketContext.jsx  # 웹소켓 연결 관리
-│   │   └── ThemeContext.jsx      # UI 테마 관리
-│   ├── pages/           # 페이지 컴포넌트
-│   │   ├── DashboardPage.jsx     # 메인 대시보드
-│   │   ├── LoginPage.jsx         # 로그인 화면
-│   │   ├── RobotAdminPage.jsx    # 로봇 관리
-│   │   ├── OrdersPage.jsx        # 주문 관리
-│   │   ├── InventoryPage.jsx     # 재고 관리
-│   │   ├── CustomerPage.jsx      # 고객/테이블 관리
-│   │   ├── VideoStreamPage.jsx   # 영상 스트리밍
-│   │   ├── StatsPage.jsx         # 통계 및 분석
-│   │   ├── SystemPage.jsx        # 시스템 관리
-│   │   └── SettingsPage.jsx      # 설정
-│   ├── services/        # API 서비스
-│   │   ├── api.js       # API 클라이언트 설정
-│   │   ├── authService.js  # 인증 관련 API
-│   │   ├── robotService.js # 로봇 관련 API
-│   │   ├── orderService.js # 주문 관련 API
-│   │   ├── inventoryService.js # 재고 관련 API
-│   │   ├── customerService.js # 고객 관련 API
-│   │   ├── videoService.js  # 비디오 관련 API
-│   │   └── websocket.js    # WebSocket 연결 관리
-│   ├── utils/           # 유틸리티 함수
-│   │   ├── formatters.js  # 데이터 포맷팅
-│   │   ├── validators.js  # 입력 검증
-│   │   ├── dateUtils.js   # 날짜/시간 관련
-│   │   └── storageUtils.js # 로컬 스토리지 관리
-│   ├── config/          # 설정 파일
-│   │   ├── apiConfig.js   # API 엔드포인트 설정
-│   │   └── constants.js   # 상수 및 열거형
-│   ├── styles/          # 스타일 관련 파일
-│   │   ├── tailwind.css   # Tailwind 스타일
-│   │   └── custom.css     # 커스텀 스타일
-│   ├── App.jsx          # 앱 진입점 및 라우팅
-│   ├── index.jsx        # React 렌더링
-│   └── index.css        # 전역 스타일
-├── package.json         # 프로젝트 의존성 및 스크립트
-└── tailwind.config.js   # Tailwind CSS 설정
-```
 
 ## 🔄 데이터 흐름
 
@@ -301,30 +234,23 @@ graph LR
 - 권한별 기능 접근 제어
 - 타임아웃 및 자동 로그아웃
 
-## 🔧 개발 환경 및 도구
+## 📃 문제 해결
 
+### 자주 발생하는 문제
 
-### 코드 품질 관리
+1. **웹소켓 연결 끊김 현상**
+   - 해결책: 자동 재연결 메커니즘 확인 및 네트워크 상태 점검
 
-- **ESLint**: JavaScript/JSX 코드 품질 및 스타일 검사
-- **Prettier**: 코드 포맷팅 표준화
-- **Jest**: 단위 테스트 프레임워크
-- **React Testing Library**: 컴포넌트 테스트
+2. **데이터 지연 문제**
+   - 해결책: 폴링 간격 조정 및 백엔드 성능 최적화
 
-### 버전 관리 규칙
+3. **차트 렌더링 성능 저하**
+   - 해결책: 데이터 포인트 수 제한 및 메모이제이션 활용
 
-- 브랜치 전략: Git Flow 채택 (master, develop, feature/*, release/*, hotfix/*)
-- 커밋 메시지 형식: 영역(컴포넌트): 변경내용
-- PR 규칙: 코드 리뷰 및 테스트 통과 필수
+### 성능 최적화
 
-## 🚀 배포 프로세스
-
-1. 코드 테스트 및 PR 검토
-2. develop 브랜치 병합
-3. 스테이징 환경 검증
-4. release 브랜치 생성
-5. 최종 테스트 및 QA
-6. master 브랜치 병합 및 배포
+- React.memo()를 활용한 불필요한 리렌더링 방지
+- 중요 데이터 캐싱 및 로컬 스토리지 활용
 
 ## 📱 스크린샷
 
@@ -344,22 +270,70 @@ graph LR
 ### 설정 화면
 ![설정](/docs/images/setting.png)
 
-## 📃 문제 해결 및 FAQ
+## 📂 코드 구조
 
-### 자주 발생하는 문제
-
-1. **웹소켓 연결 끊김 현상**
-   - 해결책: 자동 재연결 메커니즘 확인 및 네트워크 상태 점검
-
-2. **데이터 지연 문제**
-   - 해결책: 폴링 간격 조정 및 백엔드 성능 최적화
-
-3. **차트 렌더링 성능 저하**
-   - 해결책: 데이터 포인트 수 제한 및 메모이제이션 활용
-
-### 성능 최적화 팁
-
-- React.memo()를 활용한 불필요한 리렌더링 방지
-- 대용량 목록에 virtualization 적용
-- 이미지 최적화 및 지연 로딩 구현
-- 중요 데이터 캐싱 및 로컬 스토리지 활용
+```
+operator/
+├── public/              # 정적 파일
+├── src/                 # 소스 코드
+│   ├── components/      # 재사용 가능한 컴포넌트
+│   │   ├── dashboard/   # 대시보드 관련 컴포넌트
+│   │   │   ├── RobotStatusPanel.jsx  # 로봇 상태 패널
+│   │   │   ├── StoreMap.jsx          # 매장 맵
+│   │   │   ├── EventTimeline.jsx     # 이벤트 타임라인
+│   │   │   ├── RecentOrders.jsx      # 최근 주문
+│   │   │   └── SystemStatus.jsx      # 시스템 상태
+│   │   ├── layout/      # 레이아웃 관련 컴포넌트
+│   │   │   ├── Sidebar.jsx           # 사이드바 네비게이션
+│   │   │   ├── Header.jsx            # 상단 헤더
+│   │   │   └── Footer.jsx            # 하단 푸터
+│   │   ├── robot/       # 로봇 관련 컴포넌트
+│   │   ├── order/       # 주문 관련 컴포넌트 
+│   │   ├── inventory/   # 재고 관련 컴포넌트
+│   │   ├── customer/    # 고객 관련 컴포넌트
+│   │   ├── video/       # 비디오 관련 컴포넌트
+│   │   ├── common/      # 공통 UI 컴포넌트
+│   │   └── charts/      # 차트 및 데이터 시각화 컴포넌트
+│   ├── contexts/        # React 컨텍스트 (상태 관리)
+│   │   ├── AuthContext.jsx       # 인증 관련 상태
+│   │   ├── RobotContext.jsx      # 로봇 상태 관리
+│   │   ├── OrderContext.jsx      # 주문 상태 관리
+│   │   ├── WebSocketContext.jsx  # 웹소켓 연결 관리
+│   │   └── ThemeContext.jsx      # UI 테마 관리
+│   ├── pages/           # 페이지 컴포넌트
+│   │   ├── DashboardPage.jsx     # 메인 대시보드
+│   │   ├── LoginPage.jsx         # 로그인 화면
+│   │   ├── RobotAdminPage.jsx    # 로봇 관리
+│   │   ├── OrdersPage.jsx        # 주문 관리
+│   │   ├── InventoryPage.jsx     # 재고 관리
+│   │   ├── CustomerPage.jsx      # 고객/테이블 관리
+│   │   ├── VideoStreamPage.jsx   # 영상 스트리밍
+│   │   ├── StatsPage.jsx         # 통계 및 분석
+│   │   ├── SystemPage.jsx        # 시스템 관리
+│   │   └── SettingsPage.jsx      # 설정
+│   ├── services/        # API 서비스
+│   │   ├── api.js       # API 클라이언트 설정
+│   │   ├── authService.js  # 인증 관련 API
+│   │   ├── robotService.js # 로봇 관련 API
+│   │   ├── orderService.js # 주문 관련 API
+│   │   ├── inventoryService.js # 재고 관련 API
+│   │   ├── customerService.js # 고객 관련 API
+│   │   ├── videoService.js  # 비디오 관련 API
+│   │   └── websocket.js    # WebSocket 연결 관리
+│   ├── utils/           # 유틸리티 함수
+│   │   ├── formatters.js  # 데이터 포맷팅
+│   │   ├── validators.js  # 입력 검증
+│   │   ├── dateUtils.js   # 날짜/시간 관련
+│   │   └── storageUtils.js # 로컬 스토리지 관리
+│   ├── config/          # 설정 파일
+│   │   ├── apiConfig.js   # API 엔드포인트 설정
+│   │   └── constants.js   # 상수 및 열거형
+│   ├── styles/          # 스타일 관련 파일
+│   │   ├── tailwind.css   # Tailwind 스타일
+│   │   └── custom.css     # 커스텀 스타일
+│   ├── App.jsx          # 앱 진입점 및 라우팅
+│   ├── index.jsx        # React 렌더링
+│   └── index.css        # 전역 스타일
+├── package.json         # 프로젝트 의존성 및 스크립트
+└── tailwind.config.js   # Tailwind CSS 설정
+```

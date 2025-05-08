@@ -31,83 +31,37 @@ RoboDine은 로봇 기술과 인공지능을 결합한 완전 자동화된 레�
 
 ## 🏗️ 시스템 구성
 
-RoboDine 시스템은 다음 핵심 모듈로 구성됩니다:
+## 📊 시스템 아키텍처
 
-```mermaid
-graph TD
-    A[RoboDine 플랫폼] --> B[RoboDine Service]
-    A --> C[Alba Planner]
-    A --> D[Cook Planner]
-    A --> E[CookGPT]
-    
-    B --> B1[백엔드 서비스]
-    B --> B2[프론트엔드 시스템]
-    B2 --> B2a[운영자 대시보드]
-    B2 --> B2b[키오스크 시스템]
-    
-    C --> C1[고객 안내 서비스]
-    C --> C2[음식 서빙 서비스]
-    C --> C3[테이블 관리]
-    
-    D --> D1[조리 작업 관리]
-    D --> D2[조리 과정 최적화]
-    D --> D3[안전 제어]
-    
-    E --> E1[컴퓨터 비전 처리]
-    E --> E2[위치 추정]
-    E --> E3[로봇 제어 보조]
-    
-    class A main
-    class B,C,D,E modules
-    
-    classDef main fill:#f9d5e5,stroke:#333,stroke-width:2px
-    classDef modules fill:#eeeeee,stroke:#333,stroke-width:1px
-```
+![시스템 아키텍처 다이어그램](/docs/images/system_architecture.png)
 
 ### 1. [RoboDine Service](/robodine_service)
+중앙 통제 시스템으로 다음 구성 요소를 포함합니다:
 - **[백엔드 서비스](/robodine_service/backend)**: FastAPI 기반의 고성능 API 서버
 - **[프론트엔드 시스템](/robodine_service/frontend)**: React 기반의 사용자 인터페이스
   - **[운영자 대시보드](/robodine_service/frontend/operator)**: 매장 운영 모니터링 및 관리
   - **[키오스크 시스템](/robodine_service/frontend/kiosk)**: 고객 주문 인터페이스
 
 ### 2. [Alba Planner](/alba_planner)
-서빙 로봇(Pinky)을 제어하는 시스템으로, 음식 서빙, 테이블 관리 기능을 제공합니다.
+서빙 로봇(ALBABOT)을 제어하는 시스템으로, 다음 기능을 제공합니다:
+- **로봇 경로 계획**: 테이블까지의 최적 경로 계산
+- **위치 추적**: 6D 좌표계 기반 로봇 위치 추적
+- **배터리 관리**: 충전 상태 모니터링 및 자동 충전
+- **주문 서빙**: 주문 음식 픽업 및 테이블 배달
+- **테이블 관리**: 테이블 상태 모니터링
 
 ### 3. [Cook Planner](/cook_planner)
-조리 로봇(JetCobot)을 제어하는 시스템으로, 정밀한 조리 작업을 관리하고 최적화합니다.
+조리 로봇(COOKBOT)을 제어하는 시스템으로, 다음 기능을 제공합니다:
+- **조리 작업 계획**: 레시피 기반 로봇 동작 계획
+- **로봇 관절 제어**: 6축 로봇 팔 정밀 제어
+- **조리 프로세스 관리**: 조리 단계별 작업 최적화
+- **안전 시스템**: 로봇 작동 안전 프로토콜
 
 ### 4. [CookGPT](/cook_gpt)
-AI 기반 조리 지원 시스템으로, 컴퓨터 비전과 딥러닝을 활용해 로봇의 조리 과정을 개선합니다.
-
-## 📊 시스템 아키텍처
-
-```mermaid
-graph TB
-    A[고객] --> B[키오스크 시스템]
-    A --> C[서빙 로봇<br>고객 응대 & 안내]
-    
-    subgraph "중앙 서버 시스템"
-        D[RoboDine 백엔드<br>FastAPI] <--> E[데이터베이스]
-        D <--> F[WebSocket 서비스]
-        D <--> G[비디오 스트리밍]
-    end
-    
-    subgraph "로봇 제어 시스템"
-        H[Alba Planner<br>서빙 로봇 제어] <--> I[서빙 로봇(Pinky)]
-        J[Cook Planner<br>조리 로봇 제어] <--> K[조리 로봇(myCobot)]
-    end
-    
-    subgraph "AI 처리 시스템"
-        L[CookGPT<br>조리 지원 AI] <--> M[컴퓨터 비전<br>객체 인식]
-    end
-    
-    B --> D
-    C <--> D
-    D <--> H
-    D <--> J
-    D <--> N[운영자 대시보드]
-    J <--> L
-```
+AI 기반 조리 지원 시스템으로, 다음 기능을 제공합니다:
+- **비전 시스템**: 카메라 기반 조리 과정 모니터링
+- **객체 인식**: 식재료 및 주방 도구 인식
+- **위치 추적**: 3D 공간에서 객체 위치 추적
 
 자세한 내용은 다음 기술 문서를 참조하세요:
 - [전체 시스템 아키텍처](docs/architecture.md)
@@ -118,39 +72,25 @@ graph TB
 - [API 엔드포인트](docs/api_endpoints.md)
 - [데이터베이스 스키마](docs/database_schema.md)
 - [오류 코드 참조](docs/error_codes.md)
+- [인터페이스 명세서](docs/interface_specification.md)
 
 ## ✨ 주요 기능
 
-### 🤖 로봇 서빙 시스템
-
-```mermaid
-graph LR
-    A[주문 접수] --> B[경로 계산]
-    B --> C[음식 픽업]
-    C --> D[테이블 이동]
-    D --> E[서빙 완료]
-    E --> F[충전소 복귀]
-    
-    style A fill:#f9f9f9,stroke:#333
-    style B fill:#f9f9f9,stroke:#333
-    style C fill:#f9f9f9,stroke:#333
-    style D fill:#f9f9f9,stroke:#333
-    style E fill:#f9f9f9,stroke:#333
-    style F fill:#f9f9f9,stroke:#333
-```
+### 🤖 로봇 서빙 시스템 (ALBABOT)
 
 - **주문 서빙**: 주문된 음식을 정확한 테이블로 서빙
 - **테이블 관리**: 테이블 상태 모니터링 및 고객 그룹 관리
 - **자율 주행**: 장애물 회피 및 최적 경로 계산
 - **배터리 관리**: 자동 충전 스테이션 복귀
+- **위치 추적**: 3개 좌표계(PINKY, GLOBAL, WORLD)에서의 6D 위치 추적
 
-### 👨‍🍳 로봇 조리 시스템
+### 👨‍🍳 로봇 조리 시스템 (COOKBOT)
 
 - **정밀 조리 작업**: 6축 로봇 팔을 활용한 정확한 조리 작업
 - **레시피 해석**: 표준화된 레시피 단계별 실행
-- **조리 상태 모니터링**: 컴퓨터 비전 기반 위치 상태 확인
-- **다중 주문 처리**: 여러 주문의 효율적 병렬 처리
+- **조리 상태 모니터링**: 컴퓨터 비전 기반 조리 상태 확인
 - **안전 제어**: 안전 프로토콜에 따른 로봇 작동 관리
+- **관절 제어**: 6개 관절 각도 제어 및 엔드포인트 위치 제어
 
 ### 💼 매장 관리 시스템
 
@@ -165,30 +105,6 @@ graph LR
 - **키오스크 주문**: 직관적인 터치스크린 기반 메뉴 주문 시스템
 - **실시간 상태 추적**: 주문 상태 실시간 업데이트
 - **다국어 지원**: 한국어, 영어, 중국어, 일본어 지원
-- **결제 시스템**: 다양한 결제 방식 지원 (신용카드, 모바일 결제 등)
-
-## 🔄 데이터 흐름
-
-```mermaid
-sequenceDiagram
-    participant Customer as 고객
-    participant Kiosk as 키오스크
-    participant Backend as 백엔드
-    participant Cook as 조리 로봇
-    participant Alba as 서빙 로봇
-    participant Dashboard as 대시보드
-    
-    Customer->>Kiosk: 주문 입력
-    Kiosk->>Backend: 주문 전송
-    Backend->>Dashboard: 주문 알림
-    Backend->>Cook: 조리 명령
-    Cook->>Backend: 조리 완료
-    Backend->>Alba: 서빙 명령
-    Alba->>Customer: 음식 서빙
-    Alba->>Backend: 서빙 완료
-    Backend->>Dashboard: 상태 업데이트
-    Backend->>Kiosk: 주문 완료 알림
-```
 
 ## 📡 네트워크 통신
 
@@ -198,8 +114,9 @@ RoboDine은 다양한 통신 프로토콜을 활용하여 로봇, 서버, 클라
 |---------|------|-----|----------|
 | HTTP/REST | 8000 | 데이터 CRUD, 인증 | FastAPI 백엔드 |
 | WebSocket | 3000 | 실시간 데이터 업데이트 | ConnectionManager |
-| TCP | 8001/8002 | 로봇 명령 및 상태 | RoboDineTCPHandler |
-| UDP | 8003 | 비디오 스트림, 센서 데이터 | UDP_receiver.py |
+| TCP | 8001 | ALBABOT 명령 및 상태 | Alba Manager |
+| TCP | 8002 | COOKBOT 명령 및 상태 | Cook Manager |
+| UDP | 8003 | 비디오 스트림, 센서 데이터 | CookGPT |
 | RTSP | 8554 | 실시간 비디오 스트리밍 | RTSP 서버 |
 
 ## 🖥️ 사용자 인터페이스
@@ -213,13 +130,14 @@ RoboDine은 사용자 역할에 따라 두 종류의 인터페이스를 제공�
 - 주문 및 테이블 관리
 - 재고 및 매출 분석
 - 시스템 이벤트 및 로그 확인
+- 비디오 스트리밍 관리
+- 설정 및 사용자 관리
 
 ### 키오스크 시스템
 
 고객이 직접 사용하는 주문 시스템으로, 다음과 같은 특징을 가집니다:
 - 직관적인 메뉴 탐색 및 주문 인터페이스
 - 주문 상태 실시간 추적
-- 다양한 결제 방식 지원
 - 다국어 인터페이스
 
 ## 🧪 테스트 및 품질 관리
@@ -228,6 +146,7 @@ RoboDine은 안정적인 서비스 제공을 위해 철저한 테스트 프로�
 
 - **단위 테스트**: 개별 함수 및 컴포넌트의 정확성 검증
 - **통합 테스트**: 모듈 간 상호작용 및 데이터 흐름 검증
+- **로그 모니터링**: 실시간 로그 수집 및 분석
 
 ## 👥 개발팀
 

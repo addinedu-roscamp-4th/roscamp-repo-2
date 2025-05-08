@@ -29,44 +29,6 @@ React.js 기반의 사용자 인터페이스 시스템으로, 다음과 같은 �
 
 [프론트엔드 시스템 문서 바로가기](frontend/README.md)
 
-## 🔄 시스템 통합 아키텍처
-
-RoboDine 서비스는 다양한 구성 요소 간의 원활한 통신을 위한 복합적인 아키텍처를 채택하고 있습니다:
-
-```mermaid
-graph TB
-    subgraph Frontend
-        A[운영자 대시보드] 
-        B[키오스크 UI]
-    end
-    
-    subgraph Backend
-        C[FastAPI 서버]
-        D[WebSocket 서버]
-        E[TCP/UDP 서버]
-        F[RTSP 서버]
-        G[데이터베이스]
-    end
-    
-    A <--> D
-    B <--> C
-    C <--> G
-    D <--> G
-    C <--> E
-    F --> A
-    
-    E <--> H[Alba Planner]
-    E <--> I[Cook Planner]
-    
-    class A,B frontend
-    class C,D,E,F,G backend
-    class H,I external
-    
-    classDef frontend fill:#d4f1f9,stroke:#333,stroke-width:1px
-    classDef backend fill:#d5e8d4,stroke:#333,stroke-width:1px
-    classDef external fill:#ffe6cc,stroke:#333,stroke-width:1px
-```
-
 ## 📊 데이터 흐름
 
 RoboDine 서비스 내에서의 데이터 흐름은 다음과 같습니다:
@@ -96,12 +58,3 @@ RoboDine 서비스에 대한 자세한 이해를 위해 다음 문서를 참조�
 - [WebSocket 통신 아키텍처](../docs/websocket_architecture.md)
 - [네트워크 통신 방식](../docs/network_communication.md)
 - [프로젝트 구조](../docs/project_structure.md)
-
-## 🚀 확장성 계획
-
-RoboDine 서비스는 다음과 같은 확장 계획을 가지고 있습니다:
-
-- **멀티 레스토랑 지원**: 여러 매장을 관리할 수 있는 시스템으로 확장
-- **마이크로서비스 아키텍처**: 서비스를 독립적인 마이크로서비스로 분리
-- **클라우드 네이티브**: Kubernetes 기반 컨테이너 오케스트레이션 도입
-- **고급 분석**: 빅데이터 분석 도구를 통한 비즈니스 인사이트 제공 
