@@ -275,34 +275,29 @@ graph LR
 ```
 operator/
 ├── public/              # 정적 파일
+├── __tests__/           # 테스트 파일
 ├── src/                 # 소스 코드
 │   ├── components/      # 재사용 가능한 컴포넌트
 │   │   ├── dashboard/   # 대시보드 관련 컴포넌트
 │   │   │   ├── RobotStatusPanel.jsx  # 로봇 상태 패널
 │   │   │   ├── StoreMap.jsx          # 매장 맵
 │   │   │   ├── EventTimeline.jsx     # 이벤트 타임라인
+│   │   │   ├── RobotDetailModal.jsx  # 로봇 상세 정보 모달
 │   │   │   ├── RecentOrders.jsx      # 최근 주문
 │   │   │   └── SystemStatus.jsx      # 시스템 상태
-│   │   ├── layout/      # 레이아웃 관련 컴포넌트
-│   │   │   ├── Sidebar.jsx           # 사이드바 네비게이션
-│   │   │   ├── Header.jsx            # 상단 헤더
-│   │   │   └── Footer.jsx            # 하단 푸터
-│   │   ├── robot/       # 로봇 관련 컴포넌트
-│   │   ├── order/       # 주문 관련 컴포넌트 
-│   │   ├── inventory/   # 재고 관련 컴포넌트
 │   │   ├── customer/    # 고객 관련 컴포넌트
-│   │   ├── video/       # 비디오 관련 컴포넌트
-│   │   ├── common/      # 공통 UI 컴포넌트
-│   │   └── charts/      # 차트 및 데이터 시각화 컴포넌트
+│   │   ├── Layout.jsx   # 메인 레이아웃 컴포넌트
+│   │   └── AuthLayout.jsx # 인증 페이지 레이아웃
 │   ├── contexts/        # React 컨텍스트 (상태 관리)
-│   │   ├── AuthContext.jsx       # 인증 관련 상태
-│   │   ├── RobotContext.jsx      # 로봇 상태 관리
-│   │   ├── OrderContext.jsx      # 주문 상태 관리
-│   │   ├── WebSocketContext.jsx  # 웹소켓 연결 관리
-│   │   └── ThemeContext.jsx      # UI 테마 관리
+│   │   ├── AuthContext.jsx        # 인증 관련 상태
+│   │   ├── WebSocketContext.jsx   # 웹소켓 연결 관리
+│   │   ├── HealthCheckContext.jsx # 시스템 상태 체크
+│   │   └── NotificationsContext.jsx # 알림 관리
 │   ├── pages/           # 페이지 컴포넌트
+│   │   ├── auth/        # 인증 관련 페이지
 │   │   ├── DashboardPage.jsx     # 메인 대시보드
 │   │   ├── LoginPage.jsx         # 로그인 화면
+│   │   ├── SignupPage.jsx        # 회원가입 화면
 │   │   ├── RobotAdminPage.jsx    # 로봇 관리
 │   │   ├── OrdersPage.jsx        # 주문 관리
 │   │   ├── InventoryPage.jsx     # 재고 관리
@@ -312,28 +307,14 @@ operator/
 │   │   ├── SystemPage.jsx        # 시스템 관리
 │   │   └── SettingsPage.jsx      # 설정
 │   ├── services/        # API 서비스
-│   │   ├── api.js       # API 클라이언트 설정
-│   │   ├── authService.js  # 인증 관련 API
-│   │   ├── robotService.js # 로봇 관련 API
-│   │   ├── orderService.js # 주문 관련 API
-│   │   ├── inventoryService.js # 재고 관련 API
-│   │   ├── customerService.js # 고객 관련 API
-│   │   ├── videoService.js  # 비디오 관련 API
-│   │   └── websocket.js    # WebSocket 연결 관리
-│   ├── utils/           # 유틸리티 함수
-│   │   ├── formatters.js  # 데이터 포맷팅
-│   │   ├── validators.js  # 입력 검증
-│   │   ├── dateUtils.js   # 날짜/시간 관련
-│   │   └── storageUtils.js # 로컬 스토리지 관리
+│   │   └── api.js       # API 클라이언트 설정
 │   ├── config/          # 설정 파일
-│   │   ├── apiConfig.js   # API 엔드포인트 설정
-│   │   └── constants.js   # 상수 및 열거형
+│   │   └── api.js       # API 엔드포인트 설정
 │   ├── styles/          # 스타일 관련 파일
-│   │   ├── tailwind.css   # Tailwind 스타일
-│   │   └── custom.css     # 커스텀 스타일
 │   ├── App.jsx          # 앱 진입점 및 라우팅
 │   ├── index.jsx        # React 렌더링
 │   └── index.css        # 전역 스타일
 ├── package.json         # 프로젝트 의존성 및 스크립트
+├── package-lock.json    # 의존성 버전 관리
 └── tailwind.config.js   # Tailwind CSS 설정
 ```
