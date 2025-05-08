@@ -13,12 +13,16 @@ router = APIRouter()
 
 # --- Settings Models ---
 class AdminSettingsResponse(BaseModel):
+    id: Optional[int] = None
+    store_name: Optional[str] = None
     operation_start: str
     operation_end: str
     inventory_threshold: int
     alert_settings: Dict
 
 class AdminSettingsUpdateRequest(BaseModel):
+    id: Optional[int] = None
+    store_name: Optional[str] = None
     operation_start: Optional[str] = None
     operation_end: Optional[str] = None
     inventory_threshold: Optional[int] = None
@@ -43,6 +47,8 @@ def get_settings(db: Session = Depends(get_db)):
         db.refresh(settings)
     
     return AdminSettingsResponse(
+        id=settings.id,
+        store_name=settings.store_name,
         operation_start=settings.operation_start,
         operation_end=settings.operation_end,
         inventory_threshold=settings.inventory_threshold,
@@ -65,15 +71,6 @@ def update_settings(
     # Get current settings
     settings = db.query(AdminSettings).first()
     
-    # If no settings exist, create default settings
-    if not settings:
-        settings = AdminSettings(
-            operation_start="08:00",
-            operation_end="22:00",
-            inventory_threshold=10,
-            alert_settings={"low_stock": True}
-        )
-    
     # Update settings
     if settings_data.operation_start:
         settings.operation_start = settings_data.operation_start
@@ -83,13 +80,12 @@ def update_settings(
     
     if settings_data.inventory_threshold is not None:
         settings.inventory_threshold = settings_data.inventory_threshold
+
+    if settings_data.store_name:
+        settings.store_name = settings_data.store_name
     
     if settings_data.alert_settings:
-        # Merge with existing settings
-        if settings.alert_settings:
-            settings.alert_settings.update(settings_data.alert_settings)
-        else:
-            settings.alert_settings = settings_data.alert_settings
+        settings.alert_settings = settings_data.alert_settings
     
     db.add(settings)
     db.commit()

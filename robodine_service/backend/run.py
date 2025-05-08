@@ -16,17 +16,17 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlmodel import SQLModel, Session, select, case
 from sqlalchemy.orm import joinedload
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.routes import (
     poses, websockets, streaming, inventories,
     robot, albabot, cookbot, auth, users, settings, customers,
     tables, kiosks, orders, menu, events, emergencies, 
-    video_streams
+    video_streams, face_recognitions
 )
 from app.routes.websockets import router as websocket_router
 from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update, broadcast_systemlogs_update, broadcast_customers_update
 from app.routes.websockets import manager
-from app.routes.streaming import router as streaming_router
 from app.core.db_config import engine
 from app.core.database import get_session
 from app.models.robot import Robot
@@ -53,8 +53,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 # 폴링 주기 설정 (비상 시 폴백용, 초 단위)
 POLLING_INTERVAL = 3
 
-# 비디오 저장 디렉토리
-VIDEOS_DIR = "videos"
 
 # 마지막 브로드캐스트 시간 추적 (중복 방지용)
 last_broadcast = {
@@ -699,6 +697,13 @@ app.add_middleware(
     allow_methods=["*"],  # 모든 HTTP 메서드를 허용
     allow_headers=["*"],  # 모든 헤더를 허용
 )
+# 파일 크기 제한 늘리기
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,  # 최소 압축 크기 (예시)
+)
+# 비디오 저장 디렉토리
+VIDEOS_DIR = "/home/addinedu/dev_ws/roscamp-repo-2/robodine_service/backend/videos"
 
 # 비디오 파일 정적 서비스
 app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
@@ -743,9 +748,13 @@ class RoboDineTCPHandler(socketserver.BaseRequestHandler):
 # Include routers - API path prefix for all endpoints
 API_PREFIX = "/api"
 
+#health check
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # Include websocket and streaming routers (these don't need the API prefix)
 app.include_router(websocket_router, tags=["websocket"])
-app.include_router(streaming_router, prefix="/stream", tags=["streaming"]) # RTSP 스트리밍 관련 라우터
 
 # Include API routers
 app.include_router(inventories.router, prefix=f"{API_PREFIX}/inventory", tags=["inventory"])
@@ -768,6 +777,7 @@ app.include_router(menu.router, prefix=f"{API_PREFIX}/menu", tags=["menu"])
 app.include_router(events.router, prefix=f"{API_PREFIX}/events", tags=["events"])
 app.include_router(emergencies.router, prefix=f"{API_PREFIX}/emergencies", tags=["emergencies"])
 app.include_router(video_streams.router, prefix=f"{API_PREFIX}/video-streams", tags=["video_streams"])
+app.include_router(face_recognitions.router, prefix=f"{API_PREFIX}/face-recognitions", tags=["face_recognitions"])
 
 # --- TCP SERVER -----------------------------------------------------------
 def start_tcp_server(host: str, port: int):

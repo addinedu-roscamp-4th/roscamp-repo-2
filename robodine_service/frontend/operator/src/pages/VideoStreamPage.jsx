@@ -1,434 +1,545 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Video, Camera, Settings, RefreshCw, AlertTriangle } from 'react-feather';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
 import { useWebSockets } from '../contexts/WebSocketContext';
-
-// 비디오 스트림 카드 컴포넌트
-const VideoStreamCard = ({ stream, onClick }) => {
-  // 스트림 상태 확인 (대소문자 고려)
-  const streamActive = stream?.status?.toUpperCase() === 'ACTIVE';
-  
-  return (
-    <div 
-      className="bg-white p-4 rounded-lg shadow cursor-pointer hover:shadow-md transition-shadow"
-      onClick={() => onClick(stream.id)}
-    >
-      <div className="mb-2 flex justify-between items-center">
-        <h3 className="font-medium text-gray-800">{getStreamName(stream)}</h3>
-        <div className={`px-2 py-1 rounded-full text-xs flex items-center ${
-          streamActive 
-            ? 'bg-green-100 text-green-800' 
-            : 'bg-red-100 text-red-800'
-        }`}>
-          <span className={`w-2 h-2 rounded-full mr-1 ${streamActive ? 'bg-green-500' : 'bg-red-500'}`}></span>
-          {streamActive ? '활성' : '비활성'}
-        </div>
-      </div>
-      
-      <div className="h-32 bg-gray-200 rounded mb-2 flex items-center justify-center">
-        <Camera size={32} className="text-gray-400" />
-      </div>
-      
-      <p className="text-xs text-gray-600 mb-1">{getStreamDescription(stream)}</p>
-      <p className="text-xs text-gray-500">
-        마지막 확인: {stream.last_checked ? new Date(stream.last_checked).toLocaleString('ko-KR') : '정보 없음'}
-      </p>
-    </div>
-  );
-};
-
-// 비디오 스트림 상세 보기 컴포넌트
-const VideoStreamDetail = ({ stream, onClose }) => {
-  // 녹화 경로 표시
-  const recordingInfo = useMemo(() => {
-    if (!stream) return null;
-    
-    return {
-      path: stream.recording_path || '녹화 경로 없음',
-      started: stream.recording_started_at ? new Date(stream.recording_started_at).toLocaleString('ko-KR') : '-',
-      ended: stream.recording_ended_at ? new Date(stream.recording_ended_at).toLocaleString('ko-KR') : '-',
-    };
-  }, [stream]);
-  
-  if (!stream) return null;
-  
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-medium">{getStreamName(stream)}</h2>
-          <button 
-            className="text-gray-500 hover:text-gray-700"
-            onClick={onClose}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        
-        <div className="p-4">
-          <div className="mb-6">
-            <div className="bg-gray-200 h-64 rounded-lg flex items-center justify-center mb-4">
-              <Camera size={48} className="text-gray-400" />
-              <p className="ml-3 text-gray-500">녹화된 영상 정보만 확인 가능합니다</p>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-1">소스 타입</h3>
-              <p className="text-gray-900">{stream.source_type || '-'}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-1">소스 ID</h3>
-              <p className="text-gray-900">{stream.source_id || '-'}</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-1">상태</h3>
-              <p className={`px-2 py-1 rounded-full text-xs inline-flex items-center ${
-                stream.status?.toUpperCase() === 'ACTIVE' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                <span className={`w-2 h-2 rounded-full mr-1 ${stream.status?.toUpperCase() === 'ACTIVE' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                {stream.status?.toUpperCase() === 'ACTIVE' ? '활성' : '비활성'}
-              </p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-1">마지막 확인</h3>
-              <p className="text-gray-900">{stream.last_checked ? new Date(stream.last_checked).toLocaleString('ko-KR') : '정보 없음'}</p>
-            </div>
-          </div>
-          
-          <div className="bg-gray-50 p-4 rounded-lg mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">녹화 정보</h3>
-            <div className="grid grid-cols-1 gap-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">저장 경로:</span>
-                <span className="text-gray-900 font-mono text-sm">{recordingInfo.path}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">녹화 시작:</span>
-                <span className="text-gray-900">{recordingInfo.started}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">녹화 종료:</span>
-                <span className="text-gray-900">{recordingInfo.ended}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// 스트림 이름 생성 함수
-const getStreamName = (stream) => {
-  if (!stream) return '';
-  
-  const sourceType = stream.source_type || '';
-  
-  switch (sourceType) {
-    case 'GLOBAL_CAM':
-      return '매장 전체 카메라';
-    case 'COOKBOT':
-      return '쿡봇 카메라';
-    case 'PINKY':
-      return '알바봇 카메라';
-    default:
-      return `${sourceType} ${stream.source_id || ''}`;
-  }
-};
-
-// 스트림 설명 생성 함수
-const getStreamDescription = (stream) => {
-  if (!stream) return '';
-  
-  const sourceType = stream.source_type || '';
-  
-  switch (sourceType) {
-    case 'GLOBAL_CAM':
-      return '매장 전체를 촬영하는 메인 카메라';
-    case 'COOKBOT':
-      return '조리 로봇 시점 카메라';
-    case 'PINKY':
-      return '서빙 로봇 시점 카메라';
-    default:
-      return `${sourceType} 비디오 스트림`;
-  }
-};
+import { 
+  Video,
+  RefreshCw, 
+  Clock,
+  Calendar,
+  Download,
+  AlignLeft,
+  Filter,
+  ExternalLink,
+  PlayCircle,
+  StopCircle,
+  Eye,
+  XCircle,
+  AlertTriangle,
+  Wifi,
+  WifiOff,
+  RotateCw
+} from 'lucide-react';
 
 const VideoStreamPage = () => {
-  // 스트림 데이터 상태 관리
-  const [streams, setStreams] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedStreamId, setSelectedStreamId] = useState(null);
-  const [filterType, setFilterType] = useState('ALL');
-  const { apiCall } = useAuth();
-  
-  // 데이터 참조 저장
-  const streamsDataRef = useRef([]);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
-  const [isManualLoading, setIsManualLoading] = useState(false);
-  
-  // WebSocket 컨텍스트 사용
+  const [activeTab, setActiveTab] = useState('ALL');
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const { data, errors, connected, refreshTopic } = useWebSockets();
-  const wsStreams = data.video_streams || [];
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [videoLoadError, setVideoLoadError] = useState(false);
+  const refreshAttempts = useRef(0);
+  const maxRefreshAttempts = 3;
+  const refreshTimeoutRef = useRef(null);
   
-  // 로딩 상태 통합
-  const isDataLoading = !initialLoadDone || isManualLoading;
-  const dataError = error || (errors.video_streams ? String(errors.video_streams) : null);
-  
-  // 선택된 스트림 찾기
-  const selectedStream = useMemo(() => {
-    if (!selectedStreamId) return null;
-    return streams.find(stream => stream.id === selectedStreamId);
-  }, [selectedStreamId, streams]);
-  
-  // 필터링된 스트림 목록
-  const filteredStreams = useMemo(() => {
-    if (filterType === 'ALL') return streams;
-    return streams.filter(stream => stream.source_type === filterType);
-  }, [streams, filterType]);
-  
-  // 필터 옵션
-  const filterOptions = useMemo(() => {
-    const options = [{ value: 'ALL', label: '모든 카메라' }];
-    
-    // 스트림 데이터에서 고유한 소스 타입 추출
-    const uniqueTypes = [...new Set(streams.map(stream => stream.source_type))];
-    
-    // 소스 타입별 라벨 추가
-    uniqueTypes.forEach(type => {
-      if (!type) return;
-      
-      let label = '';
-      switch (type) {
-        case 'GLOBAL_CAM':
-          label = '매장 전체 카메라';
-          break;
-        case 'COOKBOT':
-          label = '쿡봇 카메라';
-          break;
-        case 'PINKY':
-          label = '알바봇 카메라';
-          break;
-        default:
-          label = type;
-      }
-      
-      options.push({ value: type, label });
-    });
-    
-    return options;
-  }, [streams]);
-  
-  // WebSocket 데이터 처리
+  // WebSocket 연결 상태를 로그에서 확인
   useEffect(() => {
-    if (wsStreams && wsStreams.length > 0) {
+    try {
+      const logKey = `ws_log_video_streams`;
+      const logs = JSON.parse(localStorage.getItem(logKey) || '[]');
+      if (logs.length > 0) {
+        console.debug('비디오 스트림 웹소켓 로그:', logs);
+      }
+    } catch (e) {
+      // 무시
+    }
+  }, []);
+  
+  // 비디오 스트림 데이터 - 에러 방어 로직 추가
+  const videoStreams = useMemo(() => {
+    // 에러 없이 데이터가 있는 경우만 사용
+    if (Array.isArray(data.video_streams) && data.video_streams.length > 0) {
+      return data.video_streams;
+    }
+    
+    // 로컬 스토리지에 캐시된 데이터가 있으면 사용
+    const cachedData = localStorage.getItem('cachedVideoStreams');
+    if (cachedData) {
       try {
-        // 데이터 일관성 확인
-        const validData = wsStreams.every(stream => 
-          stream.id !== undefined && 
-          stream.source_type !== undefined
-        );
-        
-        if (!validData) {
-          console.error('비디오 스트림 데이터 형식이 유효하지 않습니다:', wsStreams);
-          return;
-        }
-        
-        // 첫 로드 시 데이터 저장
-        if (!initialLoadDone) {
-          streamsDataRef.current = [...wsStreams];
-          setStreams(wsStreams);
-          setInitialLoadDone(true);
-          setIsManualLoading(false);
-          setError(null);
-          return;
-        }
-        
-        // 기존 데이터와 새 데이터 병합
-        const mergedStreams = [...streamsDataRef.current];
-        
-        // ID 기준으로 맵 생성
-        const streamsMap = new Map();
-        mergedStreams.forEach(stream => {
-          streamsMap.set(stream.id, stream);
-        });
-        
-        // 새 데이터로 맵 업데이트
-        wsStreams.forEach(stream => {
-          streamsMap.set(stream.id, stream);
-        });
-        
-        // 최종 데이터 배열 생성
-        const updatedStreams = Array.from(streamsMap.values());
-        
-        // 상태 업데이트
-        streamsDataRef.current = updatedStreams;
-        setStreams(updatedStreams);
-        setIsManualLoading(false);
-        setError(null);
-      } catch (err) {
-        console.error('비디오 스트림 데이터 처리 중 오류:', err);
-        setError('데이터 처리 중 오류가 발생했습니다.');
-        setIsManualLoading(false);
+        return JSON.parse(cachedData);
+      } catch (e) {
+        console.error('캐시된 비디오 스트림 데이터 파싱 오류:', e);
       }
     }
-  }, [wsStreams, initialLoadDone]);
-  
-  // API로 스트림 데이터 가져오기
-  const fetchStreams = useCallback(async () => {
-    setIsManualLoading(true);
-    setError(null);
+    
+    return [];
+  }, [data.video_streams]);
+
+  // 비디오 스트림 데이터 캐싱
+  useEffect(() => {
+    if (Array.isArray(data.video_streams) && data.video_streams.length > 0) {
+      localStorage.setItem('cachedVideoStreams', JSON.stringify(data.video_streams));
+    }
+  }, [data.video_streams]);
+
+  // 스트림 새로고침 핸들러 - 디바운스 및 오류 처리 개선
+  const handleRefreshStreams = useCallback(() => {
+    const now = Date.now();
+    const DEBOUNCE_TIME = 3000; // 3초 디바운스
+    
+    if (now - lastRefreshTime < DEBOUNCE_TIME) {
+      return; // 너무 빠른 재요청 방지
+    }
+    
+    setIsLoading(true);
+    setLastRefreshTime(now);
+    
     try {
-      // API 호출
-      const data = await apiCall('/api/video-streams');
+      // 최대 재시도 횟수 초과 시 일시적으로 새로고침 중단
+      if (refreshAttempts.current >= maxRefreshAttempts) {
+        setErrorMessage('연결 오류가 지속됩니다. 서버 상태를 확인해주세요.');
+        setIsLoading(false);
+        
+        // 30초 후 재시도 카운터 초기화
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+        }
+        
+        refreshTimeoutRef.current = setTimeout(() => {
+          refreshAttempts.current = 0;
+          setErrorMessage(null);
+        }, 30000);
+        
+        return;
+      }
       
-      // 데이터 처리 및 저장
-      if (Array.isArray(data) && data.length > 0) {
-        streamsDataRef.current = data;
-        setStreams(data);
-        setInitialLoadDone(true);
-      } else {
-        console.log('API에서 반환된 비디오 스트림 데이터가 없습니다.');
+      // WebSocket 컨텍스트의 refreshTopic 호출
+      refreshTopic('video_streams');
+      
+      // 웹소켓 연결 성공 시 오류 초기화
+      if (connected.video_streams) {
+        setErrorMessage(null);
+        refreshAttempts.current = 0;
       }
     } catch (err) {
-      console.error('비디오 스트림 정보를 불러올 수 없습니다:', err);
-      setError('비디오 스트림 정보를 불러올 수 없습니다');
-    } finally {
-      setIsManualLoading(false);
+      console.error('스트림 데이터 요청 실패:', err);
+      setErrorMessage('데이터 요청 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      refreshAttempts.current++;
     }
-  }, [apiCall]);
-  
-  // 컴포넌트 마운트 시 초기 데이터 로드
+    
+    // 일정 시간 후 로딩 상태 해제 (데이터가 오지 않더라도)
+    const loadingTimeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 3000);
+    
+    return () => clearTimeout(loadingTimeout);
+  }, [refreshTopic, lastRefreshTime, connected.video_streams]);
+
+  // 웹소켓 연결 상태 모니터링
   useEffect(() => {
-    // WebSocket 연결 갱신
-    refreshTopic('video_streams');
-    
-    // 초기 데이터 로드
-    if (!wsStreams || wsStreams.length === 0) {
-      fetchStreams();
+    if (!connected.video_streams) {
+      // 연결이 끊어진 경우, WebSocketContext에서 자동으로 재연결 시도
+      if (!errorMessage || !errorMessage.includes('연결')) {
+        setErrorMessage('비디오 스트림 서버에 연결되지 않았습니다. 자동으로 재연결을 시도합니다...');
+      }
+    } else {
+      // 연결이 복구된 경우 
+      if (errorMessage && errorMessage.includes('연결')) {
+        setErrorMessage(null);
+        refreshAttempts.current = 0;
+        
+        // 연결이 복구되면 자동으로 데이터 갱신
+        if (Date.now() - lastRefreshTime > 5000) {
+          handleRefreshStreams();
+        }
+      }
+    }
+  }, [connected.video_streams, errorMessage, handleRefreshStreams, lastRefreshTime]);
+  
+  // 페이지 초기 로드 및 WebSocket 오류 처리
+  useEffect(() => {
+    // WebSocketContext에서 보고된 오류 처리
+    if (errors.video_streams) {
+      setErrorMessage(`서버 연결 오류: ${errors.video_streams}`);
+    }
+  }, [errors.video_streams]);
+  
+  // 비디오 로드 오류 처리
+  const handleVideoError = () => {
+    setVideoLoadError(true);
+  };
+
+  // 최초 접속 시 데이터 로드 - 타임아웃 및 에러 처리 개선
+  useEffect(() => {
+    // 최초 1회 로드
+    if (!isLoading && videoStreams.length === 0) {
+      handleRefreshStreams();
     }
     
-    // 1분마다 자동 새로고침
+    // 자동 갱신 주기 설정 (60초)
     const refreshInterval = setInterval(() => {
-      refreshTopic('video_streams');
+      // 재시도 횟수가 최대치를 초과하지 않은 경우에만 자동 갱신
+      if (connected.video_streams && refreshAttempts.current < maxRefreshAttempts) {
+        handleRefreshStreams();
+      }
     }, 60000);
     
-    return () => clearInterval(refreshInterval);
-  }, [refreshTopic, fetchStreams, wsStreams]);
-  
-  // 스트림 새로고침 핸들러
-  const handleRefresh = () => {
-    setIsManualLoading(true);
-    refreshTopic('video_streams');
-    fetchStreams();
+    // 연결 되지 않은 경우 - 초기 타임아웃 처리
+    const initialConnectionTimer = setTimeout(() => {
+      if (!connected.video_streams && videoStreams.length === 0) {
+        setIsLoading(false);
+        setErrorMessage('데이터 서버에 연결할 수 없습니다. 네트워크 상태를 확인하세요.');
+      }
+    }, 5000);
+    
+    return () => {
+      clearInterval(refreshInterval);
+      clearTimeout(initialConnectionTimer);
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, [connected.video_streams, handleRefreshStreams, isLoading, videoStreams.length]);
+
+  // 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // 페이지 새로고침
+  const handlePageRefresh = () => {
+    window.location.reload();
   };
-  
-  // 스트림 선택 핸들러
-  const handleSelectStream = (streamId) => {
-    setSelectedStreamId(streamId);
+
+  // 고유한 source_type 목록 추출
+  const sourceTypes = useMemo(() => {
+    const types = new Set(videoStreams.map(stream => stream.source_type));
+    return ['ALL', ...Array.from(types)];
+  }, [videoStreams]);
+
+  // 활성 탭에 따라 필터링된 스트림
+  const filteredStreams = useMemo(() => {
+    if (!videoStreams.length) return [];
+    
+    return activeTab === 'ALL' 
+      ? videoStreams 
+      : videoStreams.filter(stream => stream.source_type === activeTab);
+  }, [videoStreams, activeTab]);
+
+  // 비디오 선택 핸들러
+  const handleVideoSelect = (video) => {
+    setSelectedVideo(video);
+    setIsPlayerOpen(true);
+    setVideoLoadError(false); // 새 비디오 선택 시 오류 상태 초기화
   };
-  
-  // 모달 닫기 핸들러
-  const handleCloseDetail = () => {
-    setSelectedStreamId(null);
+
+  // 비디오 플레이어 닫기
+  const handleClosePlayer = () => {
+    setIsPlayerOpen(false);
+    setSelectedVideo(null);
+    setVideoLoadError(false);
+  };
+
+  // 날짜 포맷팅
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(date);
+  };
+
+  // 상태 표시 태그
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      ACTIVE: { color: 'bg-green-100 text-green-800 border-green-200', icon: <PlayCircle size={14} className="mr-1" /> },
+      INACTIVE: { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: <StopCircle size={14} className="mr-1" /> },
+      ERROR: { color: 'bg-red-100 text-red-800 border-red-200', icon: <XCircle size={14} className="mr-1" /> }
+    };
+
+    const config = statusConfig[status] || statusConfig.INACTIVE;
+    
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.color}`}>
+        {config.icon}
+        {status}
+      </span>
+    );
   };
 
   return (
     <Layout>
       <div className="container mx-auto p-4 sm:p-6">
-        <div className="flex justify-between items-center mb-6">
+        <div className="mb-6 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-              <Video className="text-blue-600 mr-2" size={28} />
-              비디오 스트림
+              <Video className="mr-2" />
+              영상 스트림 관리
             </h1>
-            <p className="text-gray-600">카메라별 녹화 정보를 확인합니다.</p>
-          </div>
-          <button 
-            onClick={handleRefresh}
-            className="flex items-center px-3 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100"
-            disabled={isDataLoading}
-          >
-            <RefreshCw size={16} className={`mr-1 ${isDataLoading ? 'animate-spin' : ''}`} />
-            {isDataLoading ? '로딩 중...' : '새로고침'}
-          </button>
-        </div>
-
-        {/* 필터 선택 */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="font-medium text-gray-700">카메라 유형:</div>
-            <div className="flex flex-wrap gap-2">
-              {filterOptions.map(option => (
-                <button
-                  key={option.value}
-                  className={`px-3 py-1.5 rounded-full text-sm ${
-                    filterType === option.value
-                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                      : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
-                  }`}
-                  onClick={() => setFilterType(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 text-gray-600">
+              <p>모든 영상 스트림을 확인하고 관리합니다.</p>
+              {connected.video_streams ? (
+                <span className="flex items-center text-green-600 text-xs bg-green-50 px-2 py-0.5 rounded-full">
+                  <Wifi size={12} className="mr-1" />
+                  연결됨
+                </span>
+              ) : (
+                <span className="flex items-center text-red-600 text-xs bg-red-50 px-2 py-0.5 rounded-full">
+                  <WifiOff size={12} className="mr-1" />
+                  연결 끊김
+                </span>
+              )}
             </div>
           </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePageRefresh}
+              className="p-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-2"
+              title="페이지 새로고침"
+            >
+              <RotateCw size={16} />
+            </button>
+            <button
+              onClick={handleRefreshStreams}
+              className="p-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-2"
+              disabled={isLoading || Date.now() - lastRefreshTime < 3000 || refreshAttempts.current >= maxRefreshAttempts}
+            >
+              <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+              {isLoading ? "로딩 중" : "새로고침"}
+            </button>
+          </div>
         </div>
 
-        {/* 에러 메시지 */}
-        {dataError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center">
-            <AlertTriangle className="mr-2" size={20} />
-            {dataError}
+        {/* 오류 메시지 표시 */}
+        {errorMessage && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-md p-4 flex items-start">
+            <AlertTriangle className="text-yellow-500 mr-3 mt-0.5 flex-shrink-0" size={20} />
+            <div>
+              <h3 className="font-medium text-yellow-700">연결 상태 알림</h3>
+              <p className="text-yellow-600 text-sm mt-1">{errorMessage}</p>
+              {(refreshAttempts.current >= maxRefreshAttempts || errors.video_streams?.includes('최대 시도 횟수')) && (
+                <div className="mt-2">
+                  <p className="text-yellow-600 text-sm">
+                    연결 재시도 횟수가 초과되었습니다. 페이지를 새로고침 하거나 잠시 후 다시 시도해주세요.
+                  </p>
+                  <button 
+                    onClick={handlePageRefresh}
+                    className="mt-2 text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded flex items-center gap-1 w-fit"
+                  >
+                    <RotateCw size={12} />
+                    페이지 새로고침
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* 컨텐츠 영역 */}
-        {isDataLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        {/* 탭 네비게이션 */}
+        <div className="mb-6 overflow-x-auto">
+          <div className="flex space-x-1 border-b border-gray-200">
+            {sourceTypes.map((type) => (
+              <button
+                key={type}
+                className={`px-4 py-2 font-medium text-sm ${
+                  activeTab === type
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => setActiveTab(type)}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 비디오 스트림 그리드 */}
+        {isLoading && videoStreams.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-4 text-gray-600">영상 스트림 정보를 불러오는 중...</p>
+          </div>
+        ) : errors.video_streams && videoStreams.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <XCircle className="mx-auto h-12 w-12 text-red-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900">오류가 발생했습니다</h3>
+            <p className="mt-2 text-gray-500">{errors.video_streams}</p>
+            <button 
+              onClick={handlePageRefresh}
+              className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded flex items-center gap-2 mx-auto"
+            >
+              <RotateCw size={16} />
+              페이지 새로고침
+            </button>
           </div>
         ) : filteredStreams.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <Camera size={48} className="mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-medium text-gray-900 mb-1">비디오 스트림 없음</h3>
-            <p className="text-gray-500">
-              {filterType !== 'ALL' 
-                ? '선택한 필터에 맞는 비디오 스트림이 없습니다.' 
-                : '등록된 비디오 스트림이 없습니다.'}
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <Video className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900">영상 스트림이 없습니다</h3>
+            <p className="mt-2 text-gray-500">
+              {activeTab !== 'ALL' 
+                ? `${activeTab} 타입의 스트림이 없습니다.` 
+                : '등록된 영상 스트림이 없습니다.'}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredStreams.map(stream => (
-              <VideoStreamCard 
-                key={stream.id} 
-                stream={stream} 
-                onClick={handleSelectStream}
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredStreams.map((stream) => (
+              <div key={stream.id} className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="p-4 border-b border-gray-200">
+                  <div className="flex justify-between items-start">
+                    <h3 className="font-medium text-gray-900 truncate flex items-center">
+                      <Video size={18} className="mr-2 text-gray-500" />
+                      {stream.source_type} #{stream.source_id}
+                    </h3>
+                    {getStatusBadge(stream.status)}
+                  </div>
+                </div>
+                
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="flex items-start">
+                      <AlignLeft size={16} className="mr-2 mt-0.5 text-gray-500" />
+                      <div>
+                        <p className="text-xs text-gray-500">스트림 ID</p>
+                        <p className="text-sm font-medium">{stream.id}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <Clock size={16} className="mr-2 mt-0.5 text-gray-500" />
+                      <div>
+                        <p className="text-xs text-gray-500">마지막 확인</p>
+                        <p className="text-sm">{formatDate(stream.last_checked)}</p>
+                      </div>
+                    </div>
+                    
+                    {stream.recording_path && (
+                      <div className="flex items-start">
+                        <Calendar size={16} className="mr-2 mt-0.5 text-gray-500" />
+                        <div>
+                          <p className="text-xs text-gray-500">녹화 기간</p>
+                          <p className="text-sm">
+                            {formatDate(stream.recording_started_at)} ~ 
+                            <br />
+                            {formatDate(stream.recording_ended_at)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-white flex justify-between items-center">
+                  {stream.recording_path ? (
+                    <button
+                      onClick={() => handleVideoSelect(stream)}
+                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                    >
+                      <Eye size={16} className="mr-1" />
+                      녹화 영상 보기
+                    </button>
+                  ) : (
+                    <span className="text-gray-400 text-sm">녹화 영상 없음</span>
+                  )}
+                  
+                  {stream.url && (
+                    <a
+                      href={stream.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-gray-600 hover:text-gray-800 text-sm flex items-center"
+                    >
+                      <ExternalLink size={16} className="mr-1" />
+                      원본 스트림
+                    </a>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}
         
-        {/* 스트림 상세 모달 */}
-        {selectedStream && (
-          <VideoStreamDetail 
-            stream={selectedStream}
-            onClose={handleCloseDetail}
-          />
+        {/* 비디오 플레이어 모달 */}
+        {isPlayerOpen && selectedVideo && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="border-b px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                  <Video className="mr-2" size={20} />
+                  {selectedVideo.source_type} #{selectedVideo.source_id} 녹화 영상
+                </h2>
+                <button 
+                  onClick={handleClosePlayer}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+              
+              <div className="p-4 flex-grow overflow-auto">
+                {videoLoadError ? (
+                  <div className="aspect-video bg-gray-100 flex items-center justify-center rounded overflow-hidden">
+                    <div className="text-center p-6">
+                      <AlertTriangle className="mx-auto h-12 w-12 text-red-400 mb-2" />
+                      <h3 className="text-lg font-medium text-gray-900">영상을 불러올 수 없습니다</h3>
+                      <p className="mt-2 text-gray-500">녹화 영상 파일에 접근할 수 없습니다. 서버 관리자에게 문의하세요.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-black relative rounded overflow-hidden">
+                    <video
+                      className="absolute inset-0 w-full h-full object-contain"
+                      controls
+                      autoPlay
+                      src={`http://localhost:8000/${selectedVideo.recording_path}`}
+                      onError={handleVideoError}
+                    />
+                  </div>
+                )}
+
+                <div className="mt-4 flex items-center">
+                  <p className="text-sm text-gray-500 mr-2">영상 소스 URL:</p>
+                  <a
+                    href={selectedVideo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm"
+                  >
+                    {`http://localhost:8000/${selectedVideo.recording_path}`}
+                  </a>
+                </div>
+                
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">녹화 시작 시간</p>
+                    <p className="text-lg font-medium">{formatDate(selectedVideo.recording_started_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">녹화 종료 시간</p>
+                    <p className="text-lg font-medium">{formatDate(selectedVideo.recording_ended_at)}</p>
+                  </div>
+                </div>
+                
+                <div className="mt-4 border-t pt-4">
+                  <a
+                    href={`/${selectedVideo.recording_path}`}
+                    download
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    <Download size={16} className="mr-2" />
+                    영상 다운로드
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </Layout>
   );
 };
 
-export default VideoStreamPage; 
+export default VideoStreamPage;

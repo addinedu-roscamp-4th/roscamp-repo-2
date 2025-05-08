@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  Menu, X, Home, User, Settings, Package, 
+  Menu, X, Home, Settings, Package, 
   Database, Bell, LogOut, Monitor, AlertOctagon,
-  Coffee, Users, Video, Server, CloudLightning, AlertTriangle, ShoppingCart
+  Coffee, Users, Video, Server, CloudLightning, AlertTriangle, ShoppingCart, RefreshCw
 } from 'react-feather';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationsContext';
+import { useHealthCheck } from '../contexts/HealthCheckContext';
 
 const Header = ({ toggleSidebar }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, message: '로봇 #2 배터리 부족', type: 'warning', time: '10분 전' },
-    { id: 2, message: '테이블 #5 주문 완료', type: 'info', time: '15분 전' }
-  ]);
   const [showNotifications, setShowNotifications] = useState(false);
   const { currentUser, logout } = useAuth();
+  const notificationsContext = useNotifications();
   const navigate = useNavigate();
+  
+  // 방어적 프로그래밍: notificationsContext가 없는 경우를 처리
+  const notifications = notificationsContext?.notifications || [];
+  const unreadCount = notificationsContext?.unreadCount || 0;
+  const markAsRead = notificationsContext?.markAsRead || (() => {});
+  const markAllAsRead = notificationsContext?.markAllAsRead || (() => {});
 
   const handleLogout = () => {
     logout();
@@ -23,8 +28,61 @@ const Header = ({ toggleSidebar }) => {
   };
 
   const clearNotifications = () => {
-    setNotifications([]);
+    markAllAsRead();
     setShowNotifications(false);
+  };
+
+  // 알림 클릭 처리
+  const handleNotificationClick = (notification) => {
+    markAsRead(notification.id);
+    // 알림 타입에 따라 다른 페이지로 이동
+    if (notification.source === 'systemlog') {
+      navigate('/');  // 시스템 로그가 표시되는 대시보드로 이동
+    }
+  };
+
+  // 알림 아이콘 가져오기
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case 'INFO':
+        return <Server className="text-blue-500" size={20} />;
+      case 'WARNING':
+        return <AlertTriangle className="text-yellow-500" size={20} />;
+      case 'ERROR':
+        return <AlertOctagon className="text-red-500" size={20} />;
+      case 'DEBUG':
+        return <Database className="text-green-500" size={20} />;
+      default:
+        return <Bell className="text-gray-500" size={20} />;
+    }
+  };
+
+  // 알림 시간 포맷팅
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return '';
+    
+    try {
+      const now = new Date();
+      const date = new Date(timestamp);
+      
+      if (isNaN(date.getTime())) return '';
+      
+      const diff = Math.floor((now - date) / 1000);  // 초 단위 차이
+      
+      if (diff < 60) return `${diff}초 전`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+      
+      return date.toLocaleString('ko-KR', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      console.error('시간 포맷팅 오류:', err);
+      return '';
+    }
   };
 
   return (
@@ -64,9 +122,9 @@ const Header = ({ toggleSidebar }) => {
               className="p-2 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 relative"
             >
               <Bell size={20} />
-              {notifications.length > 0 && (
+              {unreadCount > 0 && (
                 <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                  {notifications.length}
+                  {unreadCount}
                 </span>
               )}
             </button>
@@ -86,9 +144,27 @@ const Header = ({ toggleSidebar }) => {
                   {notifications.length > 0 ? (
                     <div>
                       {notifications.map(notification => (
-                        <div key={notification.id} className="px-4 py-3 hover:bg-gray-50 border-b last:border-0">
-                          <p className="text-sm text-gray-800">{notification.message}</p>
-                          <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
+                        <div 
+                          key={notification.id} 
+                          className={`px-4 py-3 hover:bg-gray-50 border-b last:border-0 cursor-pointer ${
+                            notification.read ? 'opacity-70' : ''
+                          }`}
+                          onClick={() => handleNotificationClick(notification)}
+                        >
+                          <div className="flex items-start">
+                            <span className="mr-2 mt-0.5">
+                              {getNotificationIcon(notification.type)}
+                            </span>
+                            <div>
+                              <p className="text-sm text-gray-800">{notification.message}</p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {formatTimestamp(notification.time)}
+                                {!notification.read && (
+                                  <span className="ml-2 inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -121,14 +197,6 @@ const Header = ({ toggleSidebar }) => {
               <div className="absolute right-0 mt-2 bg-white rounded-md shadow-lg w-48 z-20">
                 <div className="py-2">
                   <Link 
-                    to="/profile" 
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-                    onClick={() => setShowUserMenu(false)}
-                  >
-                    <User size={16} className="mr-2" />
-                    프로필
-                  </Link>
-                  <Link 
                     to="/settings" 
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                     onClick={() => setShowUserMenu(false)}
@@ -155,6 +223,14 @@ const Header = ({ toggleSidebar }) => {
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const location = useLocation();
+  const healthCheckContext = useHealthCheck();
+  
+  // 방어적 프로그래밍: healthCheckContext가 없는 경우를 처리
+  const systemStatus = healthCheckContext?.systemStatus || { 
+    overall: 'checking', 
+    errors: [] 
+  };
+  const performHealthCheck = healthCheckContext?.performHealthCheck || (() => {});
   
   const menuItems = [
     { name: '대시보드', icon: Home, path: '/' },
@@ -166,6 +242,29 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { name: '설정', icon: Settings, path: '/settings' },
   ];
   
+  // 시스템 상태에 따른 색상과 메시지 결정
+  const getStatusInfo = () => {
+    switch(systemStatus.overall) {
+      case 'healthy':
+        return {
+          message: '모든 시스템 정상 작동 중',
+          color: 'text-green-400'
+        };
+      case 'unhealthy':
+        return {
+          message: `시스템 오류: ${systemStatus.errors.length}건`,
+          color: 'text-red-400'
+        };
+      default:
+        return {
+          message: '시스템 상태 확인 중...',
+          color: 'text-yellow-400'
+        };
+    }
+  };
+  
+  const statusInfo = getStatusInfo();
+
   return (
     <div className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
       {/* 모바일 오버레이 */}
@@ -218,12 +317,21 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         </div>
         
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
-          <div className="flex items-center">
-            <Monitor size={20} className="text-gray-400 mr-3" />
-            <div>
-              <p className="text-sm font-medium text-white">시스템 상태</p>
-              <p className="text-xs text-green-400">모든 시스템 정상 작동 중</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Monitor size={20} className={`${systemStatus.overall === 'healthy' ? 'text-green-400' : systemStatus.overall === 'unhealthy' ? 'text-red-400' : 'text-yellow-400'} mr-3`} />
+              <div>
+                <p className="text-sm font-medium text-white">시스템 상태</p>
+                <p className={`text-xs ${statusInfo.color}`}>{statusInfo.message}</p>
+              </div>
             </div>
+            <button 
+              onClick={performHealthCheck}
+              className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-gray-700"
+              title="상태 새로고침"
+            >
+              <RefreshCw size={16} />
+            </button>
           </div>
         </div>
       </aside>
@@ -235,7 +343,6 @@ const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const closeSidebar = () => setSidebarOpen(false);
   
   return (
     <div className="min-h-screen bg-gray-100">

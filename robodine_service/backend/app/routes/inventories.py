@@ -7,6 +7,7 @@ from app.core.db_config import get_db
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.models.enums import InventoryStatus
+from app.models.admin_settings import AdminSettings
 
 router = APIRouter()
 
@@ -110,14 +111,40 @@ def update_inventory(inventory_id: int, inventory_data: InventoryCreateRequest, 
     
     db.add(inventory)
     db.commit()
-    
+
+        
+
+    # adminsetting의 재고 threshold 값에 따라 재고 상태 업데이트
+    admin_settings = db.query(AdminSettings).first()
+    if admin_settings and inventory.count < admin_settings.inventory_threshold * inventory.max_count:
+        inventory.status = InventoryStatus.LOW_STOCK
+    else:
+        inventory.status = InventoryStatus.IN_STOCK
+    db.commit()
+    db.refresh(inventory)
+
+
     # Create a system log for this operation
     from app.models import SystemLog
-    log = SystemLog(
-        level="INFO",
-        message=f"재고 항목 업데이트: {inventory_data.name}, 수량: {inventory_data.count}",
-        timestamp=datetime.utcnow()
-    )
+    if inventory.status == InventoryStatus.LOW_STOCK:
+        log = SystemLog(
+            level="WARNING",
+            message=f"재고 부족 경고: {inventory_data.name}, 현재 수량: {inventory_data.count}",
+            timestamp=datetime.utcnow()
+        )       
+    elif inventory.status == InventoryStatus.OUT_OF_STOCK:
+        log = SystemLog(
+            level="ERROR",
+            message=f"재고 품절 경고: {inventory_data.name}, 현재 수량: {inventory_data.count}",
+            timestamp=datetime.utcnow()
+        )
+    else:
+        log = SystemLog(
+            level="INFO",
+            message=f"재고 항목 업데이트: {inventory_data.name}, 수량: {inventory_data.count}",
+            timestamp=datetime.utcnow()
+        )
+
     db.add(log)
     db.commit()
     

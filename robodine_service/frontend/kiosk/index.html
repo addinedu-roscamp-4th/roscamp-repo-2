@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React Kiosk UI</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script> <!-- Tailwind CDN -->
+</head>
+
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/javascript">
+        // React 컴포넌트 구현
+
+        const { useState } = React;
+
+        // Header Component
+        function Header() {
+            return (
+                <header className="flex justify-between p-4 bg-gray-800 text-white">
+                    <div className="text-xl">Restaurant Logo</div>
+                    <div>{new Date().toLocaleTimeString()}</div>
+                    <div>
+                        <button className="bg-blue-500 p-2 rounded">Language</button>
+                    </div>
+                </header>
+            );
+        }
+
+        // Menu Page Component
+        function MenuPage({ setIsCartPage }) {
+            const [menuItems] = useState([
+                { name: "Steak", price: "25.00", img: "https://via.placeholder.com/150" },
+                { name: "Pasta", price: "12.00", img: "https://via.placeholder.com/150" },
+                { name: "Salad", price: "8.00", img: "https://via.placeholder.com/150" }
+            ]);
+
+            return (
+                <div className="menu-page p-4">
+                    <div className="menu-items grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {menuItems.map((item, index) => (
+                            <div key={index} className="menu-item p-4 border rounded-lg shadow-lg">
+                                <img src={item.img} alt={item.name} className="w-full h-40 object-cover rounded" />
+                                <h3 className="text-xl">{item.name}</h3>
+                                <p>{item.price}</p>
+                                <button
+                                    onClick={() => setIsCartPage(true)}
+                                    className="bg-blue-500 text-white p-2 rounded-full mt-2"
+                                >
+                                    Add to Cart
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // Cart Page Component
+        function CartPage() {
+            const [itemsInCart] = useState([
+                { name: "Steak", price: "25.00", quantity: 1 },
+                { name: "Pasta", price: "12.00", quantity: 2 }
+            ]);
+
+            const totalAmount = itemsInCart.reduce(
+                (total, item) => total + item.price * item.quantity,
+                0
+            );
+
+            return (
+                <div className="cart-page p-4">
+                    <h2 className="text-2xl mb-4">Your Cart</h2>
+                    <div className="cart-items">
+                        {itemsInCart.map((item, index) => (
+                            <div key={index} className="cart-item flex justify-between p-2">
+                                <span>{item.name}</span>
+                                <span>{item.quantity} x ${item.price}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="total mt-4">
+                        <h3>Total: ${totalAmount.toFixed(2)}</h3>
+                    </div>
+                    <button className="bg-green-500 text-white p-2 rounded mt-4">Proceed to Checkout</button>
+                </div>
+            );
+        }
+
+        // Checkout Page Component
+        function CheckoutPage() {
+            const [paymentMethod, setPaymentMethod] = useState("credit");
+
+            const handlePayment = () => {
+                alert("Payment Successful!");
+            };
+
+            return (
+                <div className="checkout-page p-4">
+                    <h2 className="text-2xl mb-4">Checkout</h2>
+                    <div className="payment-method mb-4">
+                        <button
+                            onClick={() => setPaymentMethod("credit")}
+                            className={`p-2 ${paymentMethod === "credit" ? "bg-blue-500" : "bg-gray-300"}`}
+                        >
+                            Credit Card
+                        </button>
+                        <button
+                            onClick={() => setPaymentMethod("cash")}
+                            className={`p-2 ${paymentMethod === "cash" ? "bg-blue-500" : "bg-gray-300"}`}
+                        >
+                            Cash
+                        </button>
+                    </div>
+
+                    {paymentMethod === "credit" && (
+                        <div>
+                            <input type="text" placeholder="Card Number" className="p-2 border rounded mb-2" />
+                            <input type="text" placeholder="Expiry Date" className="p-2 border rounded mb-2" />
+                            <input type="text" placeholder="CVV" className="p-2 border rounded mb-2" />
+                        </div>
+                    )}
+
+                    <button onClick={handlePayment} className="bg-green-500 text-white p-2 rounded mt-4">
+                        Confirm Payment
+                    </button>
+                </div>
+            );
+        }
+
+        // Footer Component
+        function Footer({ setIsCartPage }) {
+            return (
+                <footer className="footer p-4 bg-gray-800 text-white flex justify-around">
+                    <button className="p-2 bg-blue-500 text-white rounded" onClick={() => setIsCartPage(false)}>
+                        Home
+                    </button>
+                    <button className="p-2 bg-blue-500 text-white rounded" onClick={() => setIsCartPage(true)}>
+                        Cart
+                    </button>
+                </footer>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [isCartPage, setIsCartPage] = useState(false);
+            const [isCheckoutPage, setIsCheckoutPage] = useState(false);
+
+            return (
+                <div className="App">
+                    <Header />
+                    {isCheckoutPage ? (
+                        <CheckoutPage />
+                    ) : isCartPage ? (
+                        <CartPage />
+                    ) : (
+                        <MenuPage setIsCartPage={setIsCartPage} />
+                    )}
+                    <Footer setIsCartPage={setIsCartPage} />
+                </div>
+            );
+        }
+
+        // Render the React App to the DOM
+        ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+</body>
+
+</html>

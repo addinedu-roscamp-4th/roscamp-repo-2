@@ -1,27 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, AlertTriangle, Save, 
-  Bell, Clock, RefreshCw, PieChart, Database
+  Bell, Clock, RefreshCw, Server, Database, AlertOctagon
 } from 'react-feather';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationsContext';
 
 const SettingsPage = () => {
   const [generalSettings, setGeneralSettings] = useState({
     store_name: '',
     operation_start: '09:00',
     operation_end: '22:00',
-    auto_robot_assignment: true,
-    auto_inventory_alert: true,
     inventory_threshold: 20
   });
   
   const [notificationSettings, setNotificationSettings] = useState({
-    email_notifications: true,
     push_notifications: true,
-    low_stock_notifications: true,
-    order_notifications: true,
-    emergency_notifications: true
+    INFO: true,
+    WARNING: true,
+    ERROR: true,
+    DEBUG: false
   });
   
   const [isLoading, setIsLoading] = useState(true);
@@ -29,6 +28,10 @@ const SettingsPage = () => {
   const [error, setError] = useState(null);
   const [saveMessage, setSaveMessage] = useState('');
   const { apiCall } = useAuth();
+  const notificationsContext = useNotifications();
+  
+  // 방어적 프로그래밍: notificationsContext가 없는 경우를 처리
+  const updateSettings = notificationsContext?.updateSettings || (() => {});
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -38,11 +41,25 @@ const SettingsPage = () => {
         const data = await apiCall('/api/settings');
         
         // 설정 데이터가 있을 경우 상태 업데이트
-        if (data.general) {
-          setGeneralSettings(data.general);
-        }
-        if (data.notifications) {
-          setNotificationSettings(data.notifications);
+        if (data) {
+          // 일반 설정 업데이트
+          setGeneralSettings({
+            store_name: data.store_name || '',
+            operation_start: data.operation_start || '09:00',
+            operation_end: data.operation_end || '22:00',
+            inventory_threshold: data.inventory_threshold || 20
+          });
+          
+          // 알림 설정 업데이트 - LogLevel enum 기반으로 매핑
+          if (data.alert_settings) {
+            setNotificationSettings({
+              push_notifications: data.alert_settings.push_notifications ?? true,
+              INFO: data.alert_settings.INFO ?? true,
+              WARNING: data.alert_settings.WARNING ?? true,
+              ERROR: data.alert_settings.ERROR ?? true,
+              DEBUG: data.alert_settings.DEBUG ?? false
+            });
+          }
         }
       } catch (err) {
         console.error('Failed to load settings:', err);
@@ -78,12 +95,30 @@ const SettingsPage = () => {
     setError(null);
     
     try {
-      await apiCall('/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify({
-          general: generalSettings,
-          notifications: notificationSettings
-        })
+      // API 요청 데이터 준비
+      const requestData = {
+        store_name: generalSettings.store_name,
+        operation_start: generalSettings.operation_start,
+        operation_end: generalSettings.operation_end,
+        inventory_threshold: parseInt(generalSettings.inventory_threshold),
+        alert_settings: {
+          push_notifications: notificationSettings.push_notifications,
+          INFO: notificationSettings.INFO,
+          WARNING: notificationSettings.WARNING,
+          ERROR: notificationSettings.ERROR,
+          DEBUG: notificationSettings.DEBUG
+        }
+      };
+      console.log('Saving settings:', requestData);
+      
+      await apiCall('/api/settings', 'PUT', requestData);
+      
+      // 알림 설정 업데이트
+      updateSettings({
+        INFO: notificationSettings.INFO,
+        WARNING: notificationSettings.WARNING,
+        ERROR: notificationSettings.ERROR,
+        DEBUG: notificationSettings.DEBUG
       });
       
       setSaveMessage('설정이 성공적으로 저장되었습니다');
@@ -198,46 +233,6 @@ const SettingsPage = () => {
                     />
                     <p className="mt-1 text-sm text-gray-500">재고가 이 기준값보다 낮으면 알림이 발생합니다.</p>
                   </div>
-                  
-                  <div className="space-y-4">
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          id="auto_robot_assignment"
-                          name="auto_robot_assignment"
-                          type="checkbox"
-                          checked={generalSettings.auto_robot_assignment}
-                          onChange={handleGeneralChange}
-                          className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
-                        />
-                      </div>
-                      <div className="ml-3 text-sm">
-                        <label htmlFor="auto_robot_assignment" className="font-medium text-gray-700">
-                          로봇 자동 배정
-                        </label>
-                        <p className="text-gray-500">주문 접수 시 로봇을 자동으로 배정합니다.</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          id="auto_inventory_alert"
-                          name="auto_inventory_alert"
-                          type="checkbox"
-                          checked={generalSettings.auto_inventory_alert}
-                          onChange={handleGeneralChange}
-                          className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
-                        />
-                      </div>
-                      <div className="ml-3 text-sm">
-                        <label htmlFor="auto_inventory_alert" className="font-medium text-gray-700">
-                          재고 자동 알림
-                        </label>
-                        <p className="text-gray-500">재고가 부족할 때 자동으로 알림을 받습니다.</p>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
               
@@ -248,25 +243,6 @@ const SettingsPage = () => {
                 </h2>
                 
                 <div className="space-y-4">
-                  <div className="flex items-start">
-                    <div className="flex items-center h-5">
-                      <input
-                        id="email_notifications"
-                        name="email_notifications"
-                        type="checkbox"
-                        checked={notificationSettings.email_notifications}
-                        onChange={handleNotificationChange}
-                        className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
-                      />
-                    </div>
-                    <div className="ml-3 text-sm">
-                      <label htmlFor="email_notifications" className="font-medium text-gray-700">
-                        이메일 알림
-                      </label>
-                      <p className="text-gray-500">중요 알림을 이메일로 받습니다.</p>
-                    </div>
-                  </div>
-                  
                   <div className="flex items-start">
                     <div className="flex items-center h-5">
                       <input
@@ -292,17 +268,18 @@ const SettingsPage = () => {
                       <div className="flex items-start">
                         <div className="flex items-center h-5">
                           <input
-                            id="low_stock_notifications"
-                            name="low_stock_notifications"
+                            id="INFO"
+                            name="INFO"
                             type="checkbox"
-                            checked={notificationSettings.low_stock_notifications}
+                            checked={notificationSettings.INFO}
                             onChange={handleNotificationChange}
                             className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
                           />
                         </div>
-                        <div className="ml-3 text-sm">
-                          <label htmlFor="low_stock_notifications" className="font-medium text-gray-700">
-                            재고 부족 알림
+                        <div className="ml-3 text-sm flex items-center">
+                          <Server className="text-blue-500 mr-2" size={16} />
+                          <label htmlFor="INFO" className="font-medium text-gray-700">
+                            정보 (INFO) 알림
                           </label>
                         </div>
                       </div>
@@ -310,17 +287,18 @@ const SettingsPage = () => {
                       <div className="flex items-start">
                         <div className="flex items-center h-5">
                           <input
-                            id="order_notifications"
-                            name="order_notifications"
+                            id="WARNING"
+                            name="WARNING"
                             type="checkbox"
-                            checked={notificationSettings.order_notifications}
+                            checked={notificationSettings.WARNING}
                             onChange={handleNotificationChange}
                             className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
                           />
                         </div>
-                        <div className="ml-3 text-sm">
-                          <label htmlFor="order_notifications" className="font-medium text-gray-700">
-                            주문 알림
+                        <div className="ml-3 text-sm flex items-center">
+                          <AlertTriangle className="text-yellow-500 mr-2" size={16} />
+                          <label htmlFor="WARNING" className="font-medium text-gray-700">
+                            경고 (WARNING) 알림
                           </label>
                         </div>
                       </div>
@@ -328,17 +306,37 @@ const SettingsPage = () => {
                       <div className="flex items-start">
                         <div className="flex items-center h-5">
                           <input
-                            id="emergency_notifications"
-                            name="emergency_notifications"
+                            id="ERROR"
+                            name="ERROR"
                             type="checkbox"
-                            checked={notificationSettings.emergency_notifications}
+                            checked={notificationSettings.ERROR}
                             onChange={handleNotificationChange}
                             className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
                           />
                         </div>
-                        <div className="ml-3 text-sm">
-                          <label htmlFor="emergency_notifications" className="font-medium text-gray-700">
-                            비상 상황 알림
+                        <div className="ml-3 text-sm flex items-center">
+                          <AlertOctagon className="text-red-500 mr-2" size={16} />
+                          <label htmlFor="ERROR" className="font-medium text-gray-700">
+                            오류 (ERROR) 알림
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start">
+                        <div className="flex items-center h-5">
+                          <input
+                            id="DEBUG"
+                            name="DEBUG"
+                            type="checkbox"
+                            checked={notificationSettings.DEBUG}
+                            onChange={handleNotificationChange}
+                            className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                          />
+                        </div>
+                        <div className="ml-3 text-sm flex items-center">
+                          <Database className="text-green-500 mr-2" size={16} />
+                          <label htmlFor="DEBUG" className="font-medium text-gray-700">
+                            디버그 (DEBUG) 알림
                           </label>
                         </div>
                       </div>

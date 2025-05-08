@@ -8,8 +8,8 @@ import {
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { useWebSockets } from '../contexts/WebSocketContext';
-import CustomerList from '../components/CustomerList';
-import TableMap from '../components/TableMap';
+import CustomerList from '../components/customer/CustomerList';
+import TableMap from '../components/customer/TableMap';
 import '../styles/CustomerPage.css';
 
 // 웹소켓 토픽 리스트 (Context와 동일하게 유지)

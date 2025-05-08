@@ -9,6 +9,7 @@ from app.core.db_config import get_db
 from app.models import Order, OrderItem, Customer, Robot, KioskTerminal
 from app.models.enums import OrderStatus
 from app.models.event import SystemLog, LogLevel
+from app.models.inventory import MenuItem
 
 router = APIRouter()
 
@@ -54,7 +55,86 @@ class OrderListResponse(BaseModel):
 class OrderStatusUpdateRequest(BaseModel):
     status: OrderStatus
 
+
+class TodoOrderResponse(BaseModel):
+    order_id: int
+    item_name: str
+
 # --- Endpoints ---
+
+# 쿡봇 전달용 API
+@router.get("/todo_order", response_model=TodoOrderResponse)
+def get_todo_order(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)):
+    # 1) 대기 중인 주문중에 가장 먼저 생성된 주문을 조회합니다.
+    order = db.query(Order).order_by(Order.id).filter(Order.status == OrderStatus.PLACED).first()
+    if not order:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="대기 중인 주문이 없습니다.")
+    # 2) 주문 항목을 조회합니다.
+    items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+    if not items:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="주문 항목이 없습니다, 대기중인 주문 : %s" % order.id)
+    # 3) 메뉴 항목을 조회합니다.
+    menu_items = db.query(MenuItem).filter(MenuItem.id.in_([item.menu_item_id for item in items])).all()
+    if not menu_items:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="메뉴 항목이 없습니다.")
+    # 4) 주문 항목과 메뉴 항목을 매핑합니다.
+    item_res = [
+        TodoOrderResponse(
+            order_id=order.id,
+            item_name=menu_item.name
+        ) for item in items for menu_item in menu_items if item.menu_item_id == menu_item.id
+    ]
+    # 5) 주문 상태를 업데이트합니다.
+    order.status = OrderStatus.PREPARING
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    # 6) 시스템 로그를 생성합니다.
+    log = SystemLog(
+        level=LogLevel.INFO,
+        message=f"주문이 준비 중으로 변경되었습니다. 주문 ID: {order.id}, 테이블: {order.table_id or '없음'}",
+        timestamp=datetime.utcnow()
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    # 7) 웹소켓 브로드캐스트 예약
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "order",
+        None,
+    )
+    # 8) 시스템 로그 브로드캐스트 예약
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
+        None,
+    )
+    # 9) 응답을 반환합니다.
+    return TodoOrderResponse(
+        order_id=order.id,
+        item_name=item_res[0].item_name
+    )
+
+@router.get("/todo_order_test", response_model=TodoOrderResponse)
+def get_todo_order_test(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)):
+
+    # 예시 데이터로
+    return TodoOrderResponse(
+        order_id=1,
+        item_name="salad"
+    )
+
+
+# 주문 목록 조회
 @router.get("", response_model=List[OrderListResponse])
 def get_orders(db: Session = Depends(get_db)):
     orders = db.query(Order).all()
@@ -115,7 +195,7 @@ def create_order(
         customer_id=data.customer_id,
         robot_id=data.robot_id,
         table_id=data.table_id,
-        status=OrderStatus.PREPARING,
+        status=OrderStatus.PLACED,
         # timestamp: default_factory에 의해 자동 설정
     )
     db.add(new_o)

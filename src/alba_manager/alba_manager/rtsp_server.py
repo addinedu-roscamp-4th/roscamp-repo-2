@@ -48,21 +48,12 @@ def notify_robo_add():
 
 def notify_robo_remove():
     try:
+        # 스트리밍 종료 요청
         resp = requests.post(f"{STREAM_API_BASE}/remove", json={"url": RTSP_URL})
         print(f"[Sender] notify remove → {resp.status_code} {resp.text}")
     except Exception as e:
         print(f"[Sender] ERROR notifying remove: {e}")
 
-def shutdown(signum=None, frame=None):
-    """녹화 중지 알림 후 프로세스 종료"""
-    global has_notified
-    if has_notified:
-        return  # 이미 녹화 정보를 보냈다면 중복으로 실행되지 않도록 방지
-    
-    print(f"[Sender] shutting down RTSP server")
-    notify_robo_remove()
-        
-    sys.exit(0)
 
 class RTSPMediaFactory(GstRtspServer.RTSPMediaFactory):
     def __init__(self, video_path, shutdown_callback):
@@ -88,6 +79,17 @@ class RTSPMediaFactory(GstRtspServer.RTSPMediaFactory):
         if message.type == Gst.MessageType.EOS:
             print("[Sender] End of stream reached, shutting down...")
             self.shutdown_callback()
+
+def shutdown(signum=None, frame=None):
+    """녹화 중지 알림 후 프로세스 종료"""
+    global has_notified
+    if has_notified:
+        return  # 이미 녹화 정보를 보냈다면 중복으로 실행되지 않도록 방지
+    
+    print(f"[Sender] shutting down RTSP server")
+    notify_robo_remove()  # 종료 후 remove 요청 보내기
+    sys.exit(0)
+
 
 def get_media_duration(video_file: str) -> float:
     """ffprobe를 호출해 비디오 길이(초)를 반환"""

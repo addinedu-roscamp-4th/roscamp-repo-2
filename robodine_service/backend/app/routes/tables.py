@@ -55,11 +55,11 @@ def create_table(
     db: Session = Depends(get_db)
 ):
     # Check if table number already exists
-    existing = db.query(Table).filter(Table.table_number == table_data.table_number).first()
+    existing = db.query(Table).filter(Table.id == table_data.id).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Table number {table_data.table_number} already exists"
+            detail=f"Table number {table_data.id} already exists"
         )
     # Create new table
     new_table = Table(
@@ -78,7 +78,7 @@ def create_table(
     # 시스템 로그 생성
     log = SystemLog(
         level=LogLevel.INFO,
-        message=f"새 테이블이 생성되었습니다. 테이블 번호: {new_table.table_number}, 최대 수용 인원: {new_table.max_customer}명",
+        message=f"새 테이블이 생성되었습니다. 테이블 번호: {new_table.id}, 최대 수용 인원: {new_table.max_customer}명",
         timestamp=datetime.utcnow()
     )
     db.add(log)

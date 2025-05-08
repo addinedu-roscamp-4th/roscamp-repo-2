@@ -2,12 +2,18 @@
 from typing import Dict, Any, Optional, Type
 from sqlmodel import Session, SQLModel
 from datetime import datetime
+from fastapi import HTTPException, status
 
 from app.models.robot import Robot
 from app.models.pose6d import Pose6D
 from app.models.jointangle import JointAngle
 from app.models.albabot import Albabot
 from app.models.cookbot import Cookbot
+from app.models.face_recognition import FaceRecognition
+from app.core.db_config import get_db
+from app.models.table import Table
+from app.models.enums import TableStatus
+
 
 
 def dispatch_payload(session: Session, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -19,6 +25,8 @@ def dispatch_payload(session: Session, data: Dict[str, Any]) -> Dict[str, Any]:
         return _handle_cookbot(session, data)
     elif msg_type == "Ingredient":
         return _handle_ingredient(session, data)
+    elif msg_type == "Face":
+        return _face_recognition(session, data)
     else:
         raise ValueError(f"Unknown msg_type: {msg_type}")
 
@@ -106,3 +114,31 @@ def _handle_ingredient(session: Session, data: Dict[str, Any]):
     ))
     return {"affected_entity": {"type": "inventory", "id": data["ingredient_id"]}}
 
+def _face_recognition(session: Session, data: Dict[str, Any]):
+    session.add(FaceRecognition(
+        table_id=data["table_id"],
+        timestamp=datetime.now(),
+        history=data["history"],
+        nowdetected=data["nowdetected"],
+        reliability=data["reliability"],
+        exist=data["exist"],
+    ))
+
+    db = session
+
+    # exist가 1인 경우에 테이블의 상태 변경
+    if data["exist"] == 1:
+        table = db.query(Table).filter(Table.table_id == data["table_id"]).first()
+
+        if table:
+            table.status = TableStatus.OCCUPIED
+            db.add(table)
+            db.commit()
+            db.refresh(table)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Table with ID {data['table_id']} not found"
+            )
+    
+    return {"affected_entity": {"type": "face", "id": data["table_id"]}}
