@@ -62,10 +62,8 @@ frontend/
 
 ### 키오스크 특화 기술
 
-- **Framer Motion**: 애니메이션
 - **React Hook Form**: 폼 관리
 - **i18next**: 다국어 지원
-- **Payment API**: 결제 시스템 연동
 
 ## 🔄 아키텍처 및 데이터 흐름
 
