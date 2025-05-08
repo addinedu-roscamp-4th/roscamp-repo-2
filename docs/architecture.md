@@ -8,18 +8,18 @@ RoboDine은 로봇 기술과 인공지능을 활용한 완전 자동화된 레�
 
 ```mermaid
 graph TB
-    A[고객] --> B[알바봇 서비스<br>고객 안내 & 서빙]
+    A[고객] --> B[알바봇 서비스<br>호출 & 서빙]
     A --> C[키오스크 서비스<br>메뉴 주문]
     
     subgraph "RoboDine Service"
-        D[백엔드 API 서버<br>FastAPI] <--> E[데이터베이스<br>SQLite]
+        D[백엔드 API 서버<br>FastAPI] <--> E[데이터베이스<br>PostgreSQL]
         D <--> F[WebSocket 서비스<br>실시간 통신]
         D <--> G[비디오 스트리밍<br>RTSP 서버]
     end
     
     subgraph "로봇 제어 시스템"
         H[Alba Planner<br>서빙 로봇 제어] <--> I["서빙 로봇(Pinky)<br>ROS2"]
-        J[Cook Planner<br>조리 로봇 제어] <--> K["조리 로봇(myCobot280)<br>ROS2"]
+        J[Cook Planner<br>조리 로봇 제어] <--> K["조리 로봇(jetCobot280)<br>ROS2"]
     end
     
     subgraph "AI 처리 시스템"
