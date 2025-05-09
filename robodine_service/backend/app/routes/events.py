@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.db_config import get_db
-from app.models import Event, SystemLog, User
-from app.models.enums import EventType, UserRole, EntityType, LogLevel
+from app.models import Event, SystemLog, User, AdminSettings, Notification
+from app.models.enums import EventType, UserRole, EntityType, LogLevel, NotificationStatus
 from app.routes.auth import get_current_user
 
 router = APIRouter()
@@ -173,6 +173,7 @@ def get_system_logs(
 @router.post("/system-logs", response_model=dict)
 def create_system_log(
     log_data: SystemLogCreateRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     # 로그 생성도 인증 없이 가능하도록 변경
@@ -196,11 +197,74 @@ def create_system_log(
     db.commit()
     db.refresh(new_log)
     
+    # 알림 생성 (백그라운드 작업으로 처리)
+    background_tasks.add_task(create_notifications_from_log, new_log.id, db)
+    
+    # 브로드캐스팅 작업 추가
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "systemlog",
+        None
+    )
+    
     return {
         "id": new_log.id,
         "status": "success",
         "message": "로그가 생성되었습니다."
     }
+
+# --- 알림 생성 함수 ---
+def create_notifications_from_log(log_id: int, db: Session):
+    """시스템 로그에서 사용자 알림을 생성"""
+
+
+    # 로그 가져오기
+    log = db.query(SystemLog).filter(SystemLog.id == log_id).first()
+    if not log:
+        return
+    
+    # 알림 설정 가져오기
+    settings = db.query(AdminSettings).first()
+    if not settings or not settings.alert_settings:
+        return
+    
+    # alert_settings = {"push_notifications": true, "INFO": true, "WARNING": true, "ERROR": true, "DEBUG": true}
+    # 로그 레벨에 따른 알림 설정 확인
+    alert_settings = settings.alert_settings
+    alert_settings = {
+        "INFO": alert_settings.get("INFO", False),
+        "WARNING": alert_settings.get("WARNING", False),
+        "ERROR": alert_settings.get("ERROR", False),
+        "DEBUG": alert_settings.get("DEBUG", False)
+    }
+    if not alert_settings.get(log.level, False):
+        return
+
+    
+    # 알림을 받을 사용자 목록 가져오기 (현재는 모든 ADMIN 사용자)
+    users = db.query(User).filter(User.role == UserRole.ADMIN).all()
+    
+    # 각 사용자에 대해 알림 생성
+    notifications = []
+    for user in users:
+        notification = Notification(
+            user_id=user.id,
+            type=log.level,
+            message=log.message,
+            created_at=datetime.utcnow(),
+            status=NotificationStatus.PENDING
+        )
+        notifications.append(notification)
+    
+    # 모든 알림을 한 번에 추가하고 커밋
+    if notifications:
+        db.add_all(notifications)
+        db.commit()
+        
+        # 브로드캐스팅을 위한 broadcast_notifications_update 호출
+        from run import broadcast_notifications_update
+        broadcast_notifications_update(None)
 
 # SystemLog 로그 레벨별 유틸리티 함수들
 def log_info(db: Session, message: str, broadcast_tasks=None):
@@ -209,6 +273,9 @@ def log_info(db: Session, message: str, broadcast_tasks=None):
     db.add(log)
     db.commit()
     db.refresh(log)
+    
+    # 알림 생성
+    create_notifications_from_log(log.id, db)
     
     # 브로드캐스트 작업이 제공된 경우 예약
     if broadcast_tasks:
@@ -227,6 +294,9 @@ def log_warning(db: Session, message: str, broadcast_tasks=None):
     db.commit()
     db.refresh(log)
     
+    # 알림 생성
+    create_notifications_from_log(log.id, db)
+    
     # 브로드캐스트 작업이 제공된 경우 예약
     if broadcast_tasks:
         from run import broadcast_entity_update
@@ -243,6 +313,9 @@ def log_error(db: Session, message: str, broadcast_tasks=None):
     db.add(log)
     db.commit()
     db.refresh(log)
+    
+    # 알림 생성
+    create_notifications_from_log(log.id, db)
     
     # 브로드캐스트 작업이 제공된 경우 예약
     if broadcast_tasks:
@@ -261,6 +334,9 @@ def log_debug(db: Session, message: str, broadcast_tasks=None):
     db.commit()
     db.refresh(log)
     
+    # 알림 생성
+    create_notifications_from_log(log.id, db)
+    
     # 브로드캐스트 작업이 제공된 경우 예약
     if broadcast_tasks:
         from run import broadcast_entity_update
@@ -277,6 +353,9 @@ def create_system_log(db: Session, level: LogLevel, message: str, broadcast_task
     db.add(log)
     db.commit()
     db.refresh(log)
+    
+    # 알림 생성
+    create_notifications_from_log(log.id, db)
     
     # 브로드캐스트 작업이 제공된 경우 예약
     if broadcast_tasks:

@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWebSockets } from '../contexts/WebSocketContext';
 
 // 웹소켓 토픽 리스트 (Context와 동일하게 유지)
-const TOPICS = ['robots', 'status'];
+const TOPICS = ['robots', 'status', 'commands', 'systemlogs'];
 
 // 웹소켓 설정
 const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
@@ -201,7 +201,7 @@ const RobotTable = ({ robots, onEditRobot, onDeleteRobot, onSendCommand, onChang
   );
 };
 
-const CommandList = ({ commands }) => {
+const CommandList = ({ commands, onEditCommand }) => {
   if (!commands || commands.length === 0) {
     return (
       <div className="text-center py-10 bg-gray-50 rounded-lg">
@@ -214,45 +214,100 @@ const CommandList = ({ commands }) => {
 
   const getStatusBadge = (status) => {
     switch (status) {
-      case 'SUCCESS':
+      case 'EXECUTED':
         return <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">성공</span>;
       case 'FAILED':
         return <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">실패</span>;
       case 'PENDING':
         return <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">대기중</span>;
+      case 'EXECUTING':
+        return <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">실행중</span>;
+      case 'CANCELLED':
+        return <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">취소됨</span>;
       default:
         return <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">{status}</span>;
     }
   };
 
+  const formatTime = (timeString) => {
+    if (!timeString) return '없음';
+    return new Date(timeString).toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
   return (
     <div className="bg-white shadow overflow-hidden rounded-md">
-      <ul className="divide-y divide-gray-200">
-        {commands.map((command) => (
-          <li key={command.id} className="p-4 hover:bg-gray-50">
-            <div className="flex justify-between">
-              <div className="flex items-center">
-                <div className="bg-gray-100 rounded-lg p-2 mr-3">
-                  <Send size={16} className="text-gray-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{command.command}</p>
-                  <p className="text-xs text-gray-500">{command.parameters}</p>
-                </div>
-              </div>
-              <div className="flex items-center">
-                {getStatusBadge(command.status)}
-                <span className="text-xs text-gray-500 ml-2 flex items-center">
-                  <Clock size={12} className="mr-1" />
-                  {new Date(command.issued_at).toLocaleString('ko-KR')}
-                </span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">순서</th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">명령</th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">로봇 ID</th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">발행 시간</th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료 시간</th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작업</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {commands.map((command, index) => (
+              <tr key={command.id} className="hover:bg-gray-50">
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">#{commands.length - index}</td>
+                <td className="px-3 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <div className="bg-gray-100 rounded-lg p-2 mr-2">
+                      <Send size={16} className="text-gray-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{command.command}</p>
+                      <p className="text-xs text-gray-500 max-w-sm truncate">{JSON.stringify(command.parameters || {})}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {command.robot_id}
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap">
+                  {getStatusBadge(command.status)}
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {formatTime(command.issued_at)}
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {formatTime(command.executed_at)}
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap text-sm text-right">
+                  <button 
+                    onClick={() => onEditCommand(command)}
+                    className="text-indigo-600 hover:text-indigo-900 mr-3"
+                  >
+                    <Edit size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
+};
+
+// 명령어 템플릿 정의
+const COMMAND_TEMPLATES = {
+  'MOVE': { x: 100, y: 200 },
+  'CHARGE': { duration: 30 },
+  'STOP': {},
+  'PICKUP': { item_id: 1 },
+  'PUTDOWN': { position: { x: 100, y: 100 } },
+  'RESET': {}
 };
 
 const RobotAdminPage = () => {
@@ -263,14 +318,16 @@ const RobotAdminPage = () => {
   const [isEditRobotModalOpen, setIsEditRobotModalOpen] = useState(false);
   const [isCommandModalOpen, setIsCommandModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [isCommandEditModalOpen, setIsCommandEditModalOpen] = useState(false);
   const [currentRobot, setCurrentRobot] = useState(null);
   const [currentCommand, setCurrentCommand] = useState({
     command: '',
     parameters: ''
   });
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [currentEditCommand, setCurrentEditCommand] = useState(null);
   const { apiCall } = useAuth();
-  const { data, errors, connected, refreshTopic } = useWebSockets();
+  const { data, errors, connected, refreshTopic, updateManualData } = useWebSockets();
   const { robots, commands, status } = data;
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
   const [apiActionStatus, setApiActionStatus] = useState({ type: '', message: '', isError: false });
@@ -278,6 +335,9 @@ const RobotAdminPage = () => {
   // 로봇 데이터 처리
   const processedRobots = useMemo(() => {
     // status.robots 배열이 있으면 이걸 쓰고, 없으면 fallback
+    // console.log('Robots:', robots);
+    // console.log('Status:', status);
+    // console.log('Commands:', commands);
     const base = Array.isArray(status.robots)
       ? status.robots
       : Array.isArray(robots)
@@ -319,16 +379,10 @@ const RobotAdminPage = () => {
 
   // 명령 데이터 처리
   const processedCommands = useMemo(() => {
-    const cmdList = Array.isArray(commands) ? commands : [];
-    return cmdList.map(c => ({
-      id: c['Command.id'] || c.id,
-      robot_id: c['Command.robot_id'] || c.robot_id,
-      command: c['Command.command'] || c.command,
-      parameters: c['Command.parameters'] || c.parameters,
-      status: c['Command.status'] || c.status,
-      issued_at: c['Command.issued_at'] || c.issued_at
-    }));
-  }, [commands]);
+    // console.log('Commands data type:', typeof data.commands, Array.isArray(data.commands));
+    // console.log('Commands data:', data.commands);
+    return Array.isArray(data.commands) ? data.commands : [];
+  }, [data.commands]);
 
   // 수동 새로고침 핸들러
   const handleRefreshData = useCallback(() => {
@@ -409,6 +463,15 @@ const RobotAdminPage = () => {
     setIsCommandModalOpen(true);
   };
 
+  // 명령 유형 선택 시 자동으로 템플릿 채우기
+  const handleCommandSelect = (commandType) => {
+    const template = COMMAND_TEMPLATES[commandType] || {};
+    setCurrentCommand({
+      command: commandType,
+      parameters: JSON.stringify(template, null, 2)
+    });
+  };
+
   // 로봇 명령 전송 처리
   const handleSubmitCommand = async () => {
     if (!currentCommand.command) {
@@ -418,14 +481,40 @@ const RobotAdminPage = () => {
     
     try {
       setIsLoading(true);
+      
+      // 파라미터 처리 (비어있으면 빈 객체로 처리)
+      let parsedParams = {};
+      
+      if (currentCommand.parameters && currentCommand.parameters.trim() !== '') {
+        try {
+          parsedParams = JSON.parse(currentCommand.parameters);
+        } catch (parseError) {
+          console.error('JSON 파싱 오류:', parseError);
+          setError('파라미터 형식이 올바르지 않습니다. 유효한 JSON 형식으로 입력해주세요.');
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      console.log('명령 전송 요청:', {
+        robot_id: currentRobot.id,
+        command: currentCommand.command,
+        parameters: parsedParams
+      });
+      
       await apiCall(`/api/robots/commands/${currentRobot.id}/command`, 'POST', {
         robot_id: currentRobot.id,
         command: currentCommand.command,
-        parameter: JSON.parse(currentCommand.parameters || '{}')
+        parameters: parsedParams
       });
       
       handleApiResponse('command', true, '명령 전송이');
+      
+      // 명령어 목록 갱신을 위해 commands 토픽 새로고침
+      console.log('명령어 목록 갱신 시작');
       refreshTopic('commands');
+      
+      // 명령어 모달 닫기
       setIsCommandModalOpen(false);
     } catch (error) {
       console.error('Failed to send command:', error);
@@ -498,7 +587,7 @@ const RobotAdminPage = () => {
 
     try {
       setIsLoading(true);
-      
+      console.log('현재 로봇:', currentRobot);
       // 알바봇인지 쿡봇인지 확인하여 적절한 API 호출
       if (currentRobot.type === 'ALBABOT') {
         console.log('알바봇 상태 변경 요청:', {
@@ -536,6 +625,83 @@ const RobotAdminPage = () => {
       console.error('Failed to change robot status:', error);
       handleApiResponse('status', false, '로봇 상태 변경이');
       setError('로봇 상태 변경 중 오류가 발생했습니다. 올바른 API 경로인지 확인하세요.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 명령어 수정 모달 열기
+  const handleEditCommand = (command) => {
+    setCurrentEditCommand(command);
+    setIsCommandEditModalOpen(true);
+  };
+
+  // 명령어 수정 저장
+  const handleSaveCommandEdit = async (updatedCommand) => {
+    try {
+      setIsLoading(true);
+      setError(null); // 이전 오류 초기화
+      
+      // API 요청 데이터 준비 (필요한 필드만 포함)
+      const requestData = {
+        robot_id: updatedCommand.robot_id,
+        command: updatedCommand.command,
+        parameters: updatedCommand.parameters,
+        status: updatedCommand.status
+      };
+      
+      console.log('명령어 수정 요청:', requestData);
+      
+      // API 호출로 명령어 업데이트
+      await apiCall(`/api/robots/commands/${updatedCommand.id}`, 'PUT', requestData);
+      
+      // 성공 메시지 표시
+      handleApiResponse('edit_command', true, '명령어 수정이');
+      
+      // 명령어 목록 전체 갱신 대신 수정된 명령어만 갱신 (깊은 복사)
+      const updatedCommands = JSON.parse(JSON.stringify(processedCommands)).map(cmd => {
+        if (cmd.id === updatedCommand.id) {
+          // 수정된 정보 반영
+          const updatedCmd = {
+            ...cmd,
+            command: updatedCommand.command,
+            parameters: updatedCommand.parameters,
+            status: updatedCommand.status,
+            robot_id: updatedCommand.robot_id
+          };
+          
+          // 상태가 EXECUTED로 변경된 경우 현재 시간으로 업데이트
+          if (updatedCommand.status === 'EXECUTED' && !cmd.executed_at) {
+            updatedCmd.executed_at = new Date().toISOString();
+          }
+          
+          return updatedCmd;
+        }
+        return cmd;
+      });
+      
+      // 데이터를 즉시 업데이트 (웹소켓 업데이트를 기다리지 않고)
+      updateManualData('commands', updatedCommands);
+      
+      // 모달 닫기
+      setIsCommandEditModalOpen(false);
+    } catch (error) {
+      // 오류 처리
+      console.error('Failed to update command:', error);
+      
+      // 오류 메시지 파싱
+      let errorMessage = '명령어 수정 중 오류가 발생했습니다.';
+      
+      if (error.response && error.response.data && error.response.data.detail) {
+        // API에서 반환한 상세 오류 메시지 사용
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // 에러 상태 및 메시지 설정
+      handleApiResponse('edit_command', false, '명령어 수정이');
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -640,7 +806,10 @@ const RobotAdminPage = () => {
                 />
               </>
             ) : (
-              <CommandList commands={processedCommands} />
+              <CommandList 
+                commands={processedCommands} 
+                onEditCommand={handleEditCommand} 
+              />
             )}
           </div>
         </div>
@@ -844,14 +1013,14 @@ const RobotAdminPage = () => {
               <select
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 value={currentCommand.command}
-                onChange={(e) => setCurrentCommand({...currentCommand, command: e.target.value})}
+                onChange={(e) => handleCommandSelect(e.target.value)}
               >
                 <option value="">명령 선택</option>
                 <option value="MOVE">이동</option>
-                <option value="PICKUP">물품 집기</option>
-                <option value="PUTDOWN">물품 놓기</option>
                 <option value="CHARGE">충전</option>
                 <option value="STOP">정지</option>
+                <option value="PICKUP">물품 집기</option>
+                <option value="PUTDOWN">물품 놓기</option>
                 <option value="RESET">리셋</option>
               </select>
             </div>
@@ -861,21 +1030,23 @@ const RobotAdminPage = () => {
                 파라미터 (JSON 형식)
               </label>
               <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                rows="4"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono"
+                rows="5"
                 placeholder='{"x": 100, "y": 200}'
                 value={currentCommand.parameters}
                 onChange={(e) => setCurrentCommand({...currentCommand, parameters: e.target.value})}
               ></textarea>
               <p className="mt-1 text-xs text-gray-500">
-                JSON 형식으로 파라미터를 입력하세요. 예: {"{'x': 100, 'y': 200}"}
+                명령에 맞는 파라미터가 자동으로 입력됩니다. 필요에 따라 수정하세요.
               </p>
               <div className="mt-2 text-xs text-gray-600">
-                <p className="font-semibold mb-1">명령어 파라미터 예시:</p>
+                <p className="font-semibold mb-1">명령어 파라미터 설명:</p>
                 <ul className="space-y-1 list-disc pl-5">
-                  <li><span className="font-medium">MOVE</span>: {"{'x': 100, 'y': 200}"}</li>
-                  <li><span className="font-medium">PICKUP</span>: {"{'item_id': 123}"}</li>
-                  <li><span className="font-medium">CHARGE</span>: {"{'duration': 30}"} (분)</li>
+                  <li><span className="font-medium">이동(MOVE)</span>: 이동할 좌표 (x, y)</li>
+                  <li><span className="font-medium">충전(CHARGE)</span>: 충전 시간(분)</li>
+                  <li><span className="font-medium">정지(STOP)</span>: 파라미터 없음</li>
+                  <li><span className="font-medium">물품 집기(PICKUP)</span>: 집을 물품 ID</li>
+                  <li><span className="font-medium">물품 놓기(PUTDOWN)</span>: 놓을 위치</li>
                 </ul>
               </div>
             </div>
@@ -977,7 +1148,182 @@ const RobotAdminPage = () => {
         </div>
       )}
 
+      {/* 명령어 수정 모달 */}
+      <CommandEditModal
+        command={currentEditCommand}
+        isOpen={isCommandEditModalOpen}
+        onClose={() => setIsCommandEditModalOpen(false)}
+        onSave={handleSaveCommandEdit}
+        isLoading={isLoading}
+      />
     </Layout>
+  );
+};
+
+// 명령어 수정 모달 컴포넌트
+const CommandEditModal = ({ command, isOpen, onClose, onSave, isLoading }) => {
+  const [editedCommand, setEditedCommand] = useState({
+    ...command,
+    parameters: command ? JSON.stringify(command.parameters || {}, null, 2) : '{}'
+  });
+  const [error, setError] = useState('');
+
+  // command 객체가 변경될 때마다 editedCommand 상태 업데이트
+  useEffect(() => {
+    if (command) {
+      setEditedCommand({
+        ...command,
+        parameters: JSON.stringify(command.parameters || {}, null, 2)
+      });
+      setError(''); // 새 명령어가 로드되면 이전 오류 초기화
+    }
+  }, [command]);
+
+  // 명령어 선택 시 자동으로 템플릿 적용
+  const handleCommandSelect = (commandType) => {
+    // 현재 명령어와 같은 경우 변경하지 않음
+    if (commandType === editedCommand.command) return;
+    
+    const template = COMMAND_TEMPLATES[commandType] || {};
+    setEditedCommand({
+      ...editedCommand,
+      command: commandType,
+      parameters: JSON.stringify(template, null, 2)
+    });
+  };
+
+  if (!isOpen || !command) return null;
+
+  const handleSave = () => {
+    try {
+      // 파라미터 처리
+      const updatedCommand = {
+        ...editedCommand,
+        parameters: JSON.parse(editedCommand.parameters)
+      };
+      onSave(updatedCommand);
+    } catch (error) {
+      setError('파라미터 형식이 올바르지 않습니다. 유효한 JSON 형식으로 입력해주세요.');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-medium text-gray-900">
+            명령어 #{command.id} 수정
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-500"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 p-3 mb-4 rounded-md text-sm text-red-600">
+            {error}
+          </div>
+        )}
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            명령어 <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            value={editedCommand.command}
+            onChange={(e) => handleCommandSelect(e.target.value)}
+          >
+            <option value="MOVE">이동</option>
+            <option value="CHARGE">충전</option>
+            <option value="STOP">정지</option>
+            <option value="PICKUP">물품 집기</option>
+            <option value="PUTDOWN">물품 놓기</option>
+            <option value="RESET">리셋</option>
+          </select>
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            로봇 ID <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            value={editedCommand.robot_id || ''}
+            onChange={(e) => setEditedCommand({...editedCommand, robot_id: parseInt(e.target.value)})}
+          />
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            상태 <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            value={editedCommand.status}
+            onChange={(e) => setEditedCommand({...editedCommand, status: e.target.value})}
+          >
+            <option value="PENDING">대기중</option>
+            <option value="EXECUTING">실행중</option>
+            <option value="EXECUTED">성공</option>
+            <option value="FAILED">실패</option>
+            <option value="CANCELLED">취소됨</option>
+          </select>
+        </div>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            파라미터 (JSON 형식)
+          </label>
+          <textarea
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono"
+            rows="5"
+            value={editedCommand.parameters}
+            onChange={(e) => setEditedCommand({...editedCommand, parameters: e.target.value})}
+          ></textarea>
+          <p className="mt-1 text-xs text-gray-500">
+            명령에 맞는 파라미터가 자동으로 입력됩니다. 필요에 따라 수정하세요.
+          </p>
+          <div className="mt-2 text-xs text-gray-600">
+            <p className="font-semibold mb-1">명령어 파라미터 설명:</p>
+            <ul className="space-y-1 list-disc pl-5">
+              <li><span className="font-medium">이동(MOVE)</span>: 이동할 좌표 (x, y)</li>
+              <li><span className="font-medium">충전(CHARGE)</span>: 충전 시간(분)</li>
+              <li><span className="font-medium">정지(STOP)</span>: 파라미터 없음</li>
+              <li><span className="font-medium">물품 집기(PICKUP)</span>: 집을 물품 ID</li>
+              <li><span className="font-medium">물품 놓기(PUTDOWN)</span>: 놓을 위치</li>
+              <li><span className="font-medium">리셋(RESET)</span>: 파라미터 없음</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            className="mr-2 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            disabled={isLoading}
+          >
+            취소
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 flex items-center"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <RefreshCw size={16} className="animate-spin mr-2" />
+            ) : (
+              <Save size={16} className="mr-2" />
+            )}
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -31,9 +31,10 @@ class RobotStatus(str, Enum):
 class CommandStatus(str, Enum):
     PENDING = "PENDING"
     SENT = "SENT"
-    ACKED = "ACKED"
+    EXECUTING = "EXECUTING"
     EXECUTED = "EXECUTED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 class InventoryStatus(str, Enum):
     IN_STOCK = "IN_STOCK"

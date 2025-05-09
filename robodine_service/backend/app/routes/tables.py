@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.core.db_config import get_db
 from app.models import Table, GroupAssignment, Customer
 from app.models.enums import TableStatus, LogLevel
-from app.models.event import SystemLog
+from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
 
@@ -48,58 +48,35 @@ def get_tables(db: Session = Depends(get_db)):
         ) for t in tables
     ]
 
-@router.post("", response_model=TableResponse)
+@router.post("", response_model=dict)
 def create_table(
-    table_data: TableCreateRequest,
+    table_data: dict,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    # Check if table number already exists
-    existing = db.query(Table).filter(Table.id == table_data.id).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Table number {table_data.id} already exists"
-        )
     # Create new table
     new_table = Table(
-        table_id=table_data.table_id,
-        max_customer=table_data.max_customer,
+        max_customer=table_data.get("max_customer", 4),
         status=TableStatus.AVAILABLE,
-        x=table_data.x,
-        y=table_data.y,
-        width=table_data.width,
-        height=table_data.height
+        x=table_data.get("x", 0),
+        y=table_data.get("y", 0),
+        width=table_data.get("width", 100),
+        height=table_data.get("height", 100),
+        updated_at=datetime.utcnow()
     )
+    
     db.add(new_table)
     db.commit()
     db.refresh(new_table)
     
-    # 시스템 로그 생성
-    log = SystemLog(
-        level=LogLevel.INFO,
-        message=f"새 테이블이 생성되었습니다. 테이블 번호: {new_table.id}, 최대 수용 인원: {new_table.max_customer}명",
-        timestamp=datetime.utcnow()
-    )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
+    # Log this action
+    log_info(db, f"새 테이블 생성: {new_table.id}, 최대 인원 {new_table.max_customer}명", background_tasks)
     
-    # trigger websocket broadcast
-    from run import broadcast_entity_update
-    background_tasks.add_task(broadcast_entity_update, "table", None)
-    # 시스템 로그 브로드캐스트 예약
-    background_tasks.add_task(broadcast_entity_update, "systemlog", None)
-    
-    return TableResponse(
-        id=new_table.id,
-        max_customer=new_table.max_customer,
-        status=new_table.status,
-        x=new_table.x,
-        y=new_table.y,
-        width=new_table.width,
-        height=new_table.height
-    )
+    return {
+        "id": new_table.id,
+        "status": "success",
+        "message": "Table created successfully"
+    }
 
 @router.post("/{table_id}/assign", response_model=TableResponse)
 def assign_table(
@@ -137,15 +114,8 @@ def assign_table(
     db.refresh(assignment)  # ID를 얻기 위해 리프레시
     
     # 시스템 로그 생성
-    log = SystemLog(
-        level=LogLevel.INFO,
-        message=f"테이블이 할당되었습니다. 테이블 ID: {table.id}, 고객 ID: {assign_data.customer_id}, 인원 수: {customer.count}명",
-        timestamp=datetime.utcnow()
-    )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
-    
+    log_info(db, f"테이블 {table.id}에 고객 {assign_data.customer_id} 할당되었습니다", background_tasks)
+
     # websocket broadcast
     from run import broadcast_entity_update
     background_tasks.add_task(broadcast_entity_update, "customer", None)
@@ -164,60 +134,104 @@ def assign_table(
         height=table.height
     )
 
-@router.post("/{table_id}/release", response_model=TableResponse)
+@router.put("/{table_id}/release", response_model=dict)
 def release_table(
     table_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
+    # Find table
     table = db.query(Table).filter(Table.id == table_id).first()
     if not table:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Table ID {table_id} not found")
-    if table.status != TableStatus.OCCUPIED:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Table not occupied")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Table with ID {table_id} not found"
+        )
     
-    # 배정 정보를 삭제하는 대신 released_at 필드 업데이트
-    assignment = db.query(GroupAssignment).filter(
+    # Get active assignments for this table
+    active_assignments = db.query(GroupAssignment).filter(
         GroupAssignment.table_id == table_id,
         GroupAssignment.released_at == None
-    ).first()
+    ).all()
     
-    if assignment:
-        # 배정 삭제 대신 released_at 업데이트
+    if not active_assignments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Table {table_id} is not currently assigned to any customer group"
+        )
+    
+    # Update table status
+    table.status = TableStatus.AVAILABLE
+    table.updated_at = datetime.utcnow()
+    db.add(table)
+    
+    # Release all assignments
+    customer_ids = []
+    for assignment in active_assignments:
         assignment.released_at = datetime.utcnow()
         db.add(assignment)
+        customer_ids.append(assignment.customer_id)
     
-    # 테이블 상태 변경
-    table.status = TableStatus.AVAILABLE
+    db.commit()
+    
+    # Log this action
+    customer_str = ", ".join([str(cid) for cid in customer_ids])
+    log_info(db, f"테이블 {table_id} 해제됨, 고객 그룹: {customer_str}", background_tasks)
+    
+    return {
+        "status": "success",
+        "message": f"Table {table_id} released"
+    }
+
+@router.put("/{table_id}/status", response_model=dict)
+def update_table_status(
+    table_id: int,
+    status_data: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    if "status" not in status_data:
+        raise HTTPException(status_code=400, detail="Status is required")
+        
+    new_status = status_data["status"].upper()
+    if new_status not in ["AVAILABLE", "OCCUPIED"]:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
+    
+    # Find table
+    table = db.query(Table).filter(Table.id == table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail=f"Table with ID {table_id} not found")
+    
+    # Update status
+    old_status = table.status
+    table.status = TableStatus(new_status)
+    table.updated_at = datetime.utcnow()
+    
     db.add(table)
     db.commit()
     
-    # 시스템 로그 생성
-    log = SystemLog(
-        level=LogLevel.INFO,
-        message=f"테이블이 사용가능하게 되었습니다. 테이블 ID: {table.id}",
-        timestamp=datetime.utcnow()
-    )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
+    # Handle inconsistencies with assignments based on new status
+    if new_status == "AVAILABLE":
+        # If setting to available, release any active assignments
+        active_assignments = db.query(GroupAssignment).filter(
+            GroupAssignment.table_id == table_id,
+            GroupAssignment.released_at == None
+        ).all()
+        
+        if active_assignments:
+            for assignment in active_assignments:
+                assignment.released_at = datetime.utcnow()
+                db.add(assignment)
+            db.commit()
+            log_warning(db, f"테이블 {table_id} 상태를 AVAILABLE로 변경하여 {len(active_assignments)}개의 배정이 자동으로 해제됨", background_tasks)
     
-    # websocket broadcast
-    from run import broadcast_entity_update
-    background_tasks.add_task(broadcast_entity_update, "customer", None)
-    background_tasks.add_task(broadcast_entity_update, "table", None)
-    # 시스템 로그 브로드캐스트 예약
-    background_tasks.add_task(broadcast_entity_update, "systemlog", None)
+    # Log status change
+    log_info(db, f"테이블 {table_id} 상태 변경: {old_status} → {new_status}", background_tasks)
     
-    return TableResponse(
-        id=table.id,
-        max_customer=table.max_customer,
-        status=table.status,
-        x=table.x,
-        y=table.y,
-        width=table.width,
-        height=table.height
-    )
+    return {
+        "status": "success",
+        "message": f"Table status updated to {new_status}"
+    }
 
 class TableAssignmentResponse(BaseModel):
     id: int

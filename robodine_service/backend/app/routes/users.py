@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
@@ -76,6 +76,9 @@ class NotificationResponse(BaseModel):
 class NotificationCreateRequest(BaseModel):
     type: str
     message: str
+    
+class NotificationUpdateRequest(BaseModel):
+    status: NotificationStatus
 
 
 # --- Endpoints ---
@@ -203,6 +206,7 @@ def read_notifications(
 def create_notification(
     user_id: int,
     payload: NotificationCreateRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     if not db.get(User, user_id):
@@ -217,4 +221,61 @@ def create_notification(
     db.add(note)
     db.commit()
     db.refresh(note)
+    
+    # 알림 생성 후 웹소켓 업데이트 예약
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "notification",
+        None
+    )
+    
     return note
+
+@router.put(
+    "/{user_id}/notifications/{notification_id}",
+    response_model=NotificationResponse
+)
+def update_notification_status(
+    user_id: int,
+    notification_id: int,
+    payload: NotificationUpdateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 자신의 알림만 업데이트 가능
+    if current_user.role != UserRole.ADMIN and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                           detail="Not authorized to update this notification")
+    
+    # 사용자 존재 확인
+    if not db.get(User, user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                           detail="User not found")
+    
+    # 알림 존재 확인
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == user_id
+    ).first()
+    
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                           detail="Notification not found")
+    
+    # 알림 상태 업데이트
+    notification.status = payload.status
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    
+    # 웹소켓 업데이트 예약
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "notification",
+        None
+    )
+    
+    return notification

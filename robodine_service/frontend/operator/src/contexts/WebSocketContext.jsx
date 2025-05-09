@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
-const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams'];
+const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams', 'notifications', 'commands'];
 
 // 재연결 관련 상수
 const INITIAL_RECONNECT_DELAY = 3000; // 초기 재연결 지연 시간 (3초)
@@ -29,7 +29,17 @@ export function useWebSockets() {
 export function WebSocketProvider({ children }) {
   const [connections, setConnections] = useState({});
   const [data, setData] = useState({
-    robots: [], tables: [], events: [], orders: {}, status: {}, systemlogs: [], customers: {}, inventory: [], video_streams: []
+    robots: [],
+    tables: [], 
+    events: [], 
+    orders: {}, 
+    status: {}, 
+    systemlogs: [], 
+    customers: {}, 
+    inventory: [], 
+    video_streams: [],
+    notifications: [], // 서버로부터 전송될 알림 데이터를 담을 배열
+    commands: [] // 명령어 로그 데이터를 담을 배열
   });
   const [errors, setErrors] = useState({});
   const [connected, setConnected] = useState({});
@@ -140,6 +150,58 @@ export function WebSocketProvider({ children }) {
         try {
           const msg = JSON.parse(evt.data);
           if (msg.type === 'update' && msg.topic === topic) {
+            // console.log(`WebSocket: ${topic} 메시지 수신:`, msg.data);
+            
+            // 시스템 로그 데이터인 경우 배열인지 확인
+            if (topic === 'systemlogs' && msg.data) {
+              if (!Array.isArray(msg.data)) {
+                console.warn(`WebSocket: systemlogs 데이터가 배열이 아님:`, msg.data);
+                // 배열로 변환하여 저장
+                if (msg.data && typeof msg.data === 'object') {
+                  setData(prev => ({ ...prev, [topic]: [msg.data] }));
+                } else {
+                  setData(prev => ({ ...prev, [topic]: [] }));
+                }
+                return;
+              }
+            }
+            
+            // 알림 데이터인 경우 처리
+            if (topic === 'notifications' && msg.data) {
+              if (!Array.isArray(msg.data)) {
+                console.warn(`WebSocket: notifications 데이터가 배열이 아님:`, msg.data);
+                // 배열로 변환하여 저장
+                if (msg.data && typeof msg.data === 'object') {
+                  setData(prev => ({ ...prev, [topic]: [msg.data] }));
+                } else {
+                  setData(prev => ({ ...prev, [topic]: [] }));
+                }
+                return;
+              }
+              
+              // PENDING 상태인 알림만 표시하도록 필터링
+              const pendingNotifications = msg.data.filter(notification => 
+                notification.status === 'PENDING'
+              );
+              
+              setData(prev => ({ 
+                ...prev, 
+                [topic]: pendingNotifications 
+              }));
+              
+              // 브라우저 알림 표시
+              if (Notification.permission === "granted" && pendingNotifications.length > 0) {
+                pendingNotifications.forEach(notification => {
+                  new Notification("로보다인 알림", {
+                    body: notification.message,
+                    icon: "/favicon.ico"
+                  });
+                });
+              }
+              
+              return;
+            }
+            
             setData(prev => ({ ...prev, [topic]: msg.data }));
           }
         } catch (err) {
@@ -240,6 +302,30 @@ export function WebSocketProvider({ children }) {
     connectTopic(topic);
   }, [connections, connectTopic]);
 
+  // 알림 표시를 위한 브라우저 알림 권한 요청
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission !== "granted") {
+      // 권한 요청은 사용자 상호작용이 필요하므로 클릭 이벤트 핸들러에서 처리될 수 있도록 준비
+      console.log('브라우저 알림 권한이 필요합니다. 사용자 상호작용 후 요청될 예정입니다.');
+    }
+  }, []);
+  
+  // 알림 권한 요청 함수
+  const requestNotificationPermission = useCallback(async () => {
+    if (!("Notification" in window)) {
+      console.warn("이 브라우저는 알림을 지원하지 않습니다.");
+      return false;
+    }
+    
+    try {
+      const permission = await Notification.requestPermission();
+      return permission === "granted";
+    } catch (err) {
+      console.error("알림 권한 요청 오류:", err);
+      return false;
+    }
+  }, []);
+
   // Setup connections once on mount
   useEffect(() => {
     TOPICS.forEach(connectTopic);
@@ -264,8 +350,24 @@ export function WebSocketProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 토픽 수동 업데이트 함수
+  const updateManualData = (topic, newData) => {
+    setData(prevData => ({
+      ...prevData,
+      [topic]: newData
+    }));
+  };
+
   return (
-    <WebSocketContext.Provider value={{ data, errors, connected, refreshTopic }}>
+    <WebSocketContext.Provider 
+      value={{ 
+        data, 
+        errors, 
+        connected, 
+        refreshTopic,
+        updateManualData // 수동 업데이트 함수 추가
+      }}
+    >
       {children}
     </WebSocketContext.Provider>
   );

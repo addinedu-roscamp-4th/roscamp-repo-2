@@ -485,7 +485,7 @@ const CustomerPage = () => {
       // console.log(`Releasing table ${tableId}`);
       
       // 테이블 배정 해제 API 호출
-      const response = await apiCall(`/api/tables/${tableId}/release`, 'POST');
+      const response = await apiCall(`/api/tables/${tableId}/release`, 'PUT');
       
       // console.log("Release API response:", response);
       

@@ -3,11 +3,162 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Menu, X, Home, Settings, Package, 
   Database, Bell, LogOut, Monitor, AlertOctagon,
-  Coffee, Users, Video, Server, CloudLightning, AlertTriangle, ShoppingCart, RefreshCw
+  Coffee, Users, Video, Server, CloudLightning, AlertTriangle, ShoppingCart, RefreshCw,
+  CheckCircle, XCircle, Info, HelpCircle
 } from 'react-feather';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import { useHealthCheck } from '../contexts/HealthCheckContext';
+
+// 시스템 상태 모달 컴포넌트
+const SystemStatusModal = ({ isOpen, onClose, systemStatus, onRefresh }) => {
+  if (!isOpen) return null;
+
+  // 상태에 따른 아이콘, 색상 반환 함수
+  const getStatusIcon = (status) => {
+    switch(status) {
+      case 'healthy':
+        return <CheckCircle className="text-green-500" size={18} />;
+      case 'unhealthy':
+        return <XCircle className="text-red-500" size={18} />;
+      case 'checking':
+        return <HelpCircle className="text-yellow-500" size={18} />;
+      default:
+        return <Info className="text-gray-500" size={18} />;
+    }
+  };
+
+  // 디버깅 로그
+  console.log('[시스템 상태 모달] 현재 시스템 상태:', systemStatus);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
+          <div className="absolute inset-0 bg-black opacity-50"></div>
+        </div>
+
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen"></span>&#8203;
+        
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="sm:flex sm:items-start">
+              <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
+                  <Monitor className="mr-2" size={20} />
+                  시스템 상태 상세 정보
+                </h3>
+                <div className="mt-4">
+                  <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                    <div className="flex items-center mb-2">
+                      {getStatusIcon(systemStatus.overall)}
+                      <span className="ml-2 font-semibold">전체 시스템 상태:</span>
+                      <span className={`ml-2 ${
+                        systemStatus.overall === 'healthy' ? 'text-green-600' :
+                        systemStatus.overall === 'unhealthy' ? 'text-red-600' : 'text-yellow-600'
+                      }`}>
+                        {systemStatus.overall === 'healthy' ? '정상' : 
+                         systemStatus.overall === 'unhealthy' ? '오류' : '확인 중'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      마지막 확인: {systemStatus.lastChecked ? new Date(systemStatus.lastChecked).toLocaleString('ko-KR') : '확인된 적 없음'}
+                    </p>
+                  </div>
+                  
+                  <h4 className="font-medium mb-2">서비스별 상태</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-2 border-b">
+                      <div className="flex items-center">
+                        <Database size={16} className="mr-2" />
+                        <span>데이터베이스</span>
+                      </div>
+                      <div className="flex items-center">
+                        {getStatusIcon(systemStatus.services.database)}
+                        <span className={`ml-1 ${
+                          systemStatus.services.database === 'healthy' ? 'text-green-600' :
+                          systemStatus.services.database === 'unhealthy' ? 'text-red-600' : 'text-yellow-600'
+                        }`}>
+                          {systemStatus.services.database === 'healthy' ? '정상' : 
+                           systemStatus.services.database === 'unhealthy' ? '오류' : '확인 중'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between p-2 border-b">
+                      <div className="flex items-center">
+                        <Server size={16} className="mr-2" />
+                        <span>백엔드 API</span>
+                      </div>
+                      <div className="flex items-center">
+                        {getStatusIcon(systemStatus.services.backend)}
+                        <span className={`ml-1 ${
+                          systemStatus.services.backend === 'healthy' ? 'text-green-600' :
+                          systemStatus.services.backend === 'unhealthy' ? 'text-red-600' : 'text-yellow-600'
+                        }`}>
+                          {systemStatus.services.backend === 'healthy' ? '정상' : 
+                           systemStatus.services.backend === 'unhealthy' ? '오류' : '확인 중'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between p-2 border-b">
+                      <div className="flex items-center">
+                        <CloudLightning size={16} className="mr-2" />
+                        <span>웹소켓 연결</span>
+                      </div>
+                      <div className="flex items-center">
+                        {getStatusIcon(systemStatus.services.robots)}
+                        <span className={`ml-1 ${
+                          systemStatus.services.robots === 'healthy' ? 'text-green-600' :
+                          systemStatus.services.robots === 'unhealthy' ? 'text-red-600' : 'text-yellow-600'
+                        }`}>
+                          {systemStatus.services.robots === 'healthy' ? '정상' : 
+                           systemStatus.services.robots === 'unhealthy' ? '오류' : '확인 중'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {systemStatus.errors && systemStatus.errors.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="font-medium mb-2 flex items-center">
+                        <AlertTriangle size={16} className="text-red-500 mr-2" />
+                        오류 메시지
+                      </h4>
+                      <div className="bg-red-50 border border-red-100 rounded-md p-3">
+                        <ul className="list-disc pl-5 space-y-1">
+                          {systemStatus.errors.map((error, index) => (
+                            <li key={index} className="text-red-700 text-sm">{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+            >
+              <RefreshCw size={16} className="mr-2" />
+              상태 새로고침
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Header = ({ toggleSidebar }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -22,18 +173,25 @@ const Header = ({ toggleSidebar }) => {
   const markAsRead = notificationsContext?.markAsRead || (() => {});
   const markAllAsRead = notificationsContext?.markAllAsRead || (() => {});
 
+  // 알림 상태 로깅
+  useEffect(() => {
+    // console.log('[헤더] 알림 상태:', { 총알림수: notifications.length, 안읽은알림: unreadCount });
+  }, [notifications.length, unreadCount]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
   const clearNotifications = () => {
+    // console.log('[헤더] 모든 알림 읽음 처리');
     markAllAsRead();
     setShowNotifications(false);
   };
 
   // 알림 클릭 처리
   const handleNotificationClick = (notification) => {
+    // console.log('[헤더] 알림 클릭:', notification);
     markAsRead(notification.id);
     // 알림 타입에 따라 다른 페이지로 이동
     if (notification.source === 'systemlog') {
@@ -67,12 +225,22 @@ const Header = ({ toggleSidebar }) => {
       
       if (isNaN(date.getTime())) return '';
       
-      const diff = Math.floor((now - date) / 1000);  // 초 단위 차이
+      const diffMs = now - date;
+      const diffMin = Math.floor(diffMs / (1000 * 60));
       
-      if (diff < 60) return `${diff}초 전`;
-      if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+      // 1시간 미만이면 분 단위로 표시
+      if (diffMin < 60) {
+        if (diffMin < 1) return '방금 전';
+        return `${diffMin}분 전`;
+      }
       
+      // 24시간 미만이면 시간 단위로 표시
+      const diffHours = Math.floor(diffMin / 60);
+      if (diffHours < 24) {
+        return `${diffHours}시간 전`;
+      }
+      
+      // 그 외에는 날짜와 시간 표시
       return date.toLocaleString('ko-KR', {
         month: 'short',
         day: 'numeric',
@@ -130,7 +298,7 @@ const Header = ({ toggleSidebar }) => {
             </button>
             
             {showNotifications && (
-              <div className="absolute right-0 mt-2 bg-white rounded-md shadow-lg w-72 z-20">
+              <div className="absolute right-0 mt-2 bg-white rounded-md shadow-lg w-80 z-20">
                 <div className="py-2 px-4 border-b flex justify-between items-center">
                   <h3 className="font-medium text-gray-700">알림</h3>
                   <button 
@@ -140,29 +308,31 @@ const Header = ({ toggleSidebar }) => {
                     모두 읽음 처리
                   </button>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-96 overflow-y-auto">
                   {notifications.length > 0 ? (
                     <div>
                       {notifications.map(notification => (
                         <div 
                           key={notification.id} 
                           className={`px-4 py-3 hover:bg-gray-50 border-b last:border-0 cursor-pointer ${
-                            notification.read ? 'opacity-70' : ''
+                            notification.read ? 'opacity-70' : 'border-l-4 border-l-blue-500'
                           }`}
                           onClick={() => handleNotificationClick(notification)}
                         >
                           <div className="flex items-start">
-                            <span className="mr-2 mt-0.5">
+                            <span className="mr-2 mt-0.5 flex-shrink-0">
                               {getNotificationIcon(notification.type)}
                             </span>
-                            <div>
-                              <p className="text-sm text-gray-800">{notification.message}</p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {formatTimestamp(notification.time)}
+                            <div className="flex-grow min-w-0">
+                              <p className="text-sm text-gray-800 mb-1 break-words">{notification.message}</p>
+                              <div className="flex justify-between items-center">
+                                <p className="text-xs text-gray-500">
+                                  {formatTimestamp(notification.time)}
+                                </p>
                                 {!notification.read && (
-                                  <span className="ml-2 inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                  <span className="inline-block w-2 h-2 bg-blue-500 rounded-full ml-1 flex-shrink-0"></span>
                                 )}
-                              </p>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -224,13 +394,29 @@ const Header = ({ toggleSidebar }) => {
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const location = useLocation();
   const healthCheckContext = useHealthCheck();
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  
+  // 디버깅 로그 추가
+  // console.log('[레이아웃] 헬스체크 컨텍스트:', healthCheckContext);
   
   // 방어적 프로그래밍: healthCheckContext가 없는 경우를 처리
   const systemStatus = healthCheckContext?.systemStatus || { 
     overall: 'checking', 
     errors: [] 
   };
-  const performHealthCheck = healthCheckContext?.performHealthCheck || (() => {});
+  const performHealthCheck = healthCheckContext?.performHealthCheck || (() => {
+    console.log('[레이아웃] 헬스체크 함수가 존재하지 않습니다.');
+  });
+  
+  // 시스템 상태 변경 로깅
+  useEffect(() => {
+    // console.log('[레이아웃] 시스템 상태 변경:', systemStatus);
+  }, [systemStatus]);
+  
+  const handleRefreshStatus = () => {
+    console.log('[레이아웃] 헬스체크 새로고침 버튼 클릭');
+    performHealthCheck();
+  };
   
   const menuItems = [
     { name: '대시보드', icon: Home, path: '/' },
@@ -267,6 +453,14 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
   return (
     <div className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
+      {/* 시스템 상태 모달 */}
+      <SystemStatusModal 
+        isOpen={showStatusModal} 
+        onClose={() => setShowStatusModal(false)} 
+        systemStatus={systemStatus}
+        onRefresh={handleRefreshStatus}
+      />
+      
       {/* 모바일 오버레이 */}
       {isOpen && (
         <div 
@@ -318,7 +512,10 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
+            <div 
+              className="flex items-center cursor-pointer hover:bg-gray-700 p-2 rounded-md"
+              onClick={() => setShowStatusModal(true)}
+            >
               <Monitor size={20} className={`${systemStatus.overall === 'healthy' ? 'text-green-400' : systemStatus.overall === 'unhealthy' ? 'text-red-400' : 'text-yellow-400'} mr-3`} />
               <div>
                 <p className="text-sm font-medium text-white">시스템 상태</p>
@@ -326,7 +523,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               </div>
             </div>
             <button 
-              onClick={performHealthCheck}
+              onClick={handleRefreshStatus}
               className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-gray-700"
               title="상태 새로고침"
             >

@@ -48,7 +48,6 @@ RoboDine 운영자 대시보드는 로봇 레스토랑의 전체 운영을 위�
 | `/orders` | `OrdersPage` | 주문 관리 및 추적 |
 | `/customers` | `CustomerPage` | 고객 및 테이블 관리 |
 | `/stats` | `StatsPage` | 통계 및 데이터 분석 |
-| `/system` | `SystemPage` | 시스템 이벤트 및 로그 |
 | `/settings` | `SettingsPage` | 시스템 설정 관리 |
 | `/robots` | `RobotAdminPage` | 로봇 관리 및 제어 |
 | `/video-stream` | `VideoStreamPage` | 비디오 스트리밍 관리 |
@@ -133,7 +132,6 @@ graph TD
     D --> I[CustomerPage]
     D --> J[VideoStreamPage]
     D --> K[StatsPage]
-    D --> L[SystemPage]
     D --> M[SettingsPage]
     
     B --> N[LoginPage]
@@ -304,7 +302,6 @@ operator/
 │   │   ├── CustomerPage.jsx      # 고객/테이블 관리
 │   │   ├── VideoStreamPage.jsx   # 영상 스트리밍
 │   │   ├── StatsPage.jsx         # 통계 및 분석
-│   │   ├── SystemPage.jsx        # 시스템 관리
 │   │   └── SettingsPage.jsx      # 설정
 │   ├── services/        # API 서비스
 │   │   └── api.js       # API 클라이언트 설정

@@ -31,12 +31,12 @@ export const HealthCheckProvider = ({ children }) => {
   
   // 디버깅용 로그 함수
   const logDebug = (...args) => {
-    console.log('[헬스체크]', ...args);
+    // console.log('[헬스체크]', ...args);
   };
 
   // 웹소켓 상태 변경 로깅
   useEffect(() => {
-    logDebug("웹소켓 연결 상태:", connected);
+    // logDebug("웹소켓 연결 상태:", connected);
   }, [connected]);
 
   // 헬스체크 수행 함수를 useCallback으로 메모이제이션
@@ -46,7 +46,7 @@ export const HealthCheckProvider = ({ children }) => {
     try {
       // API 호출 시도
       const healthData = await apiCall('/api/health', 'GET');
-      logDebug("헬스체크 API 응답:", healthData);
+      // logDebug("헬스체크 API 응답:", healthData); 
       
       // 웹소켓 연결 상태 확인
       const wsHealth = connected && 
@@ -54,23 +54,21 @@ export const HealthCheckProvider = ({ children }) => {
                        connected.systemlogs === true && 
                        connected.status === true;
       
-      logDebug("웹소켓 연결 상태:", { connected, wsHealth });
+      // logDebug("웹소켓 연결 상태:", { connected, wsHealth });
       
       // 서비스별 상태 업데이트
       const servicesStatus = {
-        database: healthData?.database?.status || 'unhealthy',
-        backend: healthData?.api?.status || 'unhealthy',
+        database: healthData?.database || 'unhealthy',
+        backend: healthData?.status || 'unhealthy',
         robots: wsHealth ? 'healthy' : 'unhealthy',
-        inventory: healthData?.inventory?.status || 'unhealthy'
       };
       
-      logDebug("서비스 상태:", servicesStatus);
+      // logDebug("서비스 상태:", servicesStatus);
   
       const errors = [];
       if (servicesStatus.database !== 'healthy') errors.push('데이터베이스 연결 문제가 발생했습니다.');
       if (servicesStatus.backend !== 'healthy') errors.push('백엔드 API 서비스에 문제가 발생했습니다.');
-      if (servicesStatus.robots !== 'healthy') errors.push('로봇 연결 서비스에 문제가 발생했습니다.');
-      if (servicesStatus.inventory !== 'healthy') errors.push('재고 관리 시스템에 문제가 발생했습니다.');
+      if (servicesStatus.robots !== 'healthy') errors.push('웹소켓 연결 서비스에 문제가 발생했습니다.');
   
       const allHealthy = Object.values(servicesStatus).every(status => status === 'healthy');
       
@@ -81,7 +79,7 @@ export const HealthCheckProvider = ({ children }) => {
         errors
       });
     } catch (err) {
-      logDebug('헬스체크 수행 중 오류 발생:', err);
+      // logDebug('헬스체크 수행 중 오류 발생:', err);
       
       // 웹소켓 연결 상태 확인 (에러 상황에서도)
       const robotsConnected = connected && connected.robots === true;
@@ -102,22 +100,22 @@ export const HealthCheckProvider = ({ children }) => {
   
   // 초기 및 주기적 헬스체크 설정
   useEffect(() => {
-    logDebug("헬스체크 타이머 설정");
+    // logDebug("헬스체크 타이머 설정");
     
     // 초기 헬스체크는 약간의 지연 후 수행
     const initialCheckTimer = setTimeout(() => {
-      logDebug("초기 헬스체크 실행");
+      // logDebug("초기 헬스체크 실행");
       performHealthCheck();
     }, 2000); // 2초로 약간 늘림
     
     // 정기적 헬스체크 설정 (5분마다)
     const intervalId = setInterval(() => {
-      logDebug("주기적 헬스체크 실행");
+      // logDebug("주기적 헬스체크 실행");
       performHealthCheck();
     }, 5 * 60 * 1000);
     
     return () => {
-      logDebug("헬스체크 타이머 정리");
+      // logDebug("헬스체크 타이머 정리");
       clearTimeout(initialCheckTimer);
       clearInterval(intervalId);
     };
@@ -130,7 +128,7 @@ export const HealthCheckProvider = ({ children }) => {
         (connected.robots !== undefined || 
          connected.systemlogs !== undefined || 
          connected.status !== undefined)) {
-      logDebug("웹소켓 상태 변경 감지:", connected);
+      // logDebug("웹소켓 상태 변경 감지:", connected);
       performHealthCheck();
     }
   }, [connected, performHealthCheck]); // performHealthCheck 의존성 추가

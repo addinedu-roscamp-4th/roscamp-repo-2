@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 from app.models.inventory import Inventory
@@ -6,8 +6,11 @@ from app.models.inventory import MenuIngredient, MenuItem
 from app.core.db_config import get_db
 from sqlalchemy.orm import Session
 from datetime import datetime
-from app.models.enums import InventoryStatus
+from app.models.enums import InventoryStatus, UserRole
 from app.models.admin_settings import AdminSettings
+from app.models import User
+from app.routes.auth import get_current_user
+from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
 
@@ -53,102 +56,118 @@ def get_inventory(db: Session = Depends(get_db)):
 
 # Create new inventory item
 @router.post("", response_model=dict)
-def create_inventory(inventory_data: InventoryCreateRequest, db: Session = Depends(get_db)):
-    # Check if the ingredient exists
-    ingredient = db.query(MenuIngredient).filter(MenuIngredient.id == inventory_data.ingredient_id).first()
-    if not ingredient:
+def create_inventory(
+    inventory_data: dict,
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Only admins can create inventory
+    if current_user.role != UserRole.ADMIN:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ingredient with ID {inventory_data.ingredient_id} not found"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to create inventory items"
+        )
+    
+    # Check if the ingredient already exists
+    existing_inventory = db.query(Inventory).filter(Inventory.name == inventory_data["name"]).first()
+    if existing_inventory:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Inventory with name '{inventory_data['name']}' already exists"
         )
     
     # Create new inventory item
+    max_count = inventory_data.get("max_count", 100)
+    count = inventory_data.get("count", 0)
+    
+    # Determine status based on count and max_count
+    status_value = InventoryStatus.IN_STOCK
+    if count <= 0:
+        status_value = InventoryStatus.OUT_OF_STOCK
+    elif count < max_count * 0.2:  # Less than 20% of max
+        status_value = InventoryStatus.LOW_STOCK
+    
     new_inventory = Inventory(
-        ingredient_id=inventory_data.ingredient_id,
-        name=inventory_data.name,
-        count=inventory_data.count,
-        max_count=inventory_data.max_count,
-        status=inventory_data.status
+        name=inventory_data["name"],
+        count=count,
+        max_count=max_count,
+        status=status_value,
+        updated_at=datetime.utcnow()
     )
     
     db.add(new_inventory)
     db.commit()
     db.refresh(new_inventory)
     
-    # Create a system log for this operation
-    from app.models import SystemLog
-    log = SystemLog(
-        level="INFO",
-        message=f"새 재고 항목 생성: {inventory_data.name}, 수량: {inventory_data.count}",
-        timestamp=datetime.utcnow()
-    )
-    db.add(log)
-    db.commit()
+    # Log this action
+    log_info(db, f"재고 항목 생성: {new_inventory.name}, 수량: {new_inventory.count}", background_tasks)
     
     return {
         "id": new_inventory.id,
         "status": "success",
-        "message": "재고가 생성되었습니다."
+        "message": "재고 항목이 생성되었습니다."
     }
 
 # Update inventory item
 @router.put("/{inventory_id}", response_model=dict)
-def update_inventory(inventory_id: int, inventory_data: InventoryCreateRequest, db: Session = Depends(get_db)):
-    # Find inventory item
+def update_inventory(
+    inventory_id: int,
+    inventory_data: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Only admins can update inventory
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update inventory"
+        )
+    
     inventory = db.query(Inventory).filter(Inventory.id == inventory_id).first()
     if not inventory:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Inventory item with ID {inventory_id} not found"
+            detail=f"Inventory with ID {inventory_id} not found"
         )
     
+    old_count = inventory.count
+    
     # Update inventory fields
-    inventory.ingredient_id = inventory_data.ingredient_id
-    inventory.name = inventory_data.name
-    inventory.count = inventory_data.count
-    inventory.max_count = inventory_data.max_count
-    inventory.status = inventory_data.status
+    if "name" in inventory_data:
+        inventory.name = inventory_data["name"]
+    
+    if "count" in inventory_data:
+        inventory.count = inventory_data["count"]
+    
+    if "max_count" in inventory_data:
+        inventory.max_count = inventory_data["max_count"]
+    
+    # Recalculate status based on new values
+    if inventory.count <= 0:
+        inventory.status = InventoryStatus.OUT_OF_STOCK
+        log_warning(db, f"재고 소진: {inventory.name} (ID: {inventory_id})", background_tasks)
+    elif inventory.count < inventory.max_count * 0.2:  # Less than 20% of max
+        inventory.status = InventoryStatus.LOW_STOCK
+        log_warning(db, f"재고 부족: {inventory.name} (남은 수량: {inventory.count})", background_tasks)
+    else:
+        inventory.status = InventoryStatus.IN_STOCK
+    
+    inventory.updated_at = datetime.utcnow()
     
     db.add(inventory)
     db.commit()
-
-        
-
-    # adminsetting의 재고 threshold 값에 따라 재고 상태 업데이트
-    admin_settings = db.query(AdminSettings).first()
-    if admin_settings and inventory.count < admin_settings.inventory_threshold * inventory.max_count:
-        inventory.status = InventoryStatus.LOW_STOCK
-    else:
-        inventory.status = InventoryStatus.IN_STOCK
-    db.commit()
     db.refresh(inventory)
-
-
-    # Create a system log for this operation
-    from app.models import SystemLog
-    if inventory.status == InventoryStatus.LOW_STOCK:
-        log = SystemLog(
-            level="WARNING",
-            message=f"재고 부족 경고: {inventory_data.name}, 현재 수량: {inventory_data.count}",
-            timestamp=datetime.utcnow()
-        )       
-    elif inventory.status == InventoryStatus.OUT_OF_STOCK:
-        log = SystemLog(
-            level="ERROR",
-            message=f"재고 품절 경고: {inventory_data.name}, 현재 수량: {inventory_data.count}",
-            timestamp=datetime.utcnow()
-        )
-    else:
-        log = SystemLog(
-            level="INFO",
-            message=f"재고 항목 업데이트: {inventory_data.name}, 수량: {inventory_data.count}",
-            timestamp=datetime.utcnow()
-        )
-
-    db.add(log)
-    db.commit()
     
-    return {"message": "재고가 업데이트되었습니다."}
+    # Log inventory change
+    if old_count != inventory.count:
+        log_info(db, f"재고 수량 변경: {inventory.name}, {old_count} → {inventory.count}", background_tasks)
+    
+    return {
+        "status": "success",
+        "message": "재고가 업데이트되었습니다."
+    }
 
 # Delete inventory item
 @router.delete("/{inventory_id}", response_model=dict)

@@ -5,9 +5,9 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.db_config import get_db
-from app.models import Albabot
-from app.models.enums import RobotStatus, LogLevel
-from app.models.event import SystemLog
+from app.models import Albabot, Robot
+from app.models.enums import RobotStatus, EntityType, LogLevel
+from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
 
@@ -138,14 +138,7 @@ def create_albabot_status(
         log_message = f"알바봇 #{albabot.robot_id}의 상태가 업데이트되었습니다. (상태: {albabot.status})"
     
     # 시스템 로그 저장
-    log = SystemLog(
-        level=log_level,
-        message=log_message,
-        timestamp=datetime.utcnow()
-    )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
+    log_info(db, log_message, background_tasks)
     
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
@@ -167,3 +160,79 @@ def create_albabot_status(
         battery_level=int(new_albabot.battery_level),
         timestamp=new_albabot.timestamp
     )
+
+@router.post("/{robot_id}/command", response_model=dict)
+def send_command_to_albabot(
+    robot_id: str, 
+    command_data: dict, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """알바봇에 명령 전송 (ex: 주문 서빙, 청소 등)"""
+    # Check if robot exists
+    robot = db.query(Robot).filter(Robot.robot_id == robot_id).first()
+    if not robot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Robot with ID {robot_id} not found"
+        )
+    
+    # Check if it's an Albabot
+    if robot.type != EntityType.ALBABOT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Robot {robot_id} is not an Albabot"
+        )
+    
+    # Get latest Albabot status
+    albabot = db.query(Albabot).filter(Albabot.robot_id == robot_id).order_by(Albabot.id.desc()).first()
+    if not albabot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Albabot data for robot {robot_id} not found"
+        )
+    
+    # Check if robot is available
+    if albabot.status not in [RobotStatus.IDLE]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Albabot {robot_id} is not available (current status: {albabot.status})"
+        )
+    
+    # Process command
+    command_type = command_data.get("type", "").upper()
+    
+    # Create new status entry
+    new_status = None
+    if command_type == "SERVE":
+        new_status = RobotStatus.SERVING
+    elif command_type == "CLEAN":
+        new_status = RobotStatus.CLEANING
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid command type: {command_type}"
+        )
+    
+    # Create new albabot entry with updated status
+    new_albabot = Albabot(
+        robot_id=robot_id,
+        status=new_status,
+        battery_level=albabot.battery_level,
+        timestamp=datetime.utcnow()
+    )
+    
+    db.add(new_albabot)
+    db.commit()
+    db.refresh(new_albabot)
+    
+    # Log this action
+    log_info(db, f"알바봇 {robot_id}에 {command_type} 명령 전송, 상태 변경: {albabot.status} → {new_status}", background_tasks)
+    
+    # Return success response
+    return {
+        "status": "success",
+        "message": f"Command {command_type} sent to Albabot {robot_id}",
+        "robot_id": robot_id,
+        "new_status": str(new_status)
+    }

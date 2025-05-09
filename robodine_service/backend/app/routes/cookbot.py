@@ -5,9 +5,9 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.core.db_config import get_db
-from app.models import Cookbot
-from app.models.enums import RobotStatus, LogLevel
-from app.models.event import SystemLog
+from app.models import Cookbot, Robot, Order
+from app.models.enums import RobotStatus, LogLevel, OrderStatus, EntityType
+from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
 
@@ -111,14 +111,11 @@ def create_cookbot_status(
     if status_changed:
         log_message += f" (이전 상태: {prev_status})"
     
-    log = SystemLog(
-        level=log_level,
-        message=log_message,
-        timestamp=datetime.utcnow()
+    log_info(
+        db,
+        log_message,
+        background_tasks
     )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
 
     # 모듈 초기화 이후 동적 import
     from run import broadcast_entity_update
@@ -140,3 +137,67 @@ def create_cookbot_status(
         status=new_cookbot.status,
         timestamp=new_cookbot.timestamp
     )
+
+@router.post("/{robot_id}/command", response_model=dict)
+def send_command_to_cookbot(
+    robot_id: int,
+    command: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    # Find robot
+    robot = db.get(Robot, robot_id)
+    if not robot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Robot with ID {robot_id} not found"
+        )
+    
+    if robot.robot_type != EntityType.COOKBOT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Robot with ID {robot_id} is not a COOKBOT"
+        )
+    
+    command_type = command.get("command_type")
+    if not command_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Command type is required"
+        )
+    
+    # 명령 처리 로직
+    old_status = robot.status
+    if command_type == "COOK":
+        robot.status = RobotStatus.COOKING
+        
+        # Order processing logic
+        order_id = command.get("order_id")
+        if order_id:
+            order = db.get(Order, order_id)
+            if order:
+                order.status = OrderStatus.COOKING
+                db.add(order)
+    elif command_type == "READY":
+        robot.status = RobotStatus.READY
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid command type: {command_type}"
+        )
+    
+    robot.updated_at = datetime.utcnow()
+    db.add(robot)
+    db.commit()
+    
+    # Log command
+    log_info(
+        db,
+        f"쿡봇 #{robot_id}에 명령 전송: {command_type}, 상태 변경: {old_status} → {robot.status}",
+        background_tasks
+    )
+    
+    return {
+        "status": "success",
+        "message": f"Command {command_type} sent to Cookbot {robot_id}"
+    }

@@ -19,7 +19,7 @@ WS_PING_INTERVAL = int(os.environ.get("WS_PING_INTERVAL", "30"))  # 초 단위
 # 웹소켓 메시지 프로토콜 정의
 class WSMessage(BaseModel):
     type: Literal["update", "error", "ping", "pong", "shutdown"]
-    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams"]
+    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands"]
     data: Any
 
 # 연결 관리자 클래스
@@ -35,7 +35,9 @@ class ConnectionManager:
             "systemlogs": [],
             "customers": [],
             "inventory": [],
-            "video_streams": []
+            "video_streams": [],
+            "notifications": [],
+            "commands": []
         }
         self.shutting_down = False
         self.max_connections_per_topic = WS_MAX_CONNECTIONS  # 환경 변수에서 가져온 값
@@ -115,7 +117,7 @@ class ConnectionManager:
     
     async def broadcast_update(self, 
                              data: Any, 
-                             topic: Literal["robots", "tables", "events", "orders", "systemlogs", "customers", "inventory"]):
+                             topic: Literal["robots", "tables", "events", "orders", "systemlogs", "customers", "inventory", "notifications", "commands"]):
         """데이터 객체를 JSON으로 직렬화하여 특정 토픽에 브로드캐스팅"""
         message = {
             "type": "update",
@@ -160,7 +162,7 @@ ping_task = None
 async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
     """단일 통합 웹소켓 엔드포인트 - 토픽은 URL 경로 파라미터로 지정"""
     # 지원되는 토픽 확인
-    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams"]
+    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands"]
     if topic not in valid_topics:
         logger.warning(f"Client attempted to connect to invalid topic: {topic}")
         await websocket.close(code=1003)  # 1003 = Unsupported data
@@ -187,6 +189,20 @@ async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
             except Exception as e:
                 logger.error(f"Initial inventory broadcast failed: {e}")
 
+        # 초기 브로드캐스트: 알림 연결 시 전체 알림 즉시 전송
+        elif topic == "notifications":
+            try:
+                await broadcast_entity_update("notification", None)
+            except Exception as e:
+                logger.error(f"Initial notifications broadcast failed: {e}")
+                
+        # 초기 브로드캐스트: 명령어 로그 연결 시 명령어 목록 즉시 전송
+        elif topic == "commands":
+            try:
+                await broadcast_entity_update("command", None)
+            except Exception as e:
+                logger.error(f"Initial commands broadcast failed: {e}")
+
         logger.info(f"{topic.capitalize()} connection established from {websocket.client.host}")
         
         # 클라이언트에 연결 확인 메시지 전송
@@ -201,7 +217,7 @@ async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
             try:
                 data = await websocket.receive_text()
                 client_message = json.loads(data)
-                logger.info(f"Received message from client on topic {topic}: {data}")
+                # logger.info(f"Received message from client on topic {topic}: {data}")
                 
                 # 핑-퐁 처리
                 if client_message.get("type") == "ping":
@@ -271,3 +287,11 @@ async def broadcast_customers_update(customers_data):
 async def broadcast_systemlogs_update(logs_data):
     """시스템 로그 데이터 업데이트를 브로드캐스팅"""
     await manager.broadcast_update(logs_data, "systemlogs")
+
+async def broadcast_notifications_update(notifications_data):
+    """알림 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(notifications_data, "notifications")
+
+async def broadcast_commands_update(commands_data):
+    """명령어 로그 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(commands_data, "commands")

@@ -1,6 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useWebSockets } from './WebSocketContext';
 import { useAuth } from './AuthContext';
+
+// 로깅 함수
+const logDebug = (...args) => {
+  // console.log('[알림]', ...args);
+};
 
 // 알림의 초기 상태 설정
 const initialNotificationsState = {
@@ -32,15 +37,34 @@ export const NotificationsProvider = ({ children }) => {
   const [notifications, setNotifications] = useState(initialNotificationsState);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { data: wsData, errors: wsErrors } = useWebSockets();
+  const { data: wsData, errors: wsErrors, connected, requestNotificationPermission } = useWebSockets();
   const { apiCall } = useAuth();
+  
+  // 웹소켓 데이터 로깅
+  useEffect(() => {
+    if (wsData) {
+      logDebug('웹소켓 데이터 변경됨:', { 
+        systemlogs: !!wsData.systemlogs,
+        systemlogsLength: wsData.systemlogs && Array.isArray(wsData.systemlogs) ? wsData.systemlogs.length : 0,
+        notifications: !!wsData.notifications,
+        notificationsLength: wsData.notifications && Array.isArray(wsData.notifications) ? wsData.notifications.length : 0,
+        connected
+      });
+    }
+    
+    if (wsErrors) {
+      logDebug('웹소켓 오류:', wsErrors);
+    }
+  }, [wsData, wsErrors, connected]);
 
   // 알림 설정 가져오기
   useEffect(() => {
     const fetchSettings = async () => {
       setIsLoading(true);
       try {
+        logDebug('알림 설정 가져오기 시도');
         const data = await apiCall('/api/settings');
+        logDebug('알림 설정 응답:', data);
         
         if (data && data.alert_settings) {
           setNotifications(prev => ({
@@ -52,6 +76,9 @@ export const NotificationsProvider = ({ children }) => {
               DEBUG: data.alert_settings.DEBUG ?? false
             }
           }));
+          logDebug('알림 설정 업데이트 완료');
+        } else {
+          logDebug('알림 설정이 응답에 없거나 형식이 맞지 않음');
         }
       } catch (err) {
         console.error('알림 설정을 가져오는데 실패했습니다:', err);
@@ -64,71 +91,53 @@ export const NotificationsProvider = ({ children }) => {
     fetchSettings();
   }, [apiCall]);
 
-  // systemlogs 데이터가 변경될 때마다 알림 필터링 및 업데이트
+  // 웹소켓에서 받은 알림 데이터 처리
   useEffect(() => {
-    if (!wsData?.systemlogs || wsData.systemlogs.length === 0) return;
-
-    // 마지막으로 처리된 로그 ID 확인
-    const lastProcessedId = localStorage.getItem('lastProcessedLogId');
-    const lastProcessedTimestamp = localStorage.getItem('lastProcessedLogTimestamp');
-    
-    // 새 로그 필터링
-    const newLogs = wsData.systemlogs.filter(log => {
-      // ID로 필터링
-      if (lastProcessedId && log.id <= parseInt(lastProcessedId)) return false;
+    if (wsData && wsData.notifications && Array.isArray(wsData.notifications)) {
+      logDebug(`웹소켓에서 ${wsData.notifications.length}개의 알림 수신`);
       
-      // 타임스탬프로 필터링 (보조 체크)
-      if (!lastProcessedId && lastProcessedTimestamp && new Date(log.timestamp) <= new Date(lastProcessedTimestamp)) return false;
-      
-      // 설정에 따라 로그 레벨 필터링
-      return notifications.settings[log.level];
-    });
-
-    if (newLogs.length > 0) {
-      try {
-        // 가장 높은 ID와 최신 타임스탬프 찾기
-        const highestId = Math.max(...wsData.systemlogs.map(log => log.id || 0));
-        const timestamps = wsData.systemlogs.map(log => new Date(log.timestamp).getTime()).filter(t => !isNaN(t));
-        const latestTimestamp = timestamps.length > 0 ? new Date(Math.max(...timestamps)) : new Date();
+      // 새 알림을 items에 추가 (이미 읽은 항목은 제외)
+      setNotifications(prev => {
+        // 기존 알림 ID 목록 생성
+        const existingIds = new Set(prev.items.map(item => item.id));
         
-        // 로컬 스토리지 업데이트
-        localStorage.setItem('lastProcessedLogId', highestId.toString());
-        localStorage.setItem('lastProcessedLogTimestamp', latestTimestamp.toISOString());
-        
-        // 새 알림 추가
-        const newNotifications = newLogs.map(log => ({
-          id: `log-${log.id || Date.now()}`,
-          message: log.message || '새로운 시스템 로그',
-          type: log.level || 'INFO',
-          time: new Date(log.timestamp || Date.now()),
+        // 새 알림 필터링 (이미 있는 알림 제외)
+        const newNotifications = wsData.notifications.filter(notif => 
+          !existingIds.has(`notif-${notif.id}`)
+        ).map(notif => ({
+          id: `notif-${notif.id}`,
+          message: notif.message || '새로운 알림',
+          type: notif.type || 'INFO',
+          time: notif.created_at ? new Date(notif.created_at) : new Date(),
           read: false,
-          source: 'systemlog',
-          sourceId: log.id || 0
+          source: 'notification',
+          sourceId: notif.id,
+          userId: notif.user_id
         }));
         
-        setNotifications(prev => ({
-          ...prev,
-          items: [...newNotifications, ...prev.items].slice(0, 50), // 최대 50개 알림 유지
-          unreadCount: prev.unreadCount + newNotifications.length
-        }));
-        
-        // 브라우저 알림 표시
-        if (Notification.permission === "granted") {
-          newNotifications.forEach(notification => {
-            new Notification("로보다인 시스템 알림", {
-              body: notification.message,
-              icon: "/favicon.ico"
-            });
-          });
+        if (newNotifications.length === 0) {
+          return prev; // 새 알림이 없으면 상태 업데이트 불필요
         }
-      } catch (err) {
-        console.error('알림 처리 중 오류 발생:', err);
-      }
+        
+        const updatedItems = [...newNotifications, ...prev.items].slice(0, 50);
+        const updatedUnreadCount = updatedItems.filter(item => !item.read).length;
+        
+        logDebug(`알림 상태 업데이트 (총 ${updatedItems.length}개, 읽지 않음 ${updatedUnreadCount}개)`);
+        
+        return {
+          ...prev,
+          items: updatedItems,
+          unreadCount: updatedUnreadCount
+        };
+      });
     }
-  }, [wsData?.systemlogs, notifications.settings]);
+  }, [wsData.notifications]);
 
-  // 알림 읽음 표시
-  const markAsRead = (notificationId) => {
+  // 알림 읽음 표시 (백엔드에도 상태 업데이트)
+  const markAsRead = useCallback(async (notificationId) => {
+    logDebug(`알림 읽음 표시: ${notificationId}`);
+    
+    // 로컬 상태 업데이트
     setNotifications(prev => {
       const updatedItems = prev.items.map(item => 
         item.id === notificationId ? { ...item, read: true } : item
@@ -143,19 +152,66 @@ export const NotificationsProvider = ({ children }) => {
         unreadCount
       };
     });
-  };
+    
+    // 서버에 읽음 상태 업데이트 (notification 소스인 경우)
+    const notification = notifications.items.find(item => item.id === notificationId);
+    if (notification && notification.source === 'notification' && notification.sourceId) {
+      try {
+        // API 호출을 통해 알림 상태 업데이트
+        // await apiCall(`/api/customers/${currentCustomer.id}`, 'PUT', { count: currentCustomer.count });
 
-  // 모든 알림 읽음 표시
-  const markAllAsRead = () => {
+        await apiCall(`/api/users/${notification.userId}/notifications/${notification.sourceId}`,'PUT',{ status: 'SENT' }
+        );
+        logDebug(`알림 ${notification.sourceId} 상태 업데이트 완료`);
+      } catch (err) {
+        console.error('알림 상태 업데이트 실패:', err);
+      }
+    }
+  }, [apiCall, notifications.items]);
+
+  // 모든 알림 읽음 표시 (백엔드에도 상태 업데이트)
+  const markAllAsRead = useCallback(async () => {
+    logDebug('모든 알림 읽음 표시');
+    
+    // 읽지 않은 notification 소스 알림 ID 수집
+    const unreadNotificationIds = notifications.items
+      .filter(item => !item.read && item.source === 'notification' && item.sourceId)
+      .map(item => ({
+        id: item.sourceId,
+        userId: item.userId
+      }));
+    
+    // 로컬 상태 업데이트
     setNotifications(prev => ({
       ...prev,
       items: prev.items.map(item => ({ ...item, read: true })),
       unreadCount: 0
     }));
-  };
+    
+    // 서버에 모든 알림 상태 업데이트
+    if (unreadNotificationIds.length > 0) {
+      try {
+        // 각 알림에 대해 상태 업데이트 API 호출
+        // await apiCall(`/api/users/${notification.userId}/notifications/${notification.sourceId}`,'PUT',{ status: 'SENT' }
+
+        const updatePromises = unreadNotificationIds.map(({ id, userId }) => 
+          apiCall(`/api/users/${userId}/notifications/${id}`,'PUT',{ status: 'SENT' }
+          )
+        );
+        
+        await Promise.all(updatePromises);
+        logDebug(`${unreadNotificationIds.length}개 알림 상태 일괄 업데이트 완료`);
+      } catch (err) {
+        console.error('일괄 알림 상태 업데이트 실패:', err);
+      }
+    }
+  }, [apiCall, notifications.items]);
 
   // 알림 설정 업데이트
-  const updateSettings = async (newSettings) => {
+  const updateSettings = useCallback(async (newSettings) => {
+    logDebug('알림 설정 업데이트:', newSettings);
+    
+    // 로컬 상태 업데이트
     setNotifications(prev => ({
       ...prev,
       settings: {
@@ -163,22 +219,24 @@ export const NotificationsProvider = ({ children }) => {
         ...newSettings
       }
     }));
-  };
-
-  // 브라우저 알림 권한 요청
-  const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) {
-      console.log("이 브라우저는 알림을 지원하지 않습니다.");
-      return false;
-    }
     
-    if (Notification.permission !== "granted") {
-      const permission = await Notification.requestPermission();
-      return permission === "granted";
+    // 서버에 설정 업데이트
+    try {
+      await apiCall('/api/settings', {
+        method: 'PUT',
+        data: {
+          alert_settings: {
+            ...notifications.settings,
+            ...newSettings
+          }
+        }
+      });
+      logDebug('알림 설정 서버 업데이트 완료');
+    } catch (err) {
+      console.error('알림 설정 업데이트 실패:', err);
+      setError('알림 설정 업데이트 실패');
     }
-    
-    return true;
-  };
+  }, [apiCall, notifications.settings]);
 
   // 컨텍스트 값
   const value = {
@@ -192,6 +250,15 @@ export const NotificationsProvider = ({ children }) => {
     updateSettings,
     requestNotificationPermission
   };
+
+  // 데이터 로깅
+  useEffect(() => {
+    logDebug('현재 알림 상태:', { 
+      count: notifications.items.length, 
+      unread: notifications.unreadCount,
+      settings: notifications.settings
+    });
+  }, [notifications.items.length, notifications.unreadCount]);
 
   return (
     <NotificationsContext.Provider value={value}>

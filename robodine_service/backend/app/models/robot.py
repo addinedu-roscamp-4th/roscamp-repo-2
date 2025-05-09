@@ -9,6 +9,7 @@ from .enums import RobotStatus, EntityType
 if TYPE_CHECKING:
     from .pose6d import Pose6D
     from .order import Order
+    from .robot_command import RobotCommand
 
 class Robot(SQLModel, table=True):
     __tablename__ = "robot"

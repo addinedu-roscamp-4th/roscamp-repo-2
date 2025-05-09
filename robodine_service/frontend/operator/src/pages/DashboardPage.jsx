@@ -206,12 +206,33 @@ export default function DashboardPage() {
 
   // 시스템 로그 데이터 처리
   const processedLogs = useMemo(() => {
-    const list = Array.isArray(systemlogs) ? systemlogs : [];
-    return list.map(l => ({
-      id: l['SystemLog.id'], level: l['SystemLog.level'], message: l['SystemLog.message'],
-      timestamp: l['SystemLog.timestamp']
+    // systemlogs가 배열인지 확인
+    if (!Array.isArray(systemlogs)) {
+      console.log('systemlogs가 배열이 아님:', systemlogs);
+      return [];
+    }
+
+    // 새로운 형식 (WebSocketContext에서 추가한 테스트 데이터)
+    if (systemlogs.length > 0 && systemlogs[0]?.id !== undefined && !systemlogs[0]['SystemLog.id']) {
+      return systemlogs.map((log, index) => ({
+        id: log.id || `log-${index}-${Date.now()}`,
+        level: log.level,
+        message: log.message,
+        timestamp: log.timestamp,
+        source: log.source
+      }));
+    }
+
+    // 기존 형식
+    return systemlogs.map((l, index) => ({
+      id: l['SystemLog.id'] || l.id || `log-${index}-${Date.now()}`,
+      level: l['SystemLog.level'] || l.level,
+      message: l['SystemLog.message'] || l.message,
+      timestamp: l['SystemLog.timestamp'] || l.timestamp,
+      source: l['SystemLog.source'] || l.source
     }));
   }, [systemlogs]);
+  
   const recentLogs = useMemo(() => {
     return [...processedLogs]
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))

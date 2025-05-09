@@ -43,70 +43,77 @@ export const AuthProvider = ({ children }) => {
   }, [navigate]);
 
   // API 호출 유틸리티 함수
-  const apiCall = async (endpoint, method = 'GET', body = null, customHeaders = {}) => {
-    setError(null);
-    const token = localStorage.getItem('token');
-    const url = `${API_URL}${endpoint}`;
-
-    // 요청 헤더 설정
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...customHeaders
-    };
-
-    const options = {
-      method,
-      headers
-    };
-
-    if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-      options.body = JSON.stringify(body);
-    }
-
+  const apiCall = async (endpoint, method = 'GET', data = null) => {
     try {
-      const response = await fetch(url, options);
-
-      // 응답이 JSON이 아닌 경우 처리
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.indexOf('application/json') !== -1) {
-        const data = await response.json();
-
-        // 401/403 에러 처리 - 인증 실패
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('token');
-            setCurrentUser(null);
-            setIsTokenValid(false);
-            navigate('/login');
-          }
-          throw new Error(data.detail || data.message || '요청 처리 중 오류가 발생했습니다');
-        }
-
-        return data;
-      } else {
-        // 응답이 JSON이 아닌 경우
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            localStorage.removeItem('token');
-            setCurrentUser(null);
-            setIsTokenValid(false);
-            navigate('/login');
-          }
-          throw new Error('요청 처리 중 오류가 발생했습니다');
-        }
-        return await response.text();
-      }
-    } catch (err) {
-      console.error(`API Error (${endpoint}):`, err.message);
+      const url = `${API_URL}${endpoint}`;
+      console.log(`API 요청: ${method} ${url}`);
       
-      // 404 오류는 리소스가 없음을 나타내므로 특별히 처리
-      if (err.message.includes('404') || err.message.includes('Not Found')) {
-        setError(`API 엔드포인트를 찾을 수 없습니다: ${endpoint}`);
-      } else {
-        setError(err.message);
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      // 로그인한 상태면 토큰 추가
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
-      throw err;
+      
+      const config = {
+        method,
+        headers,
+        credentials: 'include', // 쿠키 포함
+      };
+      
+      if (data) {
+        config.body = JSON.stringify(data);
+      }
+      
+      const response = await fetch(url, config);
+      
+      // 응답 데이터 추출
+      let responseData;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        responseData = await response.json();
+      } else {
+        responseData = await response.text();
+      }
+      
+      // 응답 상태 확인
+      if (!response.ok) {
+        // 오류 응답 생성
+        const error = new Error(
+          responseData.detail || 
+          (typeof responseData === 'string' ? responseData : JSON.stringify(responseData)) || 
+          `Status code: ${response.status}`
+        );
+        
+        // 응답 내용 추가
+        error.response = {
+          status: response.status,
+          statusText: response.statusText,
+          data: responseData
+        };
+        
+        // 401 Unauthorized 처리
+        if (response.status === 401) {
+          console.log('API 인증 오류, 로그아웃');
+          // 토큰 삭제 및 사용자 상태 초기화
+          localStorage.removeItem('token');
+          setCurrentUser(null);
+          setIsTokenValid(false);
+          
+          // 로그인 페이지로 리디렉션
+          navigate('/login');
+        }
+        
+        throw error;
+      }
+      
+      return responseData;
+    } catch (error) {
+      console.error(`API call error (${endpoint}):`, error);
+      throw error;
     }
   };
 
@@ -189,6 +196,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     isTokenValid,
+    isAuthenticated: isTokenValid && !!currentUser,
     login,
     signup,
     logout,

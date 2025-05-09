@@ -40,6 +40,7 @@ from app.models.inventory import Inventory, MenuItem, MenuIngredient
 from app.models.customer import Customer
 from app.models.table import Table, GroupAssignment
 from app.models.admin_settings import AdminSettings
+from app.models.user import User, Notification
 from app.core.utils import dispatch_payload
 
 from app.services.streaming_service import get_stream_urls, add_stream_url
@@ -64,7 +65,9 @@ last_broadcast = {
     "systemlogs": datetime.min,
     "customers": datetime.min,
     "inventory": datetime.min,
-    "video_streams": datetime.min
+    "video_streams": datetime.min,
+    "notifications": datetime.min,
+    "commands": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -269,6 +272,29 @@ def serialize_video_stream(stream):
         "recording_ended_at": stream.recording_ended_at.isoformat() if stream.recording_ended_at else None,
     }
 
+def serialize_notification(notification):
+    """Notification 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": notification.id,
+        "user_id": notification.user_id,
+        "type": notification.type,
+        "message": notification.message,
+        "created_at": notification.created_at.isoformat() if notification.created_at else None,
+        "status": str(notification.status).replace('NotificationStatus.', '') if notification.status else None
+    }
+
+def serialize_command(command):
+    """RobotCommand 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": command.id,
+        "robot_id": command.robot_id,
+        "command": command.command,
+        "parameters": command.parameters,
+        "status": str(command.status).replace('CommandStatus.', '') if command.status else None,
+        "issued_at": command.timestamp.isoformat() if command.timestamp else None,
+        "executed_at": command.executed_at.isoformat() if command.executed_at else None
+    }
+
 # 서버 측에서 사용할 데이터 전송 함수들
 async def broadcast_robots_update(robots_data):
     """로봇 데이터 업데이트를 브로드캐스팅"""
@@ -340,6 +366,24 @@ async def broadcast_video_streams_update(streams_data):
         "data": streams_data
     }
     await manager.broadcast(message, "video_streams")
+
+async def broadcast_notifications_update(notifications_data):
+    """알림 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "notifications",
+        "data": notifications_data
+    }
+    await manager.broadcast(message, "notifications")
+
+async def broadcast_commands_update(commands_data):
+    """명령어 로그 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "commands",
+        "data": commands_data
+    }
+    await manager.broadcast(message, "commands")
 
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
@@ -527,6 +571,33 @@ async def broadcast_entity_update(entity_type, entity_id):
                             .order_by(VideoStream.id)
                         ).all()
                         out['data'] = [serialize_video_stream(stream) for stream in streams]
+                # notification
+                elif entity_type == "notification":
+                    if entity_id:
+                        notification = session.get(Notification, entity_id)
+                        out['data'] = [serialize_notification(notification)] if notification else []
+                    else:
+                        # 대기 중인 알림만 조회
+                        notifications = session.exec(
+                            select(Notification)
+                            .where(Notification.status == "PENDING")
+                            .order_by(Notification.created_at.desc())
+                        ).all()
+                        out['data'] = [serialize_notification(notification) for notification in notifications]
+                # command
+                elif entity_type == "command":
+                    from app.models.robot_command import RobotCommand
+                    if entity_id:
+                        command = session.get(RobotCommand, entity_id)
+                        out['data'] = [serialize_command(command)] if command else []
+                    else:
+                        # 최근 명령 조회
+                        commands = session.exec(
+                            select(RobotCommand)
+                            .order_by(RobotCommand.id.desc())
+                            .limit(30)
+                        ).all()
+                        out['data'] = [serialize_command(command) for command in commands]
                 return out
 
         result = await anyio.to_thread.run_sync(_sync_db_work)
@@ -593,6 +664,12 @@ async def broadcast_entity_update(entity_type, entity_id):
         elif entity == "video_stream":
             await broadcast_video_streams_update(result['data'])
             last_broadcast['video_streams'] = now
+        elif entity == "notification":
+            await broadcast_notifications_update(result['data'])
+            last_broadcast['notifications'] = now
+        elif entity == "command":
+            await broadcast_commands_update(result['data'])
+            last_broadcast['commands'] = now
 
     except Exception as entity:
         logger.error(f"Error in broadcasting {entity_type} update: {entity}")
@@ -642,6 +719,14 @@ async def fallback_polling():
             if (now - last_broadcast.get("video_streams", datetime.min)).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("video_stream", None)
                 
+            # 알림 데이터 10초마다 갱신
+            if (now - last_broadcast.get("notifications", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("notification", None)
+                
+            # 명령어 로그 데이터 10초마다 갱신
+            if (now - last_broadcast.get("commands", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("command", None)
+                
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
             
@@ -677,6 +762,8 @@ async def lifespan(app: FastAPI):
     last_broadcast["customers"] = datetime.min
     last_broadcast["inventory"] = datetime.min
     last_broadcast["video_streams"] = datetime.min
+    last_broadcast["notifications"] = datetime.min
+    last_broadcast["commands"] = datetime.min
 
     yield
     
@@ -749,9 +836,25 @@ class RoboDineTCPHandler(socketserver.BaseRequestHandler):
 API_PREFIX = "/api"
 
 #health check
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
-    return {"status": "ok"}
+    # db 열결 무작위로 확인 후 health 체크
+    with Session(engine) as session:
+        try:
+            # DB 연결 확인
+            session.execute(select(func.count()).select_from(SystemLog))
+            # DB에서 최근 1개 레코드 조회
+            recent_log = session.exec(
+                select(SystemLog)
+                .order_by(SystemLog.timestamp.desc())
+                .limit(1)
+            ).first()
+            if recent_log:
+                logger.info(f"Recent log: {recent_log}")
+        except Exception as e:
+            logger.error(f"Database connection error: {e}")
+            return {"status": "healthy", "database": "unhealthy"}
+    return {"status": "healthy","database": "healthy"}
 
 # Include websocket and streaming routers (these don't need the API prefix)
 app.include_router(websocket_router, tags=["websocket"])
