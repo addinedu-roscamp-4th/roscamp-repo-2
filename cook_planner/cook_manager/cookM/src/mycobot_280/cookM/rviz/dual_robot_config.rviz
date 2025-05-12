@@ -1,0 +1,49 @@
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Name: TF
+      Class: rviz_default_plugins/TF
+      Enabled: true
+
+    - Name: Robot1
+      Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Robot Description: robot1/robot_description
+      TF Prefix: robot1
+      Update Interval: 0.0
+      Visual Enabled: true
+      Collision Enabled: false
+      Alpha: 1.0
+
+    - Name: Robot2
+      Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Robot Description: robot2/robot_description
+      TF Prefix: robot2
+      Update Interval: 0.0
+      Visual Enabled: true
+      Collision Enabled: false
+      Alpha: 1.0
+
+    - Name: Grid
+      Class: rviz_default_plugins/Grid
+      Enabled: true
+      Plane Cell Count: 20
+      Plane: XY
+      Cell Size: 0.1
+      Color: 160; 160; 160
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+    - Class: rviz_default_plugins/SetGoal
+  Value: true

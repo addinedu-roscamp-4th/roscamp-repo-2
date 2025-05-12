@@ -1,0 +1,16 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from mycobot_interfaces/msg/MycobotPumpStatus.msg
+// generated code does not contain a copyright notice
+
+
+module mycobot_interfaces {
+  module msg {
+    struct MycobotPumpStatus {
+      boolean status;
+
+      int8 pin1;
+
+      int8 pin2;
+    };
+  };
+};

@@ -1,0 +1,24 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from mycobot_interfaces/msg/MycobotSetAngles.msg
+// generated code does not contain a copyright notice
+
+
+module mycobot_interfaces {
+  module msg {
+    struct MycobotSetAngles {
+      float joint_1;
+
+      float joint_2;
+
+      float joint_3;
+
+      float joint_4;
+
+      float joint_5;
+
+      float joint_6;
+
+      int8 speed;
+    };
+  };
+};

@@ -1,0 +1,15 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from mycobot_interfaces/srv/GripperStatus.srv
+// generated code does not contain a copyright notice
+
+
+module mycobot_interfaces {
+  module srv {
+    struct GripperStatus_Request {
+      boolean status;
+    };
+    struct GripperStatus_Response {
+      boolean flag;
+    };
+  };
+};

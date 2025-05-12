@@ -1,0 +1,25 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from mycobot_interfaces/srv/GetCoords.srv
+// generated code does not contain a copyright notice
+
+
+module mycobot_interfaces {
+  module srv {
+    struct GetCoords_Request {
+      uint8 structure_needs_at_least_one_member;
+    };
+    struct GetCoords_Response {
+      float x;
+
+      float y;
+
+      float z;
+
+      float rx;
+
+      float ry;
+
+      float rz;
+    };
+  };
+};

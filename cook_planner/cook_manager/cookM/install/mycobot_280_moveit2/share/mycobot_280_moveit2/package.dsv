@@ -1,0 +1,8 @@
+source;share/mycobot_280_moveit2/hook/cmake_prefix_path.ps1
+source;share/mycobot_280_moveit2/hook/cmake_prefix_path.dsv
+source;share/mycobot_280_moveit2/hook/cmake_prefix_path.sh
+source;share/mycobot_280_moveit2/local_setup.bash
+source;share/mycobot_280_moveit2/local_setup.dsv
+source;share/mycobot_280_moveit2/local_setup.ps1
+source;share/mycobot_280_moveit2/local_setup.sh
+source;share/mycobot_280_moveit2/local_setup.zsh

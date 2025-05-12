@@ -1,0 +1,19 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from mycobot_interfaces/srv/PumpStatus.srv
+// generated code does not contain a copyright notice
+
+
+module mycobot_interfaces {
+  module srv {
+    struct PumpStatus_Request {
+      boolean status;
+
+      int8 pin1;
+
+      int8 pin2;
+    };
+    struct PumpStatus_Response {
+      boolean flag;
+    };
+  };
+};
