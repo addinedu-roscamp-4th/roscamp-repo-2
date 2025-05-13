@@ -1,0 +1,582 @@
+/* 테마 변수 */
+:root[data-theme="light"] {
+  --background-color: #ffffff;
+  --text-color: #333333;
+  --message-bg-user: #e3f2fd;
+  --message-bg-bot: #f5f5f5;
+  --border-color: #e0e0e0;
+  --hover-color: #f0f0f0;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --modal-bg: #ffffff;
+  --modal-header-bg: #f5f5f5;
+  --modal-text: #333333;
+  --modal-border: #e0e0e0;
+}
+
+:root[data-theme="dark"] {
+  --background-color: #1a1a1a;
+  --text-color: #ffffff;
+  --message-bg-user: #2c3e50;
+  --message-bg-bot: #34495e;
+  --border-color: #404040;
+  --hover-color: #2d2d2d;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --modal-bg: #2d2d2d;
+  --modal-header-bg: #1a1a1a;
+  --modal-text: #ffffff;
+  --modal-border: #404040;
+}
+
+/* 기본 스타일 */
+.floating-chat {
+  position: fixed;
+  z-index: 1000;
+  background: transparent;
+  transition: all 0.3s ease;
+}
+
+.floating-chat.open {
+  background: var(--background-color);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.chat-button {
+  background: var(--primary-color);
+  border: none;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.chat-icon {
+  font-size: 24px;
+}
+
+/* 채팅 컨테이너 */
+.floating-chat.open {
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+  min-height: 400px;
+  resize: both;
+  overflow: hidden;
+}
+
+/* 드래그 핸들 */
+.drag-handle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 12px 12px 0 0;
+  cursor: move;
+  user-select: none;
+}
+
+.handle-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.handle-dots span {
+  width: 4px;
+  height: 4px;
+  background-color: white;
+  border-radius: 50%;
+}
+
+/* 채팅 컨트롤 */
+.chat-controls {
+  display: flex;
+  gap: 12px;
+}
+
+.chat-controls button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  min-width: 80px;
+  justify-content: center;
+}
+
+.chat-controls button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.chat-controls button:active {
+  transform: translateY(0);
+}
+
+.chat-controls .search-button::before {
+  content: '🔍 검색';
+}
+
+.chat-controls .settings-button::before {
+  content: '⚙️ 설정';
+}
+
+.chat-controls .close-button::before {
+  content: '✕ 닫기';
+}
+
+/* 검색 바 스타일 개선 */
+.search-bar {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--background-color);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-bar input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 14px;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--background-color);
+  padding: 4px 8px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.search-controls button {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.search-controls button:hover {
+  background-color: var(--hover-color);
+}
+
+.search-count {
+  font-size: 12px;
+  color: var(--text-color);
+  opacity: 0.8;
+  margin-right: 4px;
+}
+
+/* 검색 하이라이트 스타일 */
+.highlight {
+  background-color: #ffeb3b;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.highlight-message {
+  animation: highlight-pulse 2s ease-out;
+}
+
+@keyframes highlight-pulse {
+  0% { background-color: rgba(var(--primary-color-rgb), 0.2); }
+  100% { background-color: transparent; }
+}
+
+/* 모달 공통 스타일 */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background: var(--modal-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 10000;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+  position: relative;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--modal-header-bg);
+  border-bottom: 1px solid var(--modal-border);
+  cursor: move;
+  user-select: none;
+}
+
+.modal-header:active {
+  cursor: grabbing;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--modal-text);
+  font-size: 18px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: var(--hover-color);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* 설정 모달 스타일 */
+.settings-modal {
+  width: 400px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.settings-modal.dragging {
+  transition: none;
+}
+
+.settings-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--modal-text);
+}
+
+.theme-select {
+  padding: 8px 12px;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background-color: var(--modal-bg);
+  color: var(--modal-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.theme-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* 이미지 모달 스타일 */
+.image-modal {
+  width: 90vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--modal-bg);
+  position: relative;
+}
+
+.image-modal .modal-header {
+  background: var(--modal-header-bg);
+  color: var(--modal-text);
+  border-bottom: 1px solid var(--modal-border);
+  padding: 12px 20px;
+}
+
+.image-modal .modal-body {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--modal-bg);
+}
+
+.image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.image-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.image-controls button {
+  background: var(--hover-color);
+  border: 1px solid var(--modal-border);
+  color: var(--modal-text);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  min-width: 40px;
+}
+
+.image-controls button:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.image-controls span {
+  font-size: 14px;
+  min-width: 60px;
+  text-align: center;
+  color: var(--modal-text);
+}
+
+.image-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.image-actions button {
+  background: var(--hover-color);
+  border: 1px solid var(--modal-border);
+  color: var(--modal-text);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.image-actions button:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.image-actions .modal-close {
+  padding: 8px;
+  font-size: 20px;
+  color: var(--modal-text);
+}
+
+.image-actions .modal-close:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+/* 메시지 컨테이너 */
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 메시지 스타일 */
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.message {
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  position: relative;
+}
+
+.user-message {
+  align-self: flex-end;
+  background-color: var(--message-bg-user);
+  color: var(--text-color);
+}
+
+.bot-message {
+  align-self: flex-start;
+  background-color: var(--message-bg-bot);
+  color: var(--text-color);
+}
+
+.message-content {
+  word-break: break-word;
+}
+
+.message-time {
+  font-size: 0.8em;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+/* 채팅 이미지 스타일 */
+.chat-image {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.chat-image:hover {
+  transform: scale(1.02);
+}
+
+/* 입력 영역 */
+.chat-input {
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input textarea {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  resize: none;
+  height: 40px;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+.chat-input button {
+  padding: 8px 16px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-input button:hover:not(:disabled) {
+  background-color: var(--primary-color-dark);
+}
+
+.chat-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 리사이즈 핸들 */
+.resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--border-color);
+  border-bottom: 2px solid var(--border-color);
+}
+
+/* 로딩 상태 */
+.loading-more {
+  text-align: center;
+  padding: 8px;
+  color: var(--text-color);
+  opacity: 0.7;
+}
+
+.pending {
+  opacity: 0.7;
+}
+
+/* 빈 채팅 상태 */
+.empty-chat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-color);
+  opacity: 0.7;
+}
+
+/* 반응형 스타일 */
+@media (max-width: 768px) {
+  .floating-chat.open {
+    width: 100% !important;
+    height: 100% !important;
+    left: 0 !important;
+    top: 0 !important;
+    border-radius: 0;
+  }
+
+  .chat-button {
+    width: 50px;
+    height: 50px;
+  }
+
+  .chat-icon {
+    font-size: 20px;
+  }
+} 

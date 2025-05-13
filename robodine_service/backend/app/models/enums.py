@@ -2,9 +2,39 @@ from enum import Enum
 from sqlalchemy import Enum as SQLEnum
 
 # ── ENUM 정의 ────────────────────────────────────────────────────────────────
+
+class ChatType(str, Enum):
+    """채팅 메시지 유형"""
+    TEXT = "TEXT"
+    IMAGE = "IMAGE"
+    VOICE = "VOICE"
+    ACTION = "ACTION"
+
+class ChatStatus(str, Enum):
+    """채팅 상태"""
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    ERROR = "ERROR"
+    RETRYING = "RETRYING"
+    SENT = "SENT"
+    
+class TaskType(str, Enum):
+    GREETINGS = "GREETINGS"
+    MAINTENANCE = "MAINTENANCE"
+    TAKE_PICTURE = "TAKE_PICTURE"
+
+class LogLevel(str, Enum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    DEBUG = "DEBUG"
+
 class EntityType(str, Enum):
     COOKBOT = "COOKBOT"
     ALBABOT = "ALBABOT"
+    PINKY = "PINKY"
+    GLOBAL = "GLOBAL"
+    WORLD = "WORLD"
     INVENTORY = "INVENTORY"
     CHATBOT = "CHATBOT"
 
@@ -14,15 +44,18 @@ class RobotStatus(str, Enum):
     SERVING = "SERVING"
     CLEANING = "CLEANING"
     EMERGENCY = "EMERGENCY"
-    MAINTENANCE = "MAINTENANCE"
     SECURITY = "SECURITY"
+    CHARGING = "CHARGING"
+    ERROR = "ERROR"
+    MAINTENANCE = "MAINTENANCE"
 
 class CommandStatus(str, Enum):
     PENDING = "PENDING"
     SENT = "SENT"
-    ACKED = "ACKED"
+    EXECUTING = "EXECUTING"
     EXECUTED = "EXECUTED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 class InventoryStatus(str, Enum):
     IN_STOCK = "IN_STOCK"

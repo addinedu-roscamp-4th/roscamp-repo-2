@@ -6,12 +6,14 @@ from .enums import TableStatus
 
 class Table(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    number: Optional[int] = None
-    max_adults: Optional[int] = None
-    max_children: Optional[int] = None
+    max_customer: Optional[int] = None
     status: Optional[TableStatus] = Field(sa_column=Column(SQLEnum(TableStatus)))
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    x: Optional[float] = None
+    y: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+
     assignments: List["GroupAssignment"] = Relationship(back_populates="table")
 
 class GroupAssignment(SQLModel, table=True):
@@ -21,7 +23,7 @@ class GroupAssignment(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     table_id: Optional[int] = Field(default=None, foreign_key="table.id")
     customer_id: Optional[int] = Field(default=None, foreign_key="customer.id")
-    assigned_at: Optional[datetime] = None
+    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     released_at: Optional[datetime] = None
     
     table: Optional[Table] = Relationship(back_populates="assignments")

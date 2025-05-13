@@ -135,6 +135,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.venv/
 
 # Spyder project settings
 .spyderproject
@@ -187,3 +188,16 @@ cython_debug/
 *.ogg
 *.opus
 *.aac
+
+log/
+install/
+robovenv/
+.env
+node_modules/
+
+.idea/
+.vscode/
+log/
+install/
+robovenv/
+node_modules/

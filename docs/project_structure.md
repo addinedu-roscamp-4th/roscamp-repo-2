@@ -1,266 +1,165 @@
-# 📂 RoboDine 프로젝트 구조 및 협업 가이드라인
+# 📂 RoboDine 프로젝트 구조
 
+## 📌 프로젝트 개요
 
-## 📁 최상위 폴더 역할 요약
+RoboDine은 로봇 기반 자동화 레스토랑 솔루션으로, 서빙 로봇(핑키)과 요리 로봇(myCobot280)을 통합해 고객 응대부터 음식 조리 및 서빙까지 레스토랑 운영의 전 과정을 자동화합니다. 본 문서는 전체 프로젝트의 구조와 각 모듈의 역할을 설명합니다.
 
-| 폴더명 | 설명 |
-|--------|------|
-| **robodine_service** | 중앙 서버 및 프론트엔드 웹 UI |
-| **alba_planner** | 핑키 로봇 관리 (고객 안내 및 서빙) |
-| **cook_planner** | 음식 조리 로봇(myCobot280) 관리 |
+## 📁 최상위 모듈 구조
+
+| 모듈명 | 역할 |
+|-------|------|
+| **robodine_service** | 중앙 서버 및 프론트엔드 UI 시스템 |
+| **alba_planner** | 서빙 로봇(핑키) 관리 시스템 |
+| **cook_planner** | 조리 로봇(myCobot280) 관리 시스템 |
 | **cook_gpt** | AI 기반 조리 지원 및 비전 처리 서비스 |
-| **docs** | 프로젝트 문서화 및 협업 가이드라인 |
+| **docs** | 프로젝트 문서 |
 
----
+## 📂 상세 모듈 구성
 
-## 🌿 협업 가이드라인
-
-### 🌱 브랜치 전략
-
-- **main**: 안정화된 배포 상태 유지
-- **develop**: 개발 통합 브랜치
-- **feature/<기능명>**: 개별 기능 개발 브랜치
-
-### 🌱 Pull Request 및 코드 리뷰
-
-- 모든 기능 개발은 개별 브랜치에서 진행한 후 PR을 통해 `develop` 브랜치에 병합합니다.
-- 병합 전 최소 1명 이상의 코드 리뷰가 필수입니다.
-
-### 🌱 커밋 메시지 규칙
-
-```bash
-feat: 신규 기능 추가 (#이슈번호)
-fix: 버그 수정 (#이슈번호)
-docs: 문서화 (#이슈번호)
-refactor: 코드 리팩토링 (#이슈번호)
-```
-
-예시:
-
-```bash
-git commit -m "feat: 주문 처리 REST API 구현 (#32)"
-```
-
-### 🌱 CI/CD 테스트 관리
-
-- 모든 Pull Request는 pytest와 Jest 기반의 자동화 테스트를 반드시 통과해야 합니다.
-- GitHub Actions를 통해 CI/CD 자동화를 설정합니다.
-
----
-
-## 📌 GitHub 이슈 활용 및 관리 방법
-
-GitHub 이슈를 통해 모든 작업 사항을 명확하게 관리하고 추적합니다.
-
-### ✅ 이슈 관리 흐름
-
-1. **이슈 생성**: 문제 또는 기능 요청을 이슈로 등록 후 담당자 할당
-2. **확인 및 작업 진행**: 담당자는 이슈 확인 후 작업 시작
-3. **PR 및 병합**: 작업 완료 후 PR을 생성, 병합 시 자동으로 이슈 닫기 (`Closes #이슈번호` 포함)
-
-### ✅ 이슈 작성 예시
+### 1. robodine_service (중앙 서버 및 프론트엔드)
 
 ```
-제목: ROS 데이터 수신 오류 해결 필요
-
-내용:
-현재 ROS 데이터 수신 서비스에서 간헐적으로 연결 끊김 현상이 발생합니다.
-
-## 예상 결과:
-- ROS 데이터 수신이 안정적으로 유지되어야 함
-
-## 실제 결과:
-- 연결 끊김 및 재연결 반복
-
-## 환경 정보:
-- Ubuntu 24.04, ROS2 Jazzy
+robodine_service/
+├── backend/                # FastAPI 기반 백엔드 서버
+│   ├── app/                # 애플리케이션 코어
+│   │   ├── core/           # 설정 및 공통 모듈
+│   │   ├── models/         # SQLModel 데이터 모델
+│   │   ├── routes/         # API 엔드포인트
+│   │   └── services/       # 비즈니스 로직
+│   ├── run.py              # 애플리케이션 진입점
+│   └── requirements.txt    # 의존성 패키지
+│
+└── frontend/               # 웹 인터페이스
+    ├── operator/           # 운영자 대시보드 (React)
+    │   ├── src/            # 소스 코드
+    │   │   ├── components/ # React 컴포넌트
+    │   │   ├── pages/      # 페이지 컴포넌트
+    │   │   └── contexts/   # 상태 관리
+    │   └── package.json    # 의존성 정의
+    │
+    └── kiosk/              # 고객용 키오스크 UI (React)
+        ├── components/     # UI 컴포넌트
+        └── pages/          # 페이지 컴포넌트
 ```
 
----
+### 2. alba_planner (서빙 로봇 관리)
 
-## 📋 이슈 템플릿 및 라벨 사용법
-
-### 🔖 이슈 템플릿 활용하기
-
-이슈 템플릿을 `.github/ISSUE_TEMPLATE` 폴더에 다음과 같이 구성합니다.
-
-- `feature_request.md` (기능 요청)
-- `bug_report.md` (버그 보고)
-
-#### 📌 버그 보고 템플릿 예시
-
->[버그 리포트](../.github/ISSUE_TEMPLATE/bug_report.md)
-
->[기능 요청](../.github/ISSUE_TEMPLATE/feature_request.md)
-
-```markdown
-
-
-
-### 🔖 라벨(Label) 적극 활용
-
-GitHub Issue에 다음 라벨을 적용하여 이슈를 효율적으로 관리하세요.
-
-| 라벨 이름 | 사용 목적 |
-|-----------|-----------|
-| `bug` | 버그 수정 |
-| `feature` | 새로운 기능 추가 |
-| `documentation` | 문서화 관련 |
-| `refactor` | 코드 리팩토링 |
-| `urgent` | 긴급 처리 필요 |
-| `discussion` | 논의 필요 |
-
----
-
-## ⚙️ GitHub 이슈 관련 명령어 정리
-
-PR을 통해 이슈를 자동으로 닫으려면 다음 표현을 사용합니다.
-
-| 표현 | 기능 |
-|------|------|
-| `Closes #이슈번호` | PR 병합 시 이슈 닫기 |
-| `Fixes #이슈번호` | PR 병합 시 이슈 닫기 |
-| `Resolves #이슈번호` | PR 병합 시 이슈 닫기 |
-
-예시:
-
-```markdown
-feat: 로봇 위치 보정 기능 구현 완료
-
-이 PR은 로봇의 위치 보정 기능을 개선하여 안정성을 높입니다.
-
-Closes #57
+```
+alba_planner/
+└── alba_manager/
+    ├── ros2_interface.py   # ROS2 통신 인터페이스
+    ├── tcp_client.py       # 중앙 서버 통신
+    ├── main.py             # 실행 진입점
+    └── tests/              # 단위 테스트
 ```
 
----
+### 3. cook_planner (조리 로봇 관리)
 
-## 📌 Atlassian Jira 및 Confluence 활용 협업 가이드라인
-
-우리 프로젝트는 **Jira와 Confluence**를 중심으로 작업을 관리하고 문서를 작성하며, **GitHub**는 코드 관리, Pull Request 및 코드 리뷰를 위한 도구로 활용합니다.
-
----
-
-### 📈 Jira 프로젝트로 작업 관리하기
-
-**Jira**를 통해 전체 프로젝트 진행 상황을 명확히 파악하고, 이슈를 효과적으로 관리합니다. Jira는 다음과 같이 설정하여 사용합니다.
-
-#### ✅ Jira 보드 구성 (Kanban)
-
-다음과 같은 칼럼 구성을 권장합니다:
-
-| 칼럼 이름        | 사용 목적 및 설명                          |
-|-----------------|----------------------------------------|
-| 📌 To Do         | 앞으로 수행해야 할 작업 및 이슈             |
-| 🚧 In Progress   | 현재 개발자가 진행 중인 작업                |
-| 👀 In Review     | 코드 리뷰가 진행 중인 작업 (PR 생성 이후)     |
-| ✅ Done          | 완료되어 병합된 작업                       |
-
-#### ✅ Jira 이슈 활용 흐름
-
-1. **이슈 생성**  
-   Jira에서 작업을 생성하고 담당자 지정 및 우선순위를 설정합니다.
-
-2. **작업 진행**  
-   담당자는 작업을 시작할 때 **In Progress**로 상태를 변경하고 브랜치를 생성하여 개발합니다.
-
-3. **리뷰 진행**  
-   작업이 완료되면 GitHub에서 Pull Request를 생성한 뒤, 상태를 **In Review**로 변경합니다.
-
-4. **작업 완료**  
-   코드 리뷰 완료 및 병합 후, 상태를 **Done**으로 변경합니다.
-
----
-
-### 🔗 GitHub와 Jira의 연동 방법
-
-GitHub와 Jira를 연동하여 작업 상태를 효율적으로 관리할 수 있습니다.
-
-- 커밋 메시지에 Jira 이슈 번호를 포함하여 자동 연동이 가능하게 합니다.
-
-```bash
-git commit -m "[BR-32] 주문 처리 API 구현 완료"
+```
+cook_planner/
+└── cook_manager/
+    ├── ros2_interface.py   # ROS2 통신 인터페이스
+    ├── udp_interface.py    # CookGPT 통신
+    ├── tcp_client.py       # 중앙 서버 통신
+    ├── cooking_tasks.py    # 조리 작업 관리
+    ├── main.py             # 실행 진입점
+    └── tests/              # 단위 테스트
 ```
 
-- Pull Request 제목과 본문에도 Jira 이슈 번호를 포함하여 명확하게 연결합니다.
+### 4. cook_gpt (AI 조리 지원)
 
-**예시:**
 ```
-[RD-32] 주문 처리 API 구현 완료
-
-이 PR은 주문 처리 REST API를 구현합니다.
-```
-
-Jira의 이슈에서 해당 GitHub의 커밋, PR 상태를 실시간으로 볼 수 있게 됩니다.
-
----
-
-### 📚 Confluence를 통한 문서화 및 협업하기
-
-Confluence는 프로젝트의 모든 문서를 관리하는 공간으로 활용합니다. 다음과 같이 활용합니다:
-
-| 문서 카테고리 | 문서 예시 |
-|--------------|-----------|
-| 📖 프로젝트 개요 | 프로젝트 소개, 시스템 아키텍처, 요구사항 명세 |
-| 🛠️ 개발 문서 | 기술 문서, API 명세서, 코드 컨벤션 |
-| 📌 회의록 | 팀 미팅, 기술 미팅, 의사결정 사항 |
-| 📋 릴리즈 노트 | 배포 일정, 변경 사항, 신규 기능, 버그 픽스 |
-
-#### ✅ Confluence 문서 템플릿 활용하기
-
-다음 Confluence 템플릿을 적극적으로 사용하여 효율적으로 문서화합니다:
-
-- 프로젝트 요구사항 템플릿
-- 기술 설계 문서 템플릿
-- 회의록 템플릿
-- 릴리즈 노트 템플릿
-
----
-
-### 📍 협업 예시 시나리오 (Jira + GitHub + Confluence)
-
-```plaintext
-1. Jira에서 이슈 생성 (예: RD-101, "재고 자동화 시스템 개발")
-   └ Confluence에서 기능 명세서 작성 후 Jira 이슈와 연결
-
-2. 담당자가 작업 시작 → Jira 상태를 "In Progress"로 변경
-   └ GitHub에서 feature 브랜치 생성 (feature/RD-101-inventory-automation)
-
-3. 작업 완료 후 Pull Request 생성
-   └ 제목: "[RD-101] 재고 자동화 시스템 개발 완료"
-   └ PR 본문에 Jira 이슈 링크 포함하여 리뷰 요청
-   └ Jira 상태를 "In Review"로 변경
-
-4. 코드 리뷰 완료 후 PR 병합 → Jira 상태를 "Done"으로 변경
-   └ Confluence 릴리즈 노트 업데이트
+cook_gpt/
+└── cookgpt_service/
+    ├── inference.py        # AI 조리 추론
+    ├── udp_server.py       # UDP 통신 서버
+    ├── object_detection.py # 음식 인식
+    ├── pose_estimation.py  # 음식 위치/자세 추정
+    ├── visual_servoing.py  # 로봇 위치 보정
+    ├── main.py             # 실행 진입점
+    └── tests/              # 단위 테스트
 ```
 
----
+### 5. docs (프로젝트 문서)
 
-### 🚀 Jira 활용 팁
+```
+docs/
+├── architecture.md         # 시스템 아키텍처
+├── fastapi_architecture.md # FastAPI 백엔드 구조
+├── websocket_architecture.md # 웹소켓 통신 구조
+├── network_communication.md  # 네트워크 통신 아키텍처
+└── project_structure.md    # 프로젝트 구조 (본 문서)
+```
 
-- 이슈의 우선순위 및 담당자를 명확하게 설정합니다.
-- Jira 대시보드 기능을 활용해 개인 및 팀 전체 업무를 한눈에 볼 수 있게 설정합니다.
+## 🔄 데이터 흐름 및 모듈 간 통신
 
----
+### 주요 통신 흐름
 
-### 📚 Confluence 활용 팁
+```mermaid
+graph TD
+    A[고객] -->|주문| B[키오스크 UI]
+    B -->|API 요청| C[RoboDine Service]
+    C -->|상태 반환| B
+    C -->|TCP 명령| D[Cook Planner]
+    C -->|TCP 명령| E[Alba Planner]
+    D <-->|UDP 통신| F[CookGPT]
+    F -->|이미지 처리| F
+    D -->|ROS2 명령| G[조리 로봇]
+    E -->|ROS2 명령| H[서빙 로봇]
+    G -->|조리 완료| D
+    D -->|조리 완료| C
+    C -->|서빙 요청| E
+    H -->|서빙 완료| E
+    E -->|서빙 완료| C
+    C -->|WebSocket| I[운영자 대시보드]
+```
 
-- 문서 작성 시 Jira 이슈 및 GitHub 링크를 적극적으로 삽입하여 연결성을 높입니다.
-- 주요 결정사항, 회의록 등은 Confluence에 기록하여 모든 팀원이 접근 가능하게 합니다.
+### 통신 프로토콜
 
----
+| 연결 경로 | 프로토콜 | 포트 | 용도 |
+|----------|---------|------|------|
+| RoboDine Service ↔ Alba Planner | TCP | 8001 | 로봇 명령 및 상태 전송 |
+| RoboDine Service ↔ Cook Planner | TCP | 8002 | 조리 명령 및 상태 전송 |
+| CookGPT ↔ Cook Planner | UDP | 8003 | 비전 데이터 및 AI 추론 결과 |
+| Frontend ↔ RoboDine Service | WebSocket | 3000 | 실시간 상태 업데이트 |
+| Frontend ↔ RoboDine Service | HTTP/REST API | 8000 | CRUD 작업 및 인증 |
 
-### 🛠️ GitHub 기본 활용
+## 🛠️ 개발 기술 스택
 
-GitHub는 주로 코드 관리와 코드 리뷰용으로 활용됩니다:
+### 백엔드 기술
 
-- **Pull Request**: 작업 완료 후 필수적으로 생성
-- **코드 리뷰**: 최소 1명 이상의 코드 리뷰가 필수
-- **브랜치 전략**:
-  - `main`: 배포 가능 상태 유지
-  - `develop`: 개발 통합 브랜치
-  - `feature/<이슈번호>-기능명`: Jira 이슈 번호를 브랜치 이름에 포함하여 생성
+- **Python 3.8+**: 주요 개발 언어
+- **FastAPI**: REST API 및 웹소켓 서버
+- **SQLModel**: ORM (Object-Relational Mapping)
+- **Socket.io**: 웹소켓 통신
+- **ROS2 Jazzy**: 로봇 운영 시스템
+- **OpenCV**: 컴퓨터 비전 처리
+- **PyTorch**: AI 추론 엔진
 
----
+### 프론트엔드 기술
 
-이 가이드라인에 따라 Jira와 Confluence를 중심으로 효율적인 팀 협업과 작업 관리를 진행해 주세요! 🚀✨
+- **React**: UI 라이브러리
+- **Tailwind CSS**: 스타일링
+- **Axios**: HTTP 클라이언트
+- **React Router**: 라우팅
+- **Socket.io-client**: 웹소켓 클라이언트
+- **Chart.js**: 데이터 시각화
+
+### 인프라 및 도구
+
+- **Docker**: 컨테이너화
+- **pytest**: 파이썬 테스트
+- **Jest**: JavaScript 테스트
+- **GitHub Actions**: CI/CD 파이프라인
+
+## 💾 데이터베이스 스키마 개요
+
+RoboDine 서비스는 SQLite를 사용하며, 주요 데이터 모델은 다음과 같습니다:
+
+- **Robot**: 로봇 정보 및 상태
+- **Order**: 주문 정보
+- **Table**: 테이블 정보
+- **Customer**: 고객 정보
+- **Inventory**: 재고 관리
+- **Event**: 시스템 이벤트
+- **User**: 관리자 계정

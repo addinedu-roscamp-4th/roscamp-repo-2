@@ -72,8 +72,8 @@ def main():
             avg_latency = sum(latencies) / len(latencies)
 
             # JPEG → BGR
-            npdata = np.frombuffer(jpeg_data, dtype=np.uint8)
-            frame = cv2.imdecode(npdata, cv2.IMREAD_COLOR)
+            npdata = np.frombuffer(jpeg_data, dtype=np.uint8) # JPEG 데이터로 변환
+            frame = cv2.imdecode(npdata, cv2.IMREAD_COLOR) # BGR 이미지로 디코딩
             if frame is None:
                 continue
 

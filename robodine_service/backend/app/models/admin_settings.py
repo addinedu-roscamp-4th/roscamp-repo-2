@@ -5,6 +5,7 @@ from datetime import datetime
 
 class AdminSettings(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    store_name: Optional[str] = Field(default=None, index=True)
     operation_start: Optional[str] = None
     operation_end: Optional[str] = None
     inventory_threshold: Optional[int] = None

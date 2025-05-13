@@ -4,29 +4,781 @@ import logging
 import threading
 import socketserver
 import json
+import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
+import anyio
+import os
 
-from fastapi import FastAPI
-from starlette.middleware.cors import CORSMiddleware
-from sqlmodel import SQLModel
+from fastapi import FastAPI, BackgroundTasks, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
+from sqlmodel import SQLModel, Session, select, case
+from sqlalchemy.orm import joinedload
+from fastapi.middleware.gzip import GZipMiddleware
 
-from app.routes import robots, inventory, control
+from app.routes import (
+    poses, websockets, streaming, inventories,
+    robot, albabot, cookbot, auth, users, settings, customers,
+    tables, kiosks, orders, menu, events, emergencies, 
+    video_streams, face_recognitions, chat
+)
 from app.routes.websockets import router as websocket_router
-from app.routes.streaming import router as streaming_router
-from app.core.db_config import engine
-from app.core.database import get_session
+from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update, broadcast_systemlogs_update, broadcast_customers_update
+from app.routes.websockets import manager
+from app.core.db_config import engine, get_db
 from app.models.robot import Robot
-from app.core.utils import update_model
+from app.models.table import Table
+from app.models.event import Event, SystemLog
+from app.models.order import Order, OrderItem, KioskTerminal
+from app.models.pose6d import Pose6D
+from app.models.albabot import Albabot
+from app.models.cookbot import Cookbot
+from app.models.inventory import Inventory, MenuItem, MenuIngredient
+from app.models.customer import Customer
+from app.models.table import Table, GroupAssignment
+from app.models.admin_settings import AdminSettings
+from app.models.user import User, Notification
+from app.core.utils import dispatch_payload
+from app.core.config import IMAGES_DIR, VIDEOS_DIR
 
 from app.services.streaming_service import get_stream_urls, add_stream_url
+
+main_loop = None
 
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# SQLAlchemy 쿼리/롤백 로그를 WARNING 이상만 찍도록 설정
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+
+# 폴링 주기 설정 (비상 시 폴백용, 초 단위)
+POLLING_INTERVAL = 3
+
+
+# 마지막 브로드캐스트 시간 추적 (중복 방지용)
+last_broadcast = {
+    "robots": datetime.min,
+    "tables": datetime.min,
+    "events": datetime.min,
+    "orders": datetime.min,
+    "status": datetime.min,
+    "systemlogs": datetime.min,
+    "customers": datetime.min,
+    "inventory": datetime.min,
+    "video_streams": datetime.min,
+    "notifications": datetime.min,
+    "commands": datetime.min,
+    "chat": datetime.min
+}
+
+# 모델 데이터 변환 함수들
+def serialize_robot(robot):
+    """Robot 모델을 JSON 직렬화 가능한 형태로 변환"""
+    robot_type = str(robot.type) if robot.type else None
+    # 'EntityType.'을 제거하여 타입만 출력
+    if robot_type:
+        robot_type = robot_type.replace('EntityType.', '')
+    return {
+        "Robot.id": robot.id,
+        "Robot.robot_id": robot.robot_id,
+        "Robot.type": robot_type,
+        "Robot.mac_address": robot.mac_address,
+        "Robot.ip_address": robot.ip_address,
+        "Robot.timestamp": robot.timestamp.isoformat() if robot.timestamp else None
+    }
+
+def serialize_table(table):
+    """Table 모델을 JSON 직렬화 가능한 형태로 변환"""
+    table_status = str(table.status) if table.status else None
+    if table_status:
+        table_status = table_status.replace('TableStatus.', '')
+    return {
+        "Table.id": table.id,
+        "Table.max_customer": table.max_customer,
+        "Table.status": table_status,
+        "Table.updated_at": table.updated_at.isoformat() if table.updated_at else None,
+        "Table.x": table.x,
+        "Table.y": table.y,
+        "Table.width": table.width,
+        "Table.height": table.height,
+    }
+
+def serialize_customer(customer):
+    """Customer 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "Customer.id": customer.id,
+        "Customer.count": customer.count,
+        "Customer.timestamp": customer.timestamp.isoformat() if customer.timestamp else None,
+    }
+
+def serialize_group_assignment(assignment):
+    """GroupAssignment 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "GroupAssignment.id": assignment.id,
+        "GroupAssignment.table_id": assignment.table_id,
+        "GroupAssignment.customer_id": assignment.customer_id,
+        "GroupAssignment.timestamp": assignment.timestamp.isoformat() if assignment.timestamp else None,
+        "GroupAssignment.released_at": assignment.released_at.isoformat() if assignment.released_at else None,
+    }
+
+def serialize_event(event):
+    """Event 모델을 JSON 직렬화 가능한 형태로 변환"""
+    event_type = str(event.type) if event.type else None
+    related_entity_type = str(event.related_entity_type) if event.related_entity_type else None
+    if event_type:
+        event_type = event_type.replace('EventType.', '')
+    if related_entity_type:
+        related_entity_type = related_entity_type.replace('EntityType.', '')
+    return {
+        "Event.id": event.id,
+        "Event.type": event_type,
+        "Event.related_entity_type": related_entity_type,
+        "Event.related_entity_id": event.related_entity_id,
+        "Event.description": event.description,
+        "Event.timestamp": event.timestamp.isoformat() if event.timestamp else None
+    }
+
+def serialize_order(order):
+    """Order 모델을 JSON 직렬화 가능한 형태로 변환"""
+    order_status = str(order.status) if order.status else None
+    if order_status:
+        order_status = order_status.replace('OrderStatus.', '')
+    return {
+        "Order.id": order.id,
+        "Order.customer_id": order.customer_id,
+        "Order.robot_id": order.robot_id,
+        "Order.table_id": order.table_id, 
+        "Order.status": order_status,
+        "Order.timestamp": order.timestamp.isoformat() if order.timestamp else None,
+        "Order.served_at": order.served_at.isoformat() if order.served_at else None
+    }
+
+def serialize_pose6d(pose):
+    """Pose6D 모델을 JSON 직렬화 가능한 형태로 변환"""
+    pose_type = str(pose.entity_type) if pose.entity_type else None
+    if pose_type:
+        pose_type = pose_type.replace('EntityType.', '')
+    return {
+        "Pose6D.id": pose.id,
+        "Pose6D.entity_id": pose.entity_id,
+        "Pose6D.entity_type": pose_type,
+        "Pose6D.timestamp": pose.timestamp.isoformat() if pose.timestamp else None,
+        "Pose6D.x": pose.x,
+        "Pose6D.y": pose.y,
+        "Pose6D.z": pose.z,
+        "Pose6D.roll": pose.roll,
+        "Pose6D.pitch": pose.pitch,
+        "Pose6D.yaw": pose.yaw
+    }
+
+def serialize_albabot(robot):
+    """Albabot 모델을 JSON 직렬화 가능한 형태로 변환"""
+    robot_status = str(robot.status) if robot.status else None
+    if robot_status:
+        robot_status = robot_status.replace('RobotStatus.', '')
+    return {
+        "Albabot.id": robot.id,
+        "Albabot.robot_id": robot.robot_id,
+        "Albabot.status": robot_status,
+        "Albabot.battery_level": robot.battery_level,
+        "Albabot.timestamp": robot.timestamp.isoformat() if robot.timestamp else None
+    }
+
+def serialize_cookbot(robot):
+    """Cookbot 모델을 JSON 직렬화 가능한 형태로 변환"""
+    robot_status = str(robot.status) if robot.status else None
+    if robot_status:
+        robot_status = robot_status.replace('RobotStatus.', '')
+    return {
+        "Cookbot.id": robot.id,
+        "Cookbot.robot_id": robot.robot_id,
+        "Cookbot.status": robot_status,
+        "Cookbot.timestamp": robot.timestamp.isoformat() if robot.timestamp else None
+    }
+
+def serialize_kioskterminal(kioskterminal):
+    """KioskTerminal 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "KioskTerminal.id": kioskterminal.id,
+        "KioskTerminal.table_id": kioskterminal.table_id,
+        "KioskTerminal.ip_address": kioskterminal.ip_address
+    }
+
+def serialize_orderitem(orderitem):
+    """OrderItem 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "OrderItem.order_id": orderitem.order_id,
+        "OrderItem.menu_item_id": orderitem.menu_item_id,
+        "OrderItem.quantity": orderitem.quantity
+    }
+
+def serialize_menuitem(menuitem):
+    """MenuItem 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "MenuItem.id": menuitem.id,
+        "MenuItem.name": menuitem.name,
+        "MenuItem.price": menuitem.price,
+        "MenuItem.prepare_time": menuitem.prepare_time
+    }
+
+def serialize_systemlog(log):
+    """SystemLog 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "SystemLog.id": log.id,
+        "SystemLog.level": log.level,
+        "SystemLog.message": log.message,
+        "SystemLog.timestamp": log.timestamp.isoformat() if log.timestamp else None
+    }
+
+def serialize_inventory(item):
+    """Inventory 모델을 JSON 직렬화 가능한 형태로 변환"""
+    inventory_status = str(item.status) if item.status else None
+    if inventory_status:
+        inventory_status = inventory_status.replace('InventoryStatus.', '')
+    return {
+        "id": item.id,
+        "ingredient_id": item.ingredient_id,
+        "name": item.name,
+        "count": item.count,
+        "max_count": item.max_count,
+        "status": inventory_status,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None
+    }
+
+def serialize_admin_settings(settings):
+    """AdminSettings 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": settings.id,
+        "operation_start": settings.operation_start,
+        "operation_end": settings.operation_end,
+        "inventory_threshold": settings.inventory_threshold,
+        "alert_settings": settings.alert_settings
+    }
+
+def serialize_video_stream(stream):
+    """VideoStream 모델을 JSON 직렬화 가능한 형태로 변환"""
+    
+    stream_status = str(stream.status) if stream.status else None
+    if stream_status:
+        stream_status = stream_status.replace('StreamStatus.', '')
+    
+    return {
+        "id": stream.id,
+        "source_type": str(stream.source_type).replace('StreamSourceType.', '') if stream.source_type else None,
+        "source_id": stream.source_id,
+        "last_checked": stream.last_checked.isoformat() if stream.last_checked else None,
+        "status": stream_status,
+        "recording_path": stream.recording_path,
+        "recording_started_at": stream.recording_started_at.isoformat() if stream.recording_started_at else None,
+        "recording_ended_at": stream.recording_ended_at.isoformat() if stream.recording_ended_at else None,
+    }
+
+def serialize_notification(notification):
+    """Notification 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": notification.id,
+        "user_id": notification.user_id,
+        "type": notification.type,
+        "message": notification.message,
+        "created_at": notification.created_at.isoformat() if notification.created_at else None,
+        "status": str(notification.status).replace('NotificationStatus.', '') if notification.status else None
+    }
+
+def serialize_command(command):
+    """RobotCommand 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": command.id,
+        "robot_id": command.robot_id,
+        "command": command.command,
+        "parameters": command.parameters,
+        "status": str(command.status).replace('CommandStatus.', '') if command.status else None,
+        "issued_at": command.timestamp.isoformat() if command.timestamp else None,
+        "executed_at": command.executed_at.isoformat() if command.executed_at else None
+    }
+
+def serialize_chat(chat):
+    """Chat 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": chat.id,
+        "robot_id": chat.robot_id,
+        "question": chat.question,
+        "answer": chat.answer,
+        "status": str(chat.status).replace('ChatStatus.', '') if chat.status else None,
+        "timestamp": chat.timestamp.isoformat() if chat.timestamp else None,
+    }
+
+# 서버 측에서 사용할 데이터 전송 함수들
+async def broadcast_robots_update(robots_data):
+    """로봇 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(robots_data, "robots")
+
+async def broadcast_status_update(status_data):
+    """상태 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "status",
+        "data": status_data
+    }
+    await manager.broadcast(message, "status")
+
+async def broadcast_tables_update(tables_data):
+    """테이블 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "tables",
+        "data": tables_data
+    }
+    await manager.broadcast(message, "tables")
+
+async def broadcast_events_update(events_data):
+    """이벤트 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(events_data, "events")
+
+async def broadcast_orders_update(orders_data):
+    """주문 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "orders",
+        "data": orders_data
+    }
+    await manager.broadcast(message, "orders")
+
+async def broadcast_customers_update(customers_data):
+    """고객 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "customers",
+        "data": customers_data
+    }
+    await manager.broadcast(message, "customers")
+
+async def broadcast_systemlogs_update(logs_data):
+    """시스템 로그 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "systemlogs",
+        "data": logs_data
+    }
+    await manager.broadcast(message, "systemlogs")
+
+async def broadcast_inventory_update(inventory_data):
+    """재고 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "inventory",
+        "data": inventory_data
+    }
+    await manager.broadcast(message, "inventory")
+
+async def broadcast_video_streams_update(streams_data):
+    """비디오 스트림 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "video_streams",
+        "data": streams_data
+    }
+    await manager.broadcast(message, "video_streams")
+
+async def broadcast_notifications_update(notifications_data):
+    """알림 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "notifications",
+        "data": notifications_data
+    }
+    await manager.broadcast(message, "notifications")
+
+async def broadcast_commands_update(commands_data):
+    """명령어 로그 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "commands",
+        "data": commands_data
+    }
+    await manager.broadcast(message, "commands")
+
+async def broadcast_chat_update(chat_data):
+    """채팅 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "chat",
+        "data": chat_data
+    }
+    await manager.broadcast(message, "chat")
+
+# 비동기 브로드캐스팅 함수
+async def broadcast_entity_update(entity_type, entity_id):
+    """엔티티 변경 시 해당 데이터를 웹소켓으로 브로드캐스팅"""
+    try:
+        # 1) DB 조회를 별도 스레드에서 실행
+        def _sync_db_work():
+            with Session(engine) as session:
+                out = {"entity": entity_type}
+                # robot
+                if entity_type == "robot":
+                    # 단일 또는 전체 조회
+                    robots = session.exec(
+                        select(Robot)
+                        .order_by(Robot.robot_id)
+                        ).all()
+                    out['data'] = [serialize_robot(robot) for robot in robots]
+                    # 상세 상태 조회 (albabot, cookbot, pose6d)
+                    albabots = session.exec(
+                        select(Albabot)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
+                        .distinct(Albabot.robot_id)
+                    ).all()
+                    cookbots = session.exec(
+                        select(Cookbot)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
+                        .distinct(Cookbot.robot_id)
+                    ).all()
+                    poses = session.exec(
+                        select(Pose6D)
+                        .where(Pose6D.entity_type == "WORLD")
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .distinct(Pose6D.entity_id)
+                    ).all()
+                    out['albabots'] = albabots
+                    out['cookbots'] = cookbots
+                    out['poses'] = poses
+                # table
+                elif entity_type == "table":
+                    if entity_id:
+                        table = session.get(Table, entity_id)
+                        out['table'] = [serialize_table(table)] if table else []
+                    else:
+                        tables = session.exec(select(Table)).all()
+                        out['table'] = [serialize_table(table) for table in tables]
+                    
+                    # GroupAssignment 데이터도 추가
+                    assignments = session.exec(
+                        select(GroupAssignment)
+                        .where(GroupAssignment.released_at == None)
+                    ).all()
+                    out['assignments'] = [serialize_group_assignment(a) for a in assignments]
+                # customer
+                elif entity_type == "customer":
+                    if entity_id:
+                        customer = session.get(Customer, entity_id)
+                        out['data'] = [serialize_customer(customer)] if customer else []
+                    else:
+                        customers = session.exec(
+                            select(Customer)
+                            .order_by(Customer.id.desc())
+                        ).all()
+                        out['data'] = [serialize_customer(customer) for customer in customers]
+
+                # event
+                elif entity_type == "event":
+                    if entity_id:
+                        event = session.get(Event, entity_id)
+                        out['data'] = [serialize_event(event)] if event else []
+                    else:
+                        events = session.exec(
+                            select(Event)
+                            .order_by(Event.timestamp.desc())
+                            .limit(20)
+                        ).all()
+                        out['data'] = [serialize_event(event) for event in events]
+                # order
+                elif entity_type == "order":
+                    if entity_id:
+                        order = session.get(Order, entity_id)
+                        out['data'] = [serialize_order(order)] if order else []
+                    else:
+                        orders = session.exec(
+                            select(Order)
+                            .order_by(
+                                case(
+                                    (Order.status == "PREPARING", 0),
+                                    else_=1
+                                ),
+                                Order.id.desc())
+                            .limit(20)
+                        ).all()
+                        out['data'] = [serialize_order(order) for order in orders]
+                    # # 주문 아이템 및 키오스크 단말기 정보 추가
+                    orderitems = session.exec(
+                        select(OrderItem)
+                        .order_by(OrderItem.order_id.desc())
+                        .distinct(OrderItem.order_id)
+                    ).all()
+                    out['orderitems'] = orderitems
+                    kioskterminals = session.exec(
+                        select(KioskTerminal)
+                        .order_by(KioskTerminal.id.desc())
+                    ).all()
+                    out['kioskterminals'] = kioskterminals
+                    menuitems = session.exec(
+                        select(MenuItem)
+                        .order_by(MenuItem.id)
+                    ).all()
+                    out['menuitems'] = menuitems
+                # pose6d
+                elif entity_type == "pose6d":
+                    poses = session.exec(
+                        select(Pose6D)
+                        .where(Pose6D.entity_type == "WORLD")
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .distinct(Pose6D.entity_id)
+                    ).all()
+                    out['poses'] = poses
+                # albabot or cookbot triggers full status
+                elif entity_type in ("albabot","cookbot"):
+                    # full status: robot 기본정보 + 로봇별 최신 Albabot/Cookbot/Pose6D
+                    out['robots'] = session.exec(
+                        select(Robot)
+                        .order_by(Robot.robot_id)
+                        ).all()
+                    out['albabots'] = session.exec(
+                        select(Albabot)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
+                        .distinct(Albabot.robot_id)
+                    ).all()
+                    out['cookbots'] = session.exec(
+                        select(Cookbot)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
+                        .distinct(Cookbot.robot_id)
+                    ).all()
+                    out['poses'] = session.exec(
+                        select(Pose6D)
+                        .where(Pose6D.entity_type=="WORLD")
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .distinct(Pose6D.entity_id)
+                    ).all()
+                # systemlog
+                elif entity_type == "systemlog":
+                    if entity_id:
+                        log = session.get(SystemLog, entity_id)
+                        out['data'] = [serialize_systemlog(log)] if log else []
+                    else:
+                        logs = session.exec(
+                            select(SystemLog)
+                            .order_by(SystemLog.timestamp.desc())
+                            .limit(30)
+                        ).all()
+                        out['data'] = [serialize_systemlog(log) for log in logs]
+                # inventory - 재고 데이터 조회
+                elif entity_type == "inventory":
+                    if entity_id:
+                        inventory_item = session.get(Inventory, entity_id)
+                        out['data'] = [serialize_inventory(inventory_item)] if inventory_item else []
+                    else:
+                        inventory_items = session.exec(
+                            select(Inventory)
+                            .order_by(Inventory.id)
+                        ).all()
+                        out['data'] = [serialize_inventory(item) for item in inventory_items]
+                        
+                    # 관리자 설정도 함께 보내기 (재고 임계값)
+                    admin_settings = session.exec(select(AdminSettings)).first()
+                    if admin_settings:
+                        out['admin_settings'] = serialize_admin_settings(admin_settings)
+                # video_stream
+                elif entity_type == "video_stream":
+                    from app.models.video_stream import VideoStream
+                    
+                    if entity_id:
+                        stream = session.get(VideoStream, entity_id)
+                        out['data'] = [serialize_video_stream(stream)] if stream else []
+                    else:
+                        streams = session.exec(
+                            select(VideoStream)
+                            .order_by(VideoStream.id.desc())
+                        ).all()
+                        out['data'] = [serialize_video_stream(stream) for stream in streams]
+                # notification
+                elif entity_type == "notification":
+                    if entity_id:
+                        notification = session.get(Notification, entity_id)
+                        out['data'] = [serialize_notification(notification)] if notification else []
+                    else:
+                        # 대기 중인 알림만 조회
+                        notifications = session.exec(
+                            select(Notification)
+                            .where(Notification.status == "PENDING")
+                            .order_by(Notification.created_at.desc())
+                        ).all()
+                        out['data'] = [serialize_notification(notification) for notification in notifications]
+                # command
+                elif entity_type == "command":
+                    from app.models.robot_command import RobotCommand
+                    if entity_id:
+                        command = session.get(RobotCommand, entity_id)
+                        out['data'] = [serialize_command(command)] if command else []
+                    else:
+                        # 최근 명령 조회
+                        commands = session.exec(
+                            select(RobotCommand)
+                            .order_by(RobotCommand.id.desc())
+                            .limit(30)
+                        ).all()
+                        out['data'] = [serialize_command(command) for command in commands]
+                # chat
+                elif entity_type == "chat":
+                    from app.models.chat import Chat
+                    # if entity_id:
+                    #     chat = session.get(Chat, entity_id)
+                    #     out['data'] = [serialize_chat(chat)] if chat else []
+                    # else:
+                        # 최근 채팅 조회
+                    chats = session.exec(
+                        select(Chat)
+                        .order_by(Chat.id.desc())
+                        .limit(30)
+                    ).all()
+                    out['data'] = [serialize_chat(chat) for chat in chats]
+                    
+                return out
+
+        result = await anyio.to_thread.run_sync(_sync_db_work)
+        now = datetime.now()
+
+        # 2) 스레드에서 반환된 결과로 브로드캐스트
+        entity = result['entity']
+        if entity == "robot":
+            await broadcast_robots_update(result['data'])
+            combined = {
+                'robots': result['data'],
+                'albabots': [serialize_albabot(albabots) for albabots in result['albabots']],
+                'cookbots': [serialize_cookbot(cookbots) for cookbots in result['cookbots']],
+                'poses': [serialize_pose6d(poses) for poses in result['poses']],
+            }
+            await broadcast_status_update(combined)
+            last_broadcast['robots'] = now
+            last_broadcast['status'] = now
+        elif entity == "table":
+            combined = {
+                'tables': result['table'],
+                'assignments': result['assignments']
+            }
+            await broadcast_tables_update(combined)
+            last_broadcast['tables'] = now
+        elif entity == "customer":
+            await broadcast_customers_update(result['data'])
+            last_broadcast['customers'] = now
+        elif entity == "event":
+            await broadcast_events_update(result['data'])
+            last_broadcast['events'] = now
+        elif entity == "order":
+            combined = {
+                'orders': [result['data']],
+                'kioskterminals': [serialize_kioskterminal(kioskterminals) for kioskterminals in result['kioskterminals']],
+                'orderitems' : [serialize_orderitem(orderitems) for orderitems in result['orderitems']],
+                'menuitems' : [serialize_menuitem(menuitems) for menuitems in result['menuitems']],
+            }
+            await broadcast_orders_update(combined)
+            last_broadcast['orders'] = now
+        elif entity == entity in ("albabot","cookbot"):
+            combined = {
+                'robots': [serialize_robot(robots) for robots in result.get('robots',[])],
+                'albabots': [serialize_albabot(albabots) for albabots in result.get('albabots',[])],
+                'cookbots': [serialize_cookbot(cookbots) for cookbots in result.get('cookbots',[])],
+                'poses': [serialize_pose6d(poses) for poses in result.get('poses',[])],
+            }
+            await broadcast_status_update(combined)
+            last_broadcast['status'] = now
+        elif entity == "systemlog":
+            await broadcast_systemlogs_update(result['data'])
+            last_broadcast['systemlogs'] = now
+        elif entity == "inventory":
+            # 재고 데이터 브로드캐스팅
+            inventory_data = result['data']
+            # 관리자 설정이 있으면 함께 보내기
+            if 'admin_settings' in result:
+                inventory_data = {
+                    'inventory': inventory_data,
+                    'admin_settings': result['admin_settings']
+                }
+            await broadcast_inventory_update(inventory_data)
+            last_broadcast['inventory'] = now
+        elif entity == "video_stream":
+            await broadcast_video_streams_update(result['data'])
+            last_broadcast['video_streams'] = now
+        elif entity == "notification":
+            await broadcast_notifications_update(result['data'])
+            last_broadcast['notifications'] = now
+        elif entity == "command":
+            await broadcast_commands_update(result['data'])
+            last_broadcast['commands'] = now
+        elif entity == "chat":
+            await broadcast_chat_update(result['data'])
+            last_broadcast['chat'] = now
+
+    except Exception as entity:
+        logger.error(f"Error in broadcasting {entity_type} update: {entity}")
+
+# 백업 폴링 함수 - 변경 감지 실패 대비 (10초 주기)
+async def fallback_polling():
+    """데이터베이스 폴링 백업 메커니즘 (이벤트 놓침 대비)"""
+    logger.info("Starting fallback polling")
+    while True:
+        try:
+            # 각 엔티티 타입에 대해 마지막 브로드캐스트 이후 일정 시간이 지났으면 갱신
+            now = datetime.now()
+            
+            # 로봇 데이터 10초마다 갱신
+            if (now - last_broadcast["robots"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("robot", None)
+                
+            # 테이블 데이터 10초마다 갱신
+            if (now - last_broadcast["tables"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("table", None)
+                
+            # 고객 데이터 10초마다 갱신
+            if (now - last_broadcast.get("customers", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("customer", None)
+                
+            # 이벤트 데이터 10초마다 갱신
+            if (now - last_broadcast["events"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("event", None)
+                
+            # 주문 데이터 10초마다 갱신
+            if (now - last_broadcast["orders"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("order", None)
+
+            # fallback_polling 에서 status도 주기 갱신
+            if (now - last_broadcast["status"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("robot", None)   # robot→status 통합 로직 사용
+            
+            # 시스템 로그 데이터 10초마다 갱신
+            if (now - last_broadcast["systemlogs"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("systemlog", None)
+            
+            # 재고 데이터 10초마다 갱신
+            if (now - last_broadcast["inventory"]).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("inventory", None)
+                
+            # 비디오 스트림 데이터 10초마다 갱신
+            if (now - last_broadcast.get("video_streams", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("video_stream", None)
+                
+            # 알림 데이터 10초마다 갱신
+            if (now - last_broadcast.get("notifications", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("notification", None)
+                
+            # 명령어 로그 데이터 10초마다 갱신
+            if (now - last_broadcast.get("commands", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("command", None)
+                
+            # 채팅 데이터 10초마다 갱신
+            if (now - last_broadcast.get("chat", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("chat", None)
+                
+        except Exception as e:
+            logger.error(f"Error in fallback polling: {str(e)}")
+            
+        await asyncio.sleep(POLLING_INTERVAL)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global main_loop
+    main_loop = asyncio.get_event_loop()
     logger.info("Starting up application...")
     SQLModel.metadata.create_all(bind=engine)
     logger.info("Database tables created successfully")
@@ -35,44 +787,158 @@ async def lifespan(app: FastAPI):
     tcp_thread = threading.Thread(target=start_tcp_server, args=("0.0.0.0", 8001), daemon=True)
     tcp_thread.start()
 
+    # 백업 폴링 시작 (10초마다 실행)
+    fallback_task = asyncio.create_task(fallback_polling())
+    logger.info("Started fallback polling for data updates")
+
     # 초기 RTSP 녹화 시작 (config로 미리 등록된 URL이 있으면)
     for url in get_stream_urls():
         # 이미 서비스 모듈에서 쓰레드를 띄우도록 설계했으니 단순 get만
         pass
 
+    # 마지막 브로드캐스트 시간 초기화
+    last_broadcast["systemlogs"] = datetime.min
+    last_broadcast["customers"] = datetime.min
+    last_broadcast["inventory"] = datetime.min
+    last_broadcast["video_streams"] = datetime.min
+    last_broadcast["notifications"] = datetime.min
+    last_broadcast["commands"] = datetime.min
+    last_broadcast["chat"] = datetime.min
+
     yield
+    
+    # 애플리케이션 종료 시 태스크 취소
+    fallback_task.cancel()
+    try:
+        await fallback_task
+    except asyncio.CancelledError:
+        logger.info("Fallback polling task cancelled")
+    
     logger.info("Shutting down application...")
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-app.include_router(robots.router, prefix="/robots", tags=["robots"])
-app.include_router(inventory.router, prefix="/inventory", tags=["inventory"])
-app.include_router(control.router, prefix="/control", tags=["control"])
-app.include_router(websocket_router, tags=["websocket"])
-app.include_router(streaming_router, prefix="/stream", tags=["streaming"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 모든 도메인에서 접근을 허용
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 HTTP 메서드를 허용
+    allow_headers=["*"],  # 모든 헤더를 허용
+)
+# 파일 크기 제한 늘리기
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1000,  # 최소 압축 크기 (예시)
+)
 
-# --- TCP SERVER -----------------------------------------------------------
+# 비디오 파일 정적 서비스
+app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
+app.mount("/images", StaticFiles(directory=IMAGES_DIR), name="images")
+
+
+def recv_all(sock, count: int) -> bytes:
+    """정확히 count 바이트를 받을 때까지 recv() 반복"""
+    buf = bytearray()
+    while len(buf) < count:
+        chunk = sock.recv(count - len(buf))
+        if not chunk:
+            raise ConnectionError("데이터 수신 중 연결이 끊어졌습니다.")
+        buf.extend(chunk)
+    return bytes(buf)
+
+# TCP 핸들러에서 웹소켓 브로드캐스팅 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        raw = self.request.recv(1024).strip()
-        logger.info(f"[TCP] Received: {raw}")
         try:
-            payload = json.loads(raw.decode('utf-8'))
-            rid = payload.get("id") or payload.get("robot_id")
-            if not rid:
-                raise ValueError("ID field is required")
-            et = payload.get("type", "").upper()
-            if et in ("COOKBOT", "ALBABOT"):
-                with get_session() as session:
-                    update_model(session, Robot, rid, payload)
-                    session.commit()
-                response = "OK"
-            else:
-                raise ValueError(f"Unknown type: {et}")
+            # 1) 헤더(4바이트) 읽어서 전체 길이 계산
+            raw_len = recv_all(self.request, 4)
+            total_len = int.from_bytes(raw_len, byteorder='big')
+            logger.info(f"[TCP] Incoming payload length: {total_len} bytes")
+
+            # 2) 실제 페이로드(바디)만 읽기
+            body = recv_all(self.request, total_len)
+
+            # 3) JSON 파싱
+            data = json.loads(body.decode('utf-8'))
+            logger.info(f"[TCP] Received JSON: {data}")
+
+            # 4) dispatch & DB 저장
+            with Session(engine) as session:
+                result = dispatch_payload(session, data)
+                session.commit()
+                # 필요시 브로드캐스트
+                if isinstance(result, dict) and 'affected_entity' in result:
+                    et = result['affected_entity']['type']
+                    eid = result['affected_entity']['id']
+                    # main_loop는 run.py 에서 전역으로 설정된 asyncio loop
+                    main_loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(broadcast_entity_update(et, eid))
+                    )
+
+            response = "OK_JSON"
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[TCP] JSON 디코딩 실패: {e}")
+            response = "ERROR_JSON"
+
         except Exception as e:
-            logger.error(f"[TCP] Error: {e}")
+            logger.error(f"[TCP] 처리 오류: {e}")
             response = "ERROR"
+
+        # 5) 클라이언트에 응답
         self.request.sendall(response.encode('utf-8'))
+
+# Include routers - API path prefix for all endpoints
+API_PREFIX = "/api"
+
+#health check
+@app.get("/api/health")
+async def health_check():
+    # db 열결 무작위로 확인 후 health 체크
+    with Session(engine) as session:
+        try:
+            # DB 연결 확인
+            session.execute(select(func.count()).select_from(SystemLog))
+            # DB에서 최근 1개 레코드 조회
+            recent_log = session.exec(
+                select(SystemLog)
+                .order_by(SystemLog.timestamp.desc())
+                .limit(1)
+            ).first()
+        except Exception as e:
+            logger.error(f"Database connection error: {e}")
+            return {"status": "healthy", "database": "unhealthy"}
+    return {"status": "healthy","database": "healthy"}
+
+# Include websocket and streaming routers (these don't need the API prefix)
+app.include_router(websocket_router, tags=["websocket"])
+
+# Include API routers
+app.include_router(inventories.router, prefix=f"{API_PREFIX}/inventory", tags=["inventory"])
+app.include_router(poses.router, prefix=f"{API_PREFIX}/pose6d", tags=["pose6d"])
+app.include_router(robot.router, prefix=f"{API_PREFIX}/robots", tags=["robot"])
+app.include_router(albabot.router, prefix=f"{API_PREFIX}/albabot", tags=["albabot"])
+app.include_router(cookbot.router, prefix=f"{API_PREFIX}/cookbot", tags=["cookbot"])
+
+# These routes were updated with prefix in their definition
+app.include_router(auth.router, tags=["auth"])
+app.include_router(users.router, tags=["users"])
+
+# Continue with other routers
+app.include_router(settings.router, prefix=f"{API_PREFIX}/settings", tags=["settings"])
+app.include_router(customers.router, prefix=f"{API_PREFIX}/customers", tags=["customers"])
+app.include_router(tables.router, prefix=f"{API_PREFIX}/tables", tags=["tables"])
+app.include_router(kiosks.router, prefix=f"{API_PREFIX}/kiosks", tags=["kiosks"])
+app.include_router(orders.router, prefix=f"{API_PREFIX}/orders", tags=["orders"])
+app.include_router(menu.router, prefix=f"{API_PREFIX}/menu", tags=["menu"])
+app.include_router(events.router, prefix=f"{API_PREFIX}/events", tags=["events"])
+app.include_router(emergencies.router, prefix=f"{API_PREFIX}/emergencies", tags=["emergencies"])
+app.include_router(video_streams.router, prefix=f"{API_PREFIX}/video-streams", tags=["video_streams"])
+app.include_router(face_recognitions.router, prefix=f"{API_PREFIX}/face-recognitions", tags=["face_recognitions"])
+app.include_router(chat.router, prefix=f"{API_PREFIX}/chat", tags=["chat"])
+
+# --- TCP SERVER -----------------------------------------------------------
+class ThreadedTCPServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
 
 def start_tcp_server(host: str, port: int):
     server = socketserver.ThreadingTCPServer((host, port), RoboDineTCPHandler)
@@ -82,7 +948,14 @@ def start_tcp_server(host: str, port: int):
 # --- ENTRYPOINT -----------------------------------------------------------
 def run_servers():
     import uvicorn
-    uvicorn.run("robodine_service.backend.run:app", host="0.0.0.0", port=8000, reload=True)
-
+    uvicorn.run(
+        "robodine_service.backend.run:app", 
+        host="0.0.0.0", 
+        port=8000, 
+        reload=True, 
+        log_level="warning",   # ERROR/WARNING 이상만 찍음
+        access_log=False       # HTTP 요청 액세스 로그 비활성화
+    )
+    
 if __name__ == "__main__":
     run_servers()
