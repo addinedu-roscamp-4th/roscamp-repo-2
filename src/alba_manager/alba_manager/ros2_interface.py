@@ -16,7 +16,7 @@ class AlbaRos2TCPBridge(Node):
             10
         )
         
-        self.tcp_host = "127.0.0.1"
+        self.tcp_host = "192.168.0.156"
         self.tcp_port = 8001
 
     def status_callback(self, msg: RobotStatus):
