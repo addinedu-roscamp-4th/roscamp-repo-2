@@ -424,6 +424,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { name: '고객 관리', icon: Users, path: '/customers' },
     { name: '영상 보기', icon: Video, path: '/video-stream' },
     { name: '주문 관리', icon: ShoppingCart, path: '/orders' },
+    { name: '메뉴 관리', icon: Coffee, path: '/menu' },
     { name: '재고 관리', icon: Package, path: '/inventory' },
     { name: '설정', icon: Settings, path: '/settings' },
   ];

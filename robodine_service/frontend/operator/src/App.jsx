@@ -21,6 +21,7 @@ import SettingsPage from './pages/SettingsPage';
 import RobotAdminPage from './pages/RobotAdminPage';
 import VideoStreamPage from './pages/VideoStreamPage';
 import InventoryPage from './pages/InventoryPage';
+import MenuPage from './pages/MenuPage';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -111,6 +112,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <InventoryPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/menu"
+                  element={
+                    <ProtectedRoute>
+                      <MenuPage />
                     </ProtectedRoute>
                   }
                 />
