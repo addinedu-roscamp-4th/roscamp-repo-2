@@ -38,17 +38,17 @@ def detect_box_coordinates_orb_with_scene(template_path, kp_scene, des_scene, sc
             return dst
     return None
 
-# 메인 실행
+#메인 실행
 scene_color = cv.imread('20250429_145138.jpg')
 scene_gray = cv.cvtColor(scene_color, cv.COLOR_BGR2GRAY)
 
-# ✅ scene 이미지에서 keypoints 한 번만 계산
+#scene 이미지에서 keypoints 한 번만 계산
 orb = cv.ORB_create(nfeatures=500 , scaleFactor=1.2, nlevels=4)
 kp_scene, des_scene = orb.detectAndCompute(scene_gray, None)
 
 start = time.perf_counter()
 
-# ✅ 병렬 처리로 두 템플릿 매칭
+#병렬 처리로 두 템플릿 매칭
 with ThreadPoolExecutor(max_workers=2) as executor:
     future_A = executor.submit(detect_box_coordinates_orb_with_scene, '20250429_162839.jpg', kp_scene, des_scene, scene_gray)
     future_B = executor.submit(detect_box_coordinates_orb_with_scene, '20250429_162938.jpg', kp_scene, des_scene, scene_gray)
@@ -56,9 +56,9 @@ with ThreadPoolExecutor(max_workers=2) as executor:
     dst_B = future_B.result()
 
 end = time.perf_counter()
-print(f"\n✅ ORB 병렬 검출 시간: {end - start:.4f}초")
+print(f"\nORB 병렬 검출 시간: {end - start:.4f}초")
 
-# ✅ 시각화
+# 시각화
 if dst_A is not None:
     scene_color = cv.polylines(scene_color, [np.int32(dst_A)], True, (0,255,0), 5, cv.LINE_AA)
 if dst_B is not None:
