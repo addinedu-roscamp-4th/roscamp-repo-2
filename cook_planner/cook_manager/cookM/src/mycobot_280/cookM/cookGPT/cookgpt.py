@@ -33,6 +33,7 @@ model.to('cuda')
 dummy = np.zeros((640, 640, 3), dtype=np.uint8)
 _ = model(dummy, verbose=False)[0]
 
+
 class CookGPTServiceNode(Node):
     def __init__(self):
         super().__init__('cookgpt_service_node')
@@ -109,9 +110,12 @@ class CookGPTServiceNode(Node):
 
                     # 해당 클래스와 일치하는 객체만 추림
                     for i, kp in enumerate(results.keypoints.xy):
-                        # keypoint와 클래스 일치 확인
+
+                        
                         if results.keypoints.cls is None:
                             continue
+
+                        # keypoint와 클래스 일치 확인
                         kp_class = int(results.keypoints.cls[i].item())
                         if kp_class != cmd:
                             continue
@@ -125,9 +129,9 @@ class CookGPTServiceNode(Node):
                     if not filtered:
                         continue
 
-                    # 가장 가까운 객체 선택 (z값 기준)
+                    # 가장 가까운 객체 선택 (Y값 기준) 이유? 사진기준 Y가 로봇 입장에서 가장 제한사항이 많다고 생각..
                     # closest = min(filtered, key=lambda x: x[0][2])  # tvec[2] = Z축
-                    closest = min(filtered, key=lambda x: x[0][0])  # tvec[0] = X축
+                    closest = min(filtered, key=lambda x: x[0][1])  # tvec[0] = Y축
                     tvec, rvec = closest
 
                     R_obj_cam, _ = cv2.Rodrigues(rvec)
