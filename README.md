@@ -113,8 +113,7 @@ RoboDine은 다양한 통신 프로토콜을 활용하여 로봇, 서버, 클라
 |---------|------|-----|----------|
 | HTTP/REST | 8000 | 데이터 CRUD, 인증 | FastAPI 백엔드 |
 | WebSocket | 3000 | 실시간 데이터 업데이트 | ConnectionManager |
-| TCP | 8001 | ALBABOT 명령 및 상태 | Alba Manager |
-| TCP | 8002 | COOKBOT 명령 및 상태 | Cook Manager |
+| TCP | 8001 | 로봇 명령 및 상태 | Alba Manager |
 | UDP | 8003 | 비디오 스트림, 센서 데이터 | CookGPT |
 | RTSP | 8554 | 실시간 비디오 스트리밍 | RTSP 서버 |
 
