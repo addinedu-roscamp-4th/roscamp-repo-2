@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWebSockets } from '../contexts/WebSocketContext';
 
 // 웹소켓 연결 설정
-const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
+const WS_BASE_URL = process.env.REACT_APP_WS_URL || 'ws://192.168.0.156:8000/ws';
 
 // 웹소켓 연결 함수
 const useWebSocket = (topic, onMessageReceived) => {

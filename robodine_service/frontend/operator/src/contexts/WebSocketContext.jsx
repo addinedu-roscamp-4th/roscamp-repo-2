@@ -1,7 +1,6 @@
 // src/contexts/WebSocketContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-
-const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
+const WS_BASE_URL = process.env.REACT_APP_WS_URL || 'ws://192.168.0.156:8000/ws';
 const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams', 'notifications', 'commands', 'chat'];
 
 // 재연결 관련 상수
