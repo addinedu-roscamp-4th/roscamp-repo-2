@@ -5,15 +5,15 @@ import Footer from './Footer';
 
 const Layout = ({ children, category, setCategory }) => {
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
       <Header />
       
-      <div className="flex flex-grow">
+      <div className="flex flex-grow overflow-hidden">
         <Sidebar 
           selectedCategory={category} 
           onSelectCategory={setCategory} 
         />
-        <main className="flex-grow p-4 overflow-y-auto">
+        <main className="flex-grow p-4 overflow-auto">
           {children}
         </main>
       </div>

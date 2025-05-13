@@ -1,177 +1,205 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>React Kiosk UI</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script> <!-- Tailwind CDN -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>React Kiosk UI</title>
+
+  <!-- React / ReactDOM (UMD) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Babel Standalone for in-browser JSX transpile -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-
 <body class="bg-gray-100">
-    <div id="root"></div>
+  <div id="root"></div>
 
-    <script type="text/javascript">
-        // React 컴포넌트 구현
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-        const { useState } = React;
+    // Header
+    function Header() {
+      const [time, setTime] = useState(new Date());
+      useEffect(() => {
+        const id = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(id);
+      }, []);
+      return (
+        <header className="flex justify-between items-center p-4 bg-indigo-600 text-white">
+          <div className="text-xl font-bold">로보다인 키오스크</div>
+          <div className="text-lg">{time.toLocaleTimeString()}</div>
+          <div>
+            <button className="px-3 py-1 bg-indigo-500 rounded">한국어</button>
+            <button className="px-3 py-1 ml-2 bg-indigo-500 rounded">English</button>
+          </div>
+        </header>
+      );
+    }
 
-        // Header Component
-        function Header() {
-            return (
-                <header className="flex justify-between p-4 bg-gray-800 text-white">
-                    <div className="text-xl">Restaurant Logo</div>
-                    <div>{new Date().toLocaleTimeString()}</div>
-                    <div>
-                        <button className="bg-blue-500 p-2 rounded">Language</button>
-                    </div>
-                </header>
-            );
-        }
+    // Menu Page
+    function MenuPage({ onNavigate }) {
+      // 샘플 메뉴 데이터
+      const initialMenu = [
+        { name: '샐러드', img: 'http://192.168.0.156:8000/images/menu/salad.png', price: 5000, prepare: 10 },
+        { name: '스테이크', img: 'http://192.168.0.156:8000/images/menu/steak.png', price: 10000, prepare: 30 },
+        { name: '파스타', img: 'http://192.168.0.156:8000/images/menu/pasta.png', price: 10000, prepare: 20 },
+      ];
+      const [menuItems] = useState(initialMenu);
 
-        // Menu Page Component
-        function MenuPage({ setIsCartPage }) {
-            const [menuItems] = useState([
-                { name: "스테이크", price: "25.00", img: "http://192.168.0.156:8000/images/menu/steak.png" },
-                { name: "파스타", price: "12.00", img: "http://192.168.0.156:8000/images/menu/pasta.png" },
-                { name: "샐러드", price: "8.00", img: "http://192.168.0.156:8000/images/menu/salad.png" },
-                { name: "돈가스", price: "10.00", img: "http://192.168.0.156:8000/images/menu/dongas.png"},
-                { name: "오렌지 주스,", price: "3.00", img: "http://192.168.0.156:8000/images/menu/juice.png" },
-                { name: "와인", price: "2.00", img: "http://192.168.0.156:8000/images/menu/wine.png" },
-            ]);
-
-            return (
-                <div className="menu-page p-4">
-                    <div className="menu-items grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {menuItems.map((item, index) => (
-                            <div key={index} className="menu-item p-4 border rounded-lg shadow-lg">
-                                <img src={item.img} alt={item.name} className="w-full h-40 object-cover rounded" />
-                                <h3 className="text-xl">{item.name}</h3>
-                                <p>{item.price}</p>
-                                <button
-                                    onClick={() => setIsCartPage(true)}
-                                    className="bg-blue-500 text-white p-2 rounded-full mt-2"
-                                >
-                                    Add to Cart
-                                </button>
-                            </div>
-                        ))}
-                    </div>
+      return (
+        <div className="p-4">
+          <h2 className="text-2xl font-semibold mb-4">추천 메뉴</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {menuItems.map((item, idx) => (
+              <div key={idx} className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="w-[300px] h-[200px] overflow-hidden">
+                  <img
+                    src={item.img}
+                    alt={item.name}
+                    className="w-full h-full object-cover object-center"
+                  />
                 </div>
-            );
-        }
-
-        // Cart Page Component
-        function CartPage() {
-            const [itemsInCart] = useState([
-                { name: "Steak", price: "25.00", quantity: 1 },
-                { name: "Pasta", price: "12.00", quantity: 2 }
-            ]);
-
-            const totalAmount = itemsInCart.reduce(
-                (total, item) => total + item.price * item.quantity,
-                0
-            );
-
-            return (
-                <div className="cart-page p-4">
-                    <h2 className="text-2xl mb-4">Your Cart</h2>
-                    <div className="cart-items">
-                        {itemsInCart.map((item, index) => (
-                            <div key={index} className="cart-item flex justify-between p-2">
-                                <span>{item.name}</span>
-                                <span>{item.quantity} x ${item.price}</span>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="total mt-4">
-                        <h3>Total: ${totalAmount.toFixed(2)}</h3>
-                    </div>
-                    <button className="bg-green-500 text-white p-2 rounded mt-4">Proceed to Checkout</button>
+                <div className="p-4">
+                  <h3 className="text-lg font-bold mb-2">{item.name}</h3>
+                  <p className="text-indigo-600 font-semibold mb-1">
+                    {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', minimumFractionDigits: 0 }).format(item.price)}
+                  </p>
+                  <p className="text-gray-500 text-sm mb-3">준비: {item.prepare}분</p>
+                  <button
+                    onClick={() => onNavigate('cart')}
+                    className="w-full py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
+                  >
+                    장바구니 담기
+                  </button>
                 </div>
-            );
-        }
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
-        // Checkout Page Component
-        function CheckoutPage() {
-            const [paymentMethod, setPaymentMethod] = useState("credit");
+    // Cart Page
+    function CartPage({ onNavigate }) {
+      const [items] = useState([
+        // 예시: 실제 로직에서는 상태 관리/컨텍스트나 props로 교체
+        { name: '샐러드', price: 5000, quantity: 1 },
+      ]);
+      const total = items.reduce((sum, it) => sum + it.price * it.quantity, 0);
 
-            const handlePayment = () => {
-                alert("Payment Successful!");
-            };
+      return (
+        <div className="p-4">
+          <h2 className="text-2xl font-semibold mb-4">장바구니</h2>
+          <div className="space-y-2 mb-4">
+            {items.map((it, i) => (
+              <div key={i} className="flex justify-between">
+                <span>{it.name} × {it.quantity}</span>
+                <span>{new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', minimumFractionDigits: 0 }).format(it.price * it.quantity)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-right font-bold mb-4">
+            총 합계: {new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', minimumFractionDigits: 0 }).format(total)}
+          </div>
+          <div className="flex space-x-4">
+            <button
+              onClick={() => onNavigate('menu')}
+              className="flex-1 py-2 bg-gray-400 text-white rounded hover:bg-gray-500"
+            >
+              계속 주문
+            </button>
+            <button
+              onClick={() => onNavigate('checkout')}
+              className="flex-1 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            >
+              결제하기
+            </button>
+          </div>
+        </div>
+      );
+    }
 
-            return (
-                <div className="checkout-page p-4">
-                    <h2 className="text-2xl mb-4">Checkout</h2>
-                    <div className="payment-method mb-4">
-                        <button
-                            onClick={() => setPaymentMethod("credit")}
-                            className={`p-2 ${paymentMethod === "credit" ? "bg-blue-500" : "bg-gray-300"}`}
-                        >
-                            Credit Card
-                        </button>
-                        <button
-                            onClick={() => setPaymentMethod("cash")}
-                            className={`p-2 ${paymentMethod === "cash" ? "bg-blue-500" : "bg-gray-300"}`}
-                        >
-                            Cash
-                        </button>
-                    </div>
+    // Checkout Page
+    function CheckoutPage({ onNavigate }) {
+      const [method, setMethod] = useState('credit');
+      const handlePay = () => {
+        alert('결제가 완료되었습니다!');
+        onNavigate('menu');
+      };
+      return (
+        <div className="p-4">
+          <h2 className="text-2xl font-semibold mb-4">결제</h2>
+          <div className="mb-4 space-x-2">
+            <button
+              onClick={() => setMethod('credit')}
+              className={`px-4 py-2 rounded ${method === 'credit' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+            >
+              신용카드
+            </button>
+            <button
+              onClick={() => setMethod('cash')}
+              className={`px-4 py-2 rounded ${method === 'cash' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+            >
+              현금
+            </button>
+          </div>
+          {method === 'credit' && (
+            <div className="space-y-2 mb-4">
+              <input type="text" placeholder="카드 번호" className="w-full p-2 border rounded" />
+              <input type="text" placeholder="유효기간" className="w-full p-2 border rounded" />
+              <input type="text" placeholder="CVV" className="w-full p-2 border rounded" />
+            </div>
+          )}
+          <button
+            onClick={handlePay}
+            className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            결제 완료
+          </button>
+        </div>
+      );
+    }
 
-                    {paymentMethod === "credit" && (
-                        <div>
-                            <input type="text" placeholder="Card Number" className="p-2 border rounded mb-2" />
-                            <input type="text" placeholder="Expiry Date" className="p-2 border rounded mb-2" />
-                            <input type="text" placeholder="CVV" className="p-2 border rounded mb-2" />
-                        </div>
-                    )}
+    // Footer / 내비게이션
+    function Footer({ current, onNavigate }) {
+      return (
+        <footer className="fixed bottom-0 left-0 w-full flex bg-indigo-600 text-white">
+          <button
+            onClick={() => onNavigate('menu')}
+            className={`flex-1 py-3 ${current==='menu'?'bg-indigo-700':''}`}
+          >
+            홈
+          </button>
+          <button
+            onClick={() => onNavigate('cart')}
+            className={`flex-1 py-3 ${current==='cart'?'bg-indigo-700':''}`}
+          >
+            장바구니
+          </button>
+        </footer>
+      );
+    }
 
-                    <button onClick={handlePayment} className="bg-green-500 text-white p-2 rounded mt-4">
-                        Confirm Payment
-                    </button>
-                </div>
-            );
-        }
+    // App
+    function App() {
+      const [page, setPage] = useState('menu'); // 'menu' | 'cart' | 'checkout'
+      return (
+        <div className="pb-16"> {/* footer 공간 확보 */}
+          <Header />
+          {page === 'menu' && <MenuPage onNavigate={setPage} />}
+          {page === 'cart' && <CartPage onNavigate={setPage} />}
+          {page === 'checkout' && <CheckoutPage onNavigate={setPage} />}
+          <Footer current={page} onNavigate={setPage} />
+        </div>
+      );
+    }
 
-        // Footer Component
-        function Footer({ setIsCartPage }) {
-            return (
-                <footer className="footer p-4 bg-gray-800 text-white flex justify-around">
-                    <button className="p-2 bg-blue-500 text-white rounded" onClick={() => setIsCartPage(false)}>
-                        Home
-                    </button>
-                    <button className="p-2 bg-blue-500 text-white rounded" onClick={() => setIsCartPage(true)}>
-                        Cart
-                    </button>
-                </footer>
-            );
-        }
-
-        // Main App Component
-        function App() {
-            const [isCartPage, setIsCartPage] = useState(false);
-            const [isCheckoutPage, setIsCheckoutPage] = useState(false);
-
-            return (
-                <div className="App">
-                    <Header />
-                    {isCheckoutPage ? (
-                        <CheckoutPage />
-                    ) : isCartPage ? (
-                        <CartPage />
-                    ) : (
-                        <MenuPage setIsCartPage={setIsCartPage} />
-                    )}
-                    <Footer setIsCartPage={setIsCartPage} />
-                </div>
-            );
-        }
-
-        // Render the React App to the DOM
-        ReactDOM.render(<App />, document.getElementById("root"));
-    </script>
+    // 렌더링
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
 </body>
-
 </html>

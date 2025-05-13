@@ -40,7 +40,7 @@ export const filterMenuByCategory = (menuItems, category) => {
     const isDrink = item.name.includes('음료') || 
                    item.name.includes('커피') ||
                    item.name.includes('주스') ||
-                   item.name.includes('차');
+                   item.name.includes('와인');
                    
     return category === '음료' ? isDrink : !isDrink;
   });

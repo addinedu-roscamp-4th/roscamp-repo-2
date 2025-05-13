@@ -6,12 +6,12 @@ import { useCart } from '../../context/CartContext';
 const NavItem = ({ icon, label, onClick }) => {
   return (
     <button
-      className="flex flex-col items-center justify-center p-4 w-full h-full 
+      className="flex flex-col items-center justify-center p-2 w-full h-full 
         hover:bg-indigo-500 transition-colors duration-200 focus:outline-none"
       onClick={onClick}
     >
       <span className="text-2xl">{icon}</span>
-      <span className="mt-1 text-sm">{label}</span>
+      <span className="mt-1 text-sm whitespace-nowrap">{label}</span>
     </button>
   );
 };
@@ -31,7 +31,7 @@ const Footer = () => {
   };
 
   return (
-    <footer className="bg-indigo-600 text-white bottom-0 w-full">
+    <footer className="bg-indigo-600 text-white bottom-0 w-full shadow-inner">
       <div className="grid grid-cols-3 divide-x divide-indigo-400 h-16">
         <NavItem 
           icon="🏠" 

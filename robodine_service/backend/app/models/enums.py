@@ -48,6 +48,7 @@ class RobotStatus(str, Enum):
     CHARGING = "CHARGING"
     ERROR = "ERROR"
     MAINTENANCE = "MAINTENANCE"
+    CALLING = "CALLING"
 
 class CommandStatus(str, Enum):
     PENDING = "PENDING"
@@ -65,6 +66,7 @@ class InventoryStatus(str, Enum):
 class TableStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
     OCCUPIED = "OCCUPIED"
+    CALLING = "CALLING"
 
 class OrderStatus(str, Enum):
     PLACED = "PLACED"
