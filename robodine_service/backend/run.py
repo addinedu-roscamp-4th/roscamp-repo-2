@@ -9,6 +9,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 import anyio
 import os
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +50,38 @@ main_loop = None
 
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 로그 디렉터리 생성
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# 로거 인스턴스
+logger = logging.getLogger("robodine.run")
+logger.setLevel(logging.INFO)
+
+# 포맷터
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# 1) 콘솔 핸들러
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# 2) 파일 핸들러 (10MB 순환, 백업 5개)
+file_handler = RotatingFileHandler(
+    filename=os.path.join(LOG_DIR, "server.log"),
+    maxBytes=10 * 1024 * 1024,
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# SQLAlchemy 로그는 WARNING 이상만
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # SQLAlchemy 쿼리/롤백 로그를 WARNING 이상만 찍도록 설정
@@ -72,7 +105,8 @@ last_broadcast = {
     "video_streams": datetime.min,
     "notifications": datetime.min,
     "commands": datetime.min,
-    "chat": datetime.min
+    "chat": datetime.min,
+    "menu": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -223,6 +257,15 @@ def serialize_menuitem(menuitem):
         "MenuItem.name": menuitem.name,
         "MenuItem.price": menuitem.price,
         "MenuItem.prepare_time": menuitem.prepare_time
+    }
+
+def serialize_menu_ingredient(ingredient):
+    """MenuIngredient 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "MenuIngredient.id": ingredient.id,
+        "MenuIngredient.name": ingredient.name,
+        "MenuIngredient.menu_item_id": ingredient.menu_item_id,
+        "MenuIngredient.quantity_required": ingredient.quantity_required
     }
 
 def serialize_systemlog(log):
@@ -409,6 +452,15 @@ async def broadcast_chat_update(chat_data):
         "data": chat_data
     }
     await manager.broadcast(message, "chat")
+
+async def broadcast_menu_update(menu_data):
+    """메뉴 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "menu",
+        "data": menu_data
+    }
+    await manager.broadcast(message, "menu")
 
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
@@ -633,7 +685,16 @@ async def broadcast_entity_update(entity_type, entity_id):
                         .limit(30)
                     ).all()
                     out['data'] = [serialize_chat(chat) for chat in chats]
+                # menu
+                elif entity_type == "menu":
+                    # 메뉴 항목 및 재료 데이터 조회
+                    menu_items = session.exec(select(MenuItem).order_by(MenuItem.id)).all()
+                    menu_ingredients = session.exec(select(MenuIngredient).order_by(MenuIngredient.id)).all()
                     
+                    out['data'] = {
+                        'items': [serialize_menuitem(item) for item in menu_items],
+                        'ingredients': [serialize_menu_ingredient(ingredient) for ingredient in menu_ingredients]
+                    }
                 return out
 
         result = await anyio.to_thread.run_sync(_sync_db_work)
@@ -709,6 +770,9 @@ async def broadcast_entity_update(entity_type, entity_id):
         elif entity == "chat":
             await broadcast_chat_update(result['data'])
             last_broadcast['chat'] = now
+        elif entity == "menu":
+            await broadcast_menu_update(result['data'])
+            last_broadcast['menu'] = now
 
     except Exception as entity:
         logger.error(f"Error in broadcasting {entity_type} update: {entity}")
@@ -770,6 +834,10 @@ async def fallback_polling():
             if (now - last_broadcast.get("chat", datetime.min)).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("chat", None)
                 
+            # 메뉴 데이터 10초마다 갱신
+            if (now - last_broadcast.get("menu", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("menu", None)
+                
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
             
@@ -804,6 +872,7 @@ async def lifespan(app: FastAPI):
     last_broadcast["notifications"] = datetime.min
     last_broadcast["commands"] = datetime.min
     last_broadcast["chat"] = datetime.min
+    last_broadcast["menu"] = datetime.min
 
     yield
     
@@ -820,7 +889,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 모든 도메인에서 접근을 허용
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],  # 모든 HTTP 메서드를 허용
     allow_headers=["*"],  # 모든 헤더를 허용
 )
@@ -845,7 +914,7 @@ def recv_all(sock, count: int) -> bytes:
         buf.extend(chunk)
     return bytes(buf)
 
-# TCP 핸들러에서 웹소켓 브로드캐스팅 추가
+# TCP 핸들러에서 웹소켓 브로드캐스트 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         try:
@@ -949,7 +1018,7 @@ def start_tcp_server(host: str, port: int):
 def run_servers():
     import uvicorn
     uvicorn.run(
-        "robodine_service.backend.run:app", 
+        "run:app", 
         host="0.0.0.0", 
         port=8000, 
         reload=True, 

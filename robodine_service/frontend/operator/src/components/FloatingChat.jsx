@@ -275,6 +275,7 @@ const FloatingChat = () => {
         id: `pending-${now.getTime()}`,
         status: 'pending' // 상태 추가
       };
+      
       setOptimisticMessages(prev => [...prev, optimisticMsg]);
       setInputMessage('');
       await apiCall('/api/chat/send', 'POST', { message: inputMessage });
