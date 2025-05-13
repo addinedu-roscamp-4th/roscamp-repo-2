@@ -494,7 +494,7 @@ const VideoStreamPage = () => {
                       className="absolute inset-0 w-full h-full object-contain"
                       controls
                       autoPlay
-                      src={`http://localhost:8000/${selectedVideo.recording_path}`}
+                      src={`http://192.168.0.156:8000/${selectedVideo.recording_path}`}
                       onError={handleVideoError}
                     />
                   </div>
@@ -508,7 +508,7 @@ const VideoStreamPage = () => {
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-800 text-sm"
                   >
-                    {`http://localhost:8000/${selectedVideo.recording_path}`}
+                    {`http://192.168.0.156:8000/${selectedVideo.recording_path}`}
                   </a>
                 </div>
                 

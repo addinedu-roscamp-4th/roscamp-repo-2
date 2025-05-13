@@ -22,13 +22,12 @@ from app.routes import (
     poses, websockets, streaming, inventories,
     robot, albabot, cookbot, auth, users, settings, customers,
     tables, kiosks, orders, menu, events, emergencies, 
-    video_streams, face_recognitions
+    video_streams, face_recognitions, chat
 )
 from app.routes.websockets import router as websocket_router
 from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update, broadcast_systemlogs_update, broadcast_customers_update
 from app.routes.websockets import manager
-from app.core.db_config import engine
-from app.core.database import get_session
+from app.core.db_config import engine, get_db
 from app.models.robot import Robot
 from app.models.table import Table
 from app.models.event import Event, SystemLog
@@ -42,6 +41,7 @@ from app.models.table import Table, GroupAssignment
 from app.models.admin_settings import AdminSettings
 from app.models.user import User, Notification
 from app.core.utils import dispatch_payload
+from app.core.config import IMAGES_DIR, VIDEOS_DIR
 
 from app.services.streaming_service import get_stream_urls, add_stream_url
 
@@ -50,6 +50,10 @@ main_loop = None
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# SQLAlchemy 쿼리/롤백 로그를 WARNING 이상만 찍도록 설정
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
 
 # 폴링 주기 설정 (비상 시 폴백용, 초 단위)
 POLLING_INTERVAL = 3
@@ -67,7 +71,8 @@ last_broadcast = {
     "inventory": datetime.min,
     "video_streams": datetime.min,
     "notifications": datetime.min,
-    "commands": datetime.min
+    "commands": datetime.min,
+    "chat": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -295,6 +300,17 @@ def serialize_command(command):
         "executed_at": command.executed_at.isoformat() if command.executed_at else None
     }
 
+def serialize_chat(chat):
+    """Chat 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "id": chat.id,
+        "robot_id": chat.robot_id,
+        "question": chat.question,
+        "answer": chat.answer,
+        "status": str(chat.status).replace('ChatStatus.', '') if chat.status else None,
+        "timestamp": chat.timestamp.isoformat() if chat.timestamp else None,
+    }
+
 # 서버 측에서 사용할 데이터 전송 함수들
 async def broadcast_robots_update(robots_data):
     """로봇 데이터 업데이트를 브로드캐스팅"""
@@ -385,6 +401,15 @@ async def broadcast_commands_update(commands_data):
     }
     await manager.broadcast(message, "commands")
 
+async def broadcast_chat_update(chat_data):
+    """채팅 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "chat",
+        "data": chat_data
+    }
+    await manager.broadcast(message, "chat")
+
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
     """엔티티 변경 시 해당 데이터를 웹소켓으로 브로드캐스팅"""
@@ -396,15 +421,11 @@ async def broadcast_entity_update(entity_type, entity_id):
                 # robot
                 if entity_type == "robot":
                     # 단일 또는 전체 조회
-                    if entity_id:
-                        robot = session.get(Robot, entity_id)
-                        out['data'] = [serialize_robot(robot)] if robot else []
-                    else:
-                        robots = session.exec(
-                            select(Robot)
-                            .order_by(Robot.robot_id)
-                            ).all()
-                        out['data'] = [serialize_robot(robot) for robot in robots]
+                    robots = session.exec(
+                        select(Robot)
+                        .order_by(Robot.robot_id)
+                        ).all()
+                    out['data'] = [serialize_robot(robot) for robot in robots]
                     # 상세 상태 조회 (albabot, cookbot, pose6d)
                     albabots = session.exec(
                         select(Albabot)
@@ -568,7 +589,7 @@ async def broadcast_entity_update(entity_type, entity_id):
                     else:
                         streams = session.exec(
                             select(VideoStream)
-                            .order_by(VideoStream.id)
+                            .order_by(VideoStream.id.desc())
                         ).all()
                         out['data'] = [serialize_video_stream(stream) for stream in streams]
                 # notification
@@ -598,6 +619,21 @@ async def broadcast_entity_update(entity_type, entity_id):
                             .limit(30)
                         ).all()
                         out['data'] = [serialize_command(command) for command in commands]
+                # chat
+                elif entity_type == "chat":
+                    from app.models.chat import Chat
+                    # if entity_id:
+                    #     chat = session.get(Chat, entity_id)
+                    #     out['data'] = [serialize_chat(chat)] if chat else []
+                    # else:
+                        # 최근 채팅 조회
+                    chats = session.exec(
+                        select(Chat)
+                        .order_by(Chat.id.desc())
+                        .limit(30)
+                    ).all()
+                    out['data'] = [serialize_chat(chat) for chat in chats]
+                    
                 return out
 
         result = await anyio.to_thread.run_sync(_sync_db_work)
@@ -670,6 +706,9 @@ async def broadcast_entity_update(entity_type, entity_id):
         elif entity == "command":
             await broadcast_commands_update(result['data'])
             last_broadcast['commands'] = now
+        elif entity == "chat":
+            await broadcast_chat_update(result['data'])
+            last_broadcast['chat'] = now
 
     except Exception as entity:
         logger.error(f"Error in broadcasting {entity_type} update: {entity}")
@@ -727,6 +766,10 @@ async def fallback_polling():
             if (now - last_broadcast.get("commands", datetime.min)).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("command", None)
                 
+            # 채팅 데이터 10초마다 갱신
+            if (now - last_broadcast.get("chat", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("chat", None)
+                
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
             
@@ -739,10 +782,6 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up application...")
     SQLModel.metadata.create_all(bind=engine)
     logger.info("Database tables created successfully")
-
-    # 비디오 디렉토리 생성
-    os.makedirs(VIDEOS_DIR, exist_ok=True)
-    logger.info(f"Videos directory created at {VIDEOS_DIR}")
 
     # TCP 서버
     tcp_thread = threading.Thread(target=start_tcp_server, args=("0.0.0.0", 8001), daemon=True)
@@ -764,6 +803,7 @@ async def lifespan(app: FastAPI):
     last_broadcast["video_streams"] = datetime.min
     last_broadcast["notifications"] = datetime.min
     last_broadcast["commands"] = datetime.min
+    last_broadcast["chat"] = datetime.min
 
     yield
     
@@ -789,47 +829,62 @@ app.add_middleware(
     GZipMiddleware,
     minimum_size=1000,  # 최소 압축 크기 (예시)
 )
-# 비디오 저장 디렉토리
-VIDEOS_DIR = "/home/addinedu/dev_ws/roscamp-repo-2/robodine_service/backend/videos"
 
 # 비디오 파일 정적 서비스
 app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
+app.mount("/images", StaticFiles(directory=IMAGES_DIR), name="images")
+
+
+def recv_all(sock, count: int) -> bytes:
+    """정확히 count 바이트를 받을 때까지 recv() 반복"""
+    buf = bytearray()
+    while len(buf) < count:
+        chunk = sock.recv(count - len(buf))
+        if not chunk:
+            raise ConnectionError("데이터 수신 중 연결이 끊어졌습니다.")
+        buf.extend(chunk)
+    return bytes(buf)
 
 # TCP 핸들러에서 웹소켓 브로드캐스팅 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        raw = self.request.recv(1024).strip()
-        logger.info(f"[TCP] Received: {raw}")
         try:
-            payload = json.loads(raw.decode('utf-8'))
-            entity_type = None
-            entity_id = None
-            
-            with get_session() as session:
-                # msg_type에 따라 분기 처리 및 관련 엔티티 식별
-                result = dispatch_payload(session, payload)
-                
-                # dispatch_payload 결과에서 영향받은 엔티티 정보 추출
-                if isinstance(result, dict) and 'affected_entity' in result:
-                    entity_type = result['affected_entity'].get('type')
-                    entity_id = result['affected_entity'].get('id')
-                    print (f"Entity Type: {entity_type}, Entity ID: {entity_id}")
-                
+            # 1) 헤더(4바이트) 읽어서 전체 길이 계산
+            raw_len = recv_all(self.request, 4)
+            total_len = int.from_bytes(raw_len, byteorder='big')
+            logger.info(f"[TCP] Incoming payload length: {total_len} bytes")
+
+            # 2) 실제 페이로드(바디)만 읽기
+            body = recv_all(self.request, total_len)
+
+            # 3) JSON 파싱
+            data = json.loads(body.decode('utf-8'))
+            logger.info(f"[TCP] Received JSON: {data}")
+
+            # 4) dispatch & DB 저장
+            with Session(engine) as session:
+                result = dispatch_payload(session, data)
                 session.commit()
-                
-                # 변경 후 즉시 비동기 브로드캐스팅 작업 생성
-                if entity_type:
-                    # FastAPI 메인 이벤트 루프에서 직접 태스크 생성
-                    if main_loop:
-                        main_loop.call_soon_threadsafe(
-                            lambda: asyncio.create_task(broadcast_entity_update(entity_type, entity_id))
-                        )
-                    logger.info(f"[TCP] Scheduled broadcast for {entity_type} with ID {entity_id}")
-                
-            response = "OK"
+                # 필요시 브로드캐스트
+                if isinstance(result, dict) and 'affected_entity' in result:
+                    et = result['affected_entity']['type']
+                    eid = result['affected_entity']['id']
+                    # main_loop는 run.py 에서 전역으로 설정된 asyncio loop
+                    main_loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(broadcast_entity_update(et, eid))
+                    )
+
+            response = "OK_JSON"
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[TCP] JSON 디코딩 실패: {e}")
+            response = "ERROR_JSON"
+
         except Exception as e:
-            logger.error(f"[TCP] Error: {e}")
+            logger.error(f"[TCP] 처리 오류: {e}")
             response = "ERROR"
+
+        # 5) 클라이언트에 응답
         self.request.sendall(response.encode('utf-8'))
 
 # Include routers - API path prefix for all endpoints
@@ -849,8 +904,6 @@ async def health_check():
                 .order_by(SystemLog.timestamp.desc())
                 .limit(1)
             ).first()
-            if recent_log:
-                logger.info(f"Recent log: {recent_log}")
         except Exception as e:
             logger.error(f"Database connection error: {e}")
             return {"status": "healthy", "database": "unhealthy"}
@@ -881,8 +934,12 @@ app.include_router(events.router, prefix=f"{API_PREFIX}/events", tags=["events"]
 app.include_router(emergencies.router, prefix=f"{API_PREFIX}/emergencies", tags=["emergencies"])
 app.include_router(video_streams.router, prefix=f"{API_PREFIX}/video-streams", tags=["video_streams"])
 app.include_router(face_recognitions.router, prefix=f"{API_PREFIX}/face-recognitions", tags=["face_recognitions"])
+app.include_router(chat.router, prefix=f"{API_PREFIX}/chat", tags=["chat"])
 
 # --- TCP SERVER -----------------------------------------------------------
+class ThreadedTCPServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+
 def start_tcp_server(host: str, port: int):
     server = socketserver.ThreadingTCPServer((host, port), RoboDineTCPHandler)
     logger.info(f"[TCP] Server listening on {host}:{port}")
@@ -891,7 +948,14 @@ def start_tcp_server(host: str, port: int):
 # --- ENTRYPOINT -----------------------------------------------------------
 def run_servers():
     import uvicorn
-    uvicorn.run("robodine_service.backend.run:app", host="0.0.0.0", port=8000, reload=True)
-
+    uvicorn.run(
+        "robodine_service.backend.run:app", 
+        host="0.0.0.0", 
+        port=8000, 
+        reload=True, 
+        log_level="warning",   # ERROR/WARNING 이상만 찍음
+        access_log=False       # HTTP 요청 액세스 로그 비활성화
+    )
+    
 if __name__ == "__main__":
     run_servers()

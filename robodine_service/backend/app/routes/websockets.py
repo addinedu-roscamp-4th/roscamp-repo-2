@@ -19,7 +19,7 @@ WS_PING_INTERVAL = int(os.environ.get("WS_PING_INTERVAL", "30"))  # 초 단위
 # 웹소켓 메시지 프로토콜 정의
 class WSMessage(BaseModel):
     type: Literal["update", "error", "ping", "pong", "shutdown"]
-    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands"]
+    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands", "chat"]
     data: Any
 
 # 연결 관리자 클래스
@@ -37,7 +37,8 @@ class ConnectionManager:
             "inventory": [],
             "video_streams": [],
             "notifications": [],
-            "commands": []
+            "commands": [],
+            "chat": []
         }
         self.shutting_down = False
         self.max_connections_per_topic = WS_MAX_CONNECTIONS  # 환경 변수에서 가져온 값
@@ -162,7 +163,7 @@ ping_task = None
 async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
     """단일 통합 웹소켓 엔드포인트 - 토픽은 URL 경로 파라미터로 지정"""
     # 지원되는 토픽 확인
-    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands"]
+    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands", "chat"]
     if topic not in valid_topics:
         logger.warning(f"Client attempted to connect to invalid topic: {topic}")
         await websocket.close(code=1003)  # 1003 = Unsupported data
@@ -202,6 +203,13 @@ async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
                 await broadcast_entity_update("command", None)
             except Exception as e:
                 logger.error(f"Initial commands broadcast failed: {e}")
+                
+        # 초기 브로드캐스트: 채팅 연결 시 채팅 메시지 목록 즉시 전송
+        elif topic == "chat":
+            try:
+                await broadcast_entity_update("chat", None)
+            except Exception as e:
+                logger.error(f"Initial chat broadcast failed: {e}")
 
         logger.info(f"{topic.capitalize()} connection established from {websocket.client.host}")
         
@@ -295,3 +303,7 @@ async def broadcast_notifications_update(notifications_data):
 async def broadcast_commands_update(commands_data):
     """명령어 로그 데이터 업데이트를 브로드캐스팅"""
     await manager.broadcast_update(commands_data, "commands")
+
+async def broadcast_chat_update(chat_data):
+    """채팅 데이터 업데이트를 브로드캐스팅"""
+    await manager.broadcast_update(chat_data, "chat")

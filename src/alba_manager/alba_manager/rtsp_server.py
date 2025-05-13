@@ -20,7 +20,7 @@ RTSP_IP    = "192.168.0.156"
 RTSP_PORT  = 8554
 STREAM_PATH= "/stream"
 RTSP_URL   = f"rtsp://{RTSP_IP}:{RTSP_PORT}{STREAM_PATH}"
-video_file = "/home/addinedu/dev_ws/recording_20250410_142223.mp4"
+video_file = "/home/addinedu/dev_ws/recording_20250410_140931.mp4"
 
 
 # 수신 서버 API
@@ -36,7 +36,7 @@ def notify_robo_add():
 
         resp = requests.post(f"{STREAM_API_BASE}/add", json={
             "url": RTSP_URL, 
-            "source_type": "PINKY", 
+            "source_type": "COOKBOT", 
             "source_id": "rtsp_server",
             "recording_path": video_file,
             "recording_started_at": (datetime.now(timezone.utc) - duration_timedelta).isoformat(),

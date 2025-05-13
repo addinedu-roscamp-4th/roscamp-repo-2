@@ -8,6 +8,9 @@ import WebSocketProvider from './contexts/WebSocketContext';
 import { HealthCheckProvider } from './contexts/HealthCheckContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
 
+// Components
+import FloatingChat from './components/FloatingChat';
+
 // Pages
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
@@ -115,6 +118,11 @@ function App() {
                 {/* Redirect unknown paths to dashboard */}
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
+              
+              {/* Floating Chat Component - 로그인 페이지가 아닐 때만 표시 */}
+              <AuthComponent>
+                <FloatingChat />
+              </AuthComponent>
             </div>
           </NotificationsProvider>
         </HealthCheckProvider>
@@ -122,5 +130,15 @@ function App() {
     </AuthProvider>
   );
 }
+
+// 인증 확인 컴포넌트 - 로그인 상태일 때만 자식 컴포넌트를 렌더링
+const AuthComponent = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) return null;
+  if (!isAuthenticated) return null;
+  
+  return children;
+};
 
 export default App;

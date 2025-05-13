@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 ASYNC_DATABASE_URL = "postgresql+asyncpg://robodine_user:robodine_pass@localhost:5432/robodine_db"
 async_engine: AsyncEngine = create_async_engine(
     ASYNC_DATABASE_URL,
-    echo=True,
+    echo=False,
 )
 
 # 비동기 세션 생성기
@@ -23,7 +23,7 @@ AsyncSessionLocal = sessionmaker(
 SYNC_DATABASE_URL = "postgresql://robodine_user:robodine_pass@localhost:5432/robodine_db"
 engine = create_engine(
     SYNC_DATABASE_URL,
-    echo=True,
+    echo=False,
 )
 
 # 동기 세션 생성기
@@ -47,3 +47,5 @@ async def get_async_db():
     """Dependency to get an asynchronous database session."""
     async with AsyncSessionLocal() as session:
         yield session
+
+        

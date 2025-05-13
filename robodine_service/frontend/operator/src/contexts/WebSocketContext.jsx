@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const WS_BASE_URL = 'ws://127.0.0.1:8000/ws';
-const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams', 'notifications', 'commands'];
+const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams', 'notifications', 'commands', 'chat'];
 
 // 재연결 관련 상수
 const INITIAL_RECONNECT_DELAY = 3000; // 초기 재연결 지연 시간 (3초)
@@ -39,7 +39,8 @@ export function WebSocketProvider({ children }) {
     inventory: [], 
     video_streams: [],
     notifications: [], // 서버로부터 전송될 알림 데이터를 담을 배열
-    commands: [] // 명령어 로그 데이터를 담을 배열
+    commands: [], // 명령어 로그 데이터를 담을 배열
+    chat: [] // 채팅 메시지 데이터를 담을 배열
   });
   const [errors, setErrors] = useState({});
   const [connected, setConnected] = useState({});
@@ -202,6 +203,25 @@ export function WebSocketProvider({ children }) {
               return;
             }
             
+            // 채팅 데이터인 경우 처리
+            if (topic === 'chat' && msg.data) {
+              // console.log('채팅 메시지 수신:', msg.data);
+              
+              // 데이터가 배열인지 확인
+              if (!Array.isArray(msg.data)) {
+                // 단일 메시지인 경우 배열로 변환
+                if (msg.data && typeof msg.data === 'object') {
+                  const newMessages = [msg.data];
+                  processChatMessages(newMessages);
+                }
+                return;
+              }
+              
+              // 배열인 경우 처리
+              processChatMessages(msg.data);
+              return;
+            }
+            
             setData(prev => ({ ...prev, [topic]: msg.data }));
           }
         } catch (err) {
@@ -269,6 +289,48 @@ export function WebSocketProvider({ children }) {
       reconnectTimers.current[topic] = setTimeout(() => connectTopic(topic), delay);
     }
   }, [connections]); // 빈 deps → stable reference
+
+  // 채팅 메시지 처리 함수
+  const processChatMessages = (messages) => {
+    setData(prev => {
+      // 기존 메시지의 ID 세트 생성
+      const existingIds = new Set(prev.chat.map(m => m.id));
+      
+      // 새 메시지와 기존 메시지 합치기
+      let updatedChat = [...prev.chat];
+      
+      messages.forEach(message => {
+        // 각 메시지에 대해 JSON 파싱 시도 (이미지 포함 메시지 확인)
+        if (message.answer && typeof message.answer === 'string' && message.answer.startsWith('{')) {
+          try {
+            // 이미 파싱된 객체가 아닌지 확인 (이중 파싱 방지)
+            JSON.parse(message.answer);
+          } catch (e) {
+            console.warn('채팅 메시지 JSON 파싱 실패:', e);
+          }
+        }
+        
+        // 기존 메시지 업데이트 또는 새 메시지 추가
+        if (existingIds.has(message.id)) {
+          // 기존 메시지 업데이트
+          updatedChat = updatedChat.map(m => 
+            m.id === message.id ? { ...m, ...message } : m
+          );
+        } else {
+          // 새 메시지 추가
+          updatedChat.push(message);
+        }
+      });
+      
+      // 타임스탬프 기준으로 정렬
+      updatedChat.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      return {
+        ...prev,
+        chat: updatedChat
+      };
+    });
+  };
 
   // Refresh connection for a topic
   const refreshTopic = useCallback((topic) => {
@@ -357,6 +419,21 @@ export function WebSocketProvider({ children }) {
       [topic]: newData
     }));
   };
+  
+  // 채팅 메시지 추가 함수
+  const addChatMessage = (message) => {
+    processChatMessages([message]);
+  };
+  
+  // 채팅 메시지 업데이트 함수
+  const updateChatMessage = (messageId, updatedData) => {
+    setData(prevData => ({
+      ...prevData,
+      chat: prevData.chat.map(msg => 
+        msg.id === messageId ? { ...msg, ...updatedData } : msg
+      )
+    }));
+  };
 
   return (
     <WebSocketContext.Provider 
@@ -365,7 +442,9 @@ export function WebSocketProvider({ children }) {
         errors, 
         connected, 
         refreshTopic,
-        updateManualData // 수동 업데이트 함수 추가
+        updateManualData, // 수동 업데이트 함수 추가
+        addChatMessage,    // 채팅 메시지 추가 함수
+        updateChatMessage  // 채팅 메시지 업데이트 함수
       }}
     >
       {children}

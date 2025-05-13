@@ -3,6 +3,8 @@ from typing import Dict, Any, Optional, Type
 from sqlmodel import Session, SQLModel
 from datetime import datetime
 from fastapi import HTTPException, status
+import base64, uuid, os
+import json
 
 from app.models.robot import Robot
 from app.models.pose6d import Pose6D
@@ -12,8 +14,9 @@ from app.models.cookbot import Cookbot
 from app.models.face_recognition import FaceRecognition
 from app.core.db_config import get_db
 from app.models.table import Table
-from app.models.enums import TableStatus
-
+from app.models.chat import Chat
+from app.models.enums import TableStatus, ChatStatus
+from app.core.config import IMAGES_DIR
 
 
 def dispatch_payload(session: Session, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -27,6 +30,8 @@ def dispatch_payload(session: Session, data: Dict[str, Any]) -> Dict[str, Any]:
         return _handle_ingredient(session, data)
     elif msg_type == "Face":
         return _face_recognition(session, data)
+    elif msg_type == "Chatbot":
+        return _chatbot(session, data)
     else:
         raise ValueError(f"Unknown msg_type: {msg_type}")
 
@@ -142,3 +147,55 @@ def _face_recognition(session: Session, data: Dict[str, Any]):
             )
     
     return {"affected_entity": {"type": "face", "id": data["table_id"]}}
+
+def _chatbot(session: Session, data: Dict[str, Any]):
+    chat = session.query(Chat).filter(Chat.id == data["msg_id"]).first()
+    if not chat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Chat with ID {data['msg_id']} not found")
+
+    # 공통 필드 업데이트
+    chat.question   = data["question"]
+    chat.robot_id   = data["robot_id"]
+    chat.robot_task = data["robot_task"]
+    chat.status     = ChatStatus.COMPLETED
+    
+    if data["robot_task"] == "TAKE_PICTURE":
+        # -- 이미지 저장 --
+        img_bytes = base64.b64decode(data["response_image"])
+        fname     = f"{uuid.uuid4().hex}.png"
+        out_path  = os.path.join(IMAGES_DIR, fname)
+        with open(out_path, "wb") as wf:
+            wf.write(img_bytes)
+
+        # -- 텍스트 + 이미지 URL을 JSON 문자열로 answer에 저장 --
+        answer_payload = {
+            "text": data["response_text"],
+            "image": f"/images/{fname}"
+        }
+        chat.answer = json.dumps(answer_payload, ensure_ascii=False)
+    else:
+        # 일반 텍스트 응답인 경우
+        chat.answer = data["response_text"]
+
+    session.add(chat)
+    session.commit()
+    session.refresh(chat)
+    return {"affected_entity": {"type": "chat", "id": chat.id}}
+
+# 채팅 업데이트 전송 함수
+async def broadcast_chat_update(chat_id: int, session: Session = None):
+    """
+    채팅 ID에 대한 업데이트를 웹소켓으로 브로드캐스팅
+    
+    Args:
+        chat_id: 업데이트할 채팅 메시지 ID
+        session: 데이터베이스 세션 (없으면 새로 생성)
+    """
+    try:
+        from run import broadcast_entity_update
+        await broadcast_entity_update("chat", chat_id)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"채팅 업데이트 브로드캐스팅 중 오류: {str(e)}")

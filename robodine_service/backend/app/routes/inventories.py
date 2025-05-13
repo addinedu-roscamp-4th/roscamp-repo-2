@@ -102,6 +102,15 @@ def create_inventory(
     
     # Log this action
     log_info(db, f"재고 항목 생성: {new_inventory.name}, 수량: {new_inventory.count}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "inventory",
+        None
+    )
+    
     
     return {
         "id": new_inventory.id,
@@ -163,6 +172,14 @@ def update_inventory(
     # Log inventory change
     if old_count != inventory.count:
         log_info(db, f"재고 수량 변경: {inventory.name}, {old_count} → {inventory.count}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "inventory",
+        None
+    )
     
     return {
         "status": "success",
@@ -171,7 +188,9 @@ def update_inventory(
 
 # Delete inventory item
 @router.delete("/{inventory_id}", response_model=dict)
-def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
+def delete_inventory(inventory_id: int,
+                    background_tasks: BackgroundTasks,
+                    db: Session = Depends(get_db)):
     # Find inventory item
     inventory = db.query(Inventory).filter(Inventory.id == inventory_id).first()
     if not inventory:
@@ -196,6 +215,14 @@ def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
     )
     db.add(log)
     db.commit()
+        
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "inventory",
+        None
+    )
     
     return {"message": "재고가 삭제되었습니다."}
 
@@ -204,6 +231,7 @@ def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
 @router.post("/update_inventory")
 def update_inventory_endpoint(
     data: InventoryCreateRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     # MenuIngredient 테이블에서 이름 조회
@@ -227,6 +255,14 @@ def update_inventory_endpoint(
     db.commit()
     db.refresh(inv)
 
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "inventory",
+        None
+    )
+
     return {
         "message": "Inventory logged successfully",
         "inventory": inv,
@@ -234,7 +270,11 @@ def update_inventory_endpoint(
 
 # 재료 항목 업데이트
 @router.post("/update_menu_ingredient")
-def update_menu_ingredient(ingredient_data: MenuIgredientData, db: Session = Depends(get_db)):
+def update_menu_ingredient(
+    ingredient_data: MenuIgredientData,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)):
+
     # Check if ingredient already exists in the database
     ingredient = db.query(MenuIngredient).filter(MenuIngredient.id == ingredient_data.id).first()
     
@@ -249,12 +289,23 @@ def update_menu_ingredient(ingredient_data: MenuIgredientData, db: Session = Dep
     
     db.add(ingredient)
     db.commit()
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "inventory",
+        None
+    )
     
     return {"message": "Ingredient data processed successfully!"}
 
 # 메뉴 항목 업데이트
 @router.post("/update_menu_item")
-def update_menu_item(menu_item_data: MenuItemData, db: Session = Depends(get_db)):
+def update_menu_item(
+    menu_item_data: MenuItemData,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)):
     # Check if menu item already exists in the database
     menu_item = db.query(MenuItem).filter(MenuItem.id == menu_item_data.id).first()
     
@@ -269,5 +320,13 @@ def update_menu_item(menu_item_data: MenuItemData, db: Session = Depends(get_db)
     
     db.add(menu_item)
     db.commit()
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "inventory",
+        None
+    )
     
     return {"message": "Menu data processed successfully!"}
