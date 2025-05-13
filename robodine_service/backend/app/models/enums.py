@@ -1,0 +1,99 @@
+from enum import Enum
+from sqlalchemy import Enum as SQLEnum
+
+# ── ENUM 정의 ────────────────────────────────────────────────────────────────
+
+class ChatType(str, Enum):
+    """채팅 메시지 유형"""
+    TEXT = "TEXT"
+    IMAGE = "IMAGE"
+    VOICE = "VOICE"
+    ACTION = "ACTION"
+
+class ChatStatus(str, Enum):
+    """채팅 상태"""
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    ERROR = "ERROR"
+    RETRYING = "RETRYING"
+    SENT = "SENT"
+    
+class TaskType(str, Enum):
+    GREETINGS = "GREETINGS"
+    MAINTENANCE = "MAINTENANCE"
+    TAKE_PICTURE = "TAKE_PICTURE"
+
+class LogLevel(str, Enum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    DEBUG = "DEBUG"
+
+class EntityType(str, Enum):
+    COOKBOT = "COOKBOT"
+    ALBABOT = "ALBABOT"
+    PINKY = "PINKY"
+    GLOBAL = "GLOBAL"
+    WORLD = "WORLD"
+    INVENTORY = "INVENTORY"
+    CHATBOT = "CHATBOT"
+
+class RobotStatus(str, Enum):
+    IDLE = "IDLE"
+    COOKING = "COOKING"
+    SERVING = "SERVING"
+    CLEANING = "CLEANING"
+    EMERGENCY = "EMERGENCY"
+    SECURITY = "SECURITY"
+    CHARGING = "CHARGING"
+    ERROR = "ERROR"
+    MAINTENANCE = "MAINTENANCE"
+
+class CommandStatus(str, Enum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    EXECUTING = "EXECUTING"
+    EXECUTED = "EXECUTED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+class InventoryStatus(str, Enum):
+    IN_STOCK = "IN_STOCK"
+    LOW_STOCK = "LOW_STOCK"
+    OUT_OF_STOCK = "OUT_OF_STOCK"
+
+class TableStatus(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    OCCUPIED = "OCCUPIED"
+
+class OrderStatus(str, Enum):
+    PLACED = "PLACED"
+    PREPARING = "PREPARING"
+    SERVED = "SERVED"
+    CANCELLED = "CANCELLED"
+
+class EventType(str, Enum):
+    WELCOME = "WELCOME"
+    CALL = "CALL"
+    BIRTHDAY = "BIRTHDAY"
+    EMERGENCY = "EMERGENCY"
+    CLEANING = "CLEANING"
+
+class StreamSourceType(str, Enum):
+    PINKY = "PINKY"
+    COOKBOT = "COOKBOT"
+    GLOBAL_CAM = "GLOBAL_CAM"
+
+class StreamStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    ERROR = "ERROR"
+
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    KIOSK = "KIOSK"
+
+class NotificationStatus(str, Enum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED" 
