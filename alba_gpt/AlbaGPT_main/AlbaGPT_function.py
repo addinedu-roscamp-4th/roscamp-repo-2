@@ -1,7 +1,6 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain
-from langchain.memory import ConversationBufferMemory
 from langchain_teddynote.models import MultiModal
 from dotenv import load_dotenv
 from AlbaGPT_main import alba_task_type_list, dynamic_object_list
