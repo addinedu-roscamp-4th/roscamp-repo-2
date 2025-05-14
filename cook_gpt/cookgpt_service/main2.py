@@ -89,91 +89,72 @@ class CookGPTServiceNode(Node):
         robot_id = request.robot_id
         camera_matrix, dist_coeffs = self.camera_params[robot_id]
         cmd = request.command
+
         if robot_id not in self.robot_ports:
             self.get_logger().warn(f":x: 알 수 없는 로봇 ID 요청: {robot_id}")
             return response
-        # :closed_lock_with_key: 프레임만 안전하게 꺼냄
-        with self.frame_locks[robot_id]:
-            # frame = self.latest_frames.get(robot_id, None)
-            frames = list(self.latest_frames.get(robot_id , []))
-        if len(frames) < 5:
-            self.get_logger().warn(f":warning: {robot_id} - 프레임 부족 {len(frames)}장")
-            return response
         
+        frames = []
+
+        #5장받을때까지 대기
+        while True:
+            with self.frame_locks[robot_id]:
+                frames = list(self.latest_frames.get(robot_id, []))
+
+            if len(frames) >= 5:
+                break
+            time.sleep(0.01)
+
 
         if cmd in [0, 1, 2, 3]:
-            poses = []
-            R_flip = R.from_euler('x', [180], degrees=True).as_matrix()
-            
+            all_keypoints = []
+
             try:
                 for frame in frames:
                     results = model(frame, verbose=False)[0]
-                    filtered = []
+                    if results.keypoints.cls is None:
+                        continue
 
-                    # 해당 클래스와 일치하는 객체만 추림
                     for i, kp in enumerate(results.keypoints.xy):
-
-                        
-                        if results.keypoints.cls is None:
-                            continue
-
-                        # keypoint와 클래스 일치 확인
                         kp_class = int(results.keypoints.cls[i].item())
                         if kp_class != cmd:
                             continue
-
                         kpt = kp.cpu().numpy()[:4].astype(np.float32)
-                        ret, rvec, tvec = cv2.solvePnP(objp, kpt, camera_matrix, dist_coeffs)
+                        all_keypoints.append(kpt)
 
-                        if ret:
-                            filtered.append((tvec, rvec))
-
-                    if not filtered:
-                        continue
-
-                    # 가장 가까운 객체 선택 (Y값 기준) 이유? 사진기준 Y가 로봇 입장에서 가장 제한사항이 많다고 생각..
-                    # closest = min(filtered, key=lambda x: x[0][2])  # tvec[2] = Z축
-                    closest = min(filtered, key=lambda x: x[0][1])  # tvec[0] = Y축
-                    tvec, rvec = closest
-
-                    R_obj_cam, _ = cv2.Rodrigues(rvec)
-                    R_obj_cam_flipped = R_flip @ R_obj_cam
-                    rpy = R.from_matrix(R_obj_cam_flipped).as_euler('xyz', degrees=True)
-
-                    if rpy.shape == (3,) and not np.isnan(rpy).any():
-                        # pose = {'tvec': tvec.flatten(), 'rpy': rpy}
-                        poses.append((tvec.flatten(),rpy))
-                    # else:
-                    #     self.get_logger().warn(f"RPY 계산 실패 또는 NaN 발생: {rpy}")
-        
-            
-                if not poses:
-                    self.get_logger().warn(f"{robot_id} - 유효한 pose 없음 (cmd {cmd})")
+                if len(all_keypoints) == 0:
+                    self.get_logger().warn(f"{robot_id} - 클래스 {cmd} keypoint 감지 실패")
                     return response
-                
-                tvecs = np.array([p[0] for p in poses])
-                rpys = np.array([p[1] for p in poses])
 
-                rpys_corrected = rpys.copy()
+                keypoints_avg = np.mean(np.array(all_keypoints), axis=0)
+                ret, rvec, tvec = cv2.solvePnP(objp, keypoints_avg, camera_matrix, dist_coeffs)
 
-                avg_tvec = np.mean(tvecs, axis=0)
-                avg_rpy = np.mean(rpys_corrected, axis=0)
+                if not ret:
+                    self.get_logger().warn(f"{robot_id} - solvePnP 실패")
+                    return response
 
-                # 응답 작성
-                response.x, response.y, response.z = avg_tvec
-                response.rx, response.ry, response.rz = avg_rpy
-                self.get_logger().info(f"{robot_id} - 평균 pose 계산 완료 ({len(poses)}개)")
+                # RPY 계산 (quaternion averaging 아님, 1회 solvePnP라서 필요 없음요)
+                R_obj_cam, _ = cv2.Rodrigues(rvec)
+                R_obj_cam_flipped = R.from_euler('x', [180], degrees=True).as_matrix() @ R_obj_cam
+                rpy = R.from_matrix(R_obj_cam_flipped).as_euler('xyz', degrees=True)
+
+                if rpy.shape != (3,) or np.isnan(rpy).any():
+                    self.get_logger().warn(f"{robot_id} - RPY 변환 실패 또는 NaN 발생")
+                    return response
+
+                response.x, response.y, response.z = tvec.flatten()
+                response.rx, response.ry, response.rz = rpy
+                self.get_logger().info(f"{robot_id} - cmd {cmd} pose 추정 완료")
 
             except Exception as e:
                 self.get_logger().warn(f"YOLO/solvePnP 오류: {e}")
                 return response
 
-        # :pushpin: cmd 4~6: 객체 탐지 결과 응답
         elif cmd in [4, 5, 6]:
             label_map = {4: "dish", 5: "sauce", 6: "stain"}
             label = label_map[cmd]
             try:
-                results = model(frame, verbose=False)[0]
+                results = model(frames[-1], verbose=False)[0]
                 found = any([
                     int(r[5]) == model.names.index(label)
                     for r in results.boxes.data.cpu().numpy()
@@ -182,6 +163,7 @@ class CookGPTServiceNode(Node):
                 self.get_logger().info(f":mag_right: {robot_id} - {label} 존재 여부: {found}")
             except Exception as e:
                 self.get_logger().warn(f":x: {label} 탐지 실패: {e}")
+
         return response
     
     def prevent_collision(self):
