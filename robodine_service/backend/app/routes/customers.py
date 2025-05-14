@@ -84,6 +84,14 @@ def create_customer(
     db.add(customer)
     db.commit()
     db.refresh(customer)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "customer",
+        None
+    )
     
     # Log this action
     log_info(db, f"손님이 입장하셨습니다.: {customer.count}명 (ID: {customer.id})", background_tasks)
@@ -110,6 +118,14 @@ def delete_customer(customer_id: int,
     
     # Log this action
     log_info(db, f"손님이 퇴장했습니다. 고객 ID: {customer_id}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "customer",
+        None
+    )
     
     return {"message": "Customer deleted successfully"}
 
@@ -165,6 +181,14 @@ def assign_table_to_customer(
     db.add(assignment)
     db.add(table)
     db.commit()
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "customer",
+        None
+    )
     
     # Log this action
     log_info(db, f"테이블 {table_id} 배정되었습니다: 고객 그룹 {customer_id} ({customer.count}명)", background_tasks)

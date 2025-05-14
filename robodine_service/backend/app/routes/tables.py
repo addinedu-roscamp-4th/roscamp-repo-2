@@ -90,6 +90,14 @@ def create_table(
     
     # Log this action
     log_info(db, f"새 테이블 생성: {new_table.id}, 최대 인원 {new_table.max_customer}명", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "",
+        None
+    )
     
     return {
         "id": new_table.id,
@@ -196,6 +204,14 @@ def release_table(
     # Log this action
     customer_str = ", ".join([str(cid) for cid in customer_ids])
     log_info(db, f"테이블 {table_id} 해제됨, 고객 그룹: {customer_str}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "table",
+        None
+    )
     
     return {
         "status": "success",
@@ -213,7 +229,7 @@ def update_table_status(
         raise HTTPException(status_code=400, detail="Status is required")
         
     new_status = status_data["status"].upper()
-    if new_status not in ["AVAILABLE", "OCCUPIED"]:
+    if new_status not in ["AVAILABLE", "OCCUPIED", "CLEANING"]:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
     
     # Find table
@@ -242,10 +258,18 @@ def update_table_status(
                 assignment.released_at = datetime.utcnow()
                 db.add(assignment)
             db.commit()
-            log_warning(db, f"테이블 {table_id} 상태를 AVAILABLE로 변경하여 {len(active_assignments)}개의 배정이 자동으로 해제됨", background_tasks)
+            log_warning(db, f"테이블 {table_id} 상태를 AVAILABLE로 변경되었습니다.", background_tasks)
     
     # Log status change
     log_info(db, f"테이블 {table_id} 상태 변경: {old_status} → {new_status}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "table",
+        None
+    )
     
     return {
         "status": "success",

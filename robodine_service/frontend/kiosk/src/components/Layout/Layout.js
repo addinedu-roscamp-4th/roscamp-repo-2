@@ -1,24 +1,28 @@
 import React from 'react';
-import Header from './Header';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import Footer from './Footer';
+import NotificationOverlay from '../Notification/NotificationOverlay';
 
-const Layout = ({ children, category, setCategory }) => {
+const Layout = ({ 
+  selectedCategory, 
+  onSelectCategory, 
+  notifications, 
+  onCloseNotification 
+}) => {
   return (
-    <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
-      <Header />
+    <div className="flex h-screen w-screen bg-[#F7F9FA] overflow-hidden">
+      <Sidebar 
+        selectedCategory={selectedCategory} 
+        onSelectCategory={onSelectCategory} 
+      />
       
-      <div className="flex flex-grow overflow-hidden">
-        <Sidebar 
-          selectedCategory={category} 
-          onSelectCategory={setCategory} 
+      <main className="flex-1 overflow-auto relative">
+        <Outlet />
+        <NotificationOverlay
+          notifications={notifications}
+          onClose={onCloseNotification}
         />
-        <main className="flex-grow p-4 overflow-auto">
-          {children}
-        </main>
-      </div>
-      
-      <Footer />
+      </main>
     </div>
   );
 };

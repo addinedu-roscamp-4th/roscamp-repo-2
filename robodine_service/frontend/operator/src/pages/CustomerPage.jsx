@@ -21,8 +21,6 @@ const CustomerPage = () => {
   const [error, setError] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState({ type: '', data: null });
   const [currentCustomer, setCurrentCustomer] = useState({ count: 1 });
   const [actionMessage, setActionMessage] = useState({ text: '', isError: false });
   const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
@@ -32,6 +30,8 @@ const CustomerPage = () => {
   const [processedCustomers, setProcessedCustomers] = useState([]);
   const [processedTables, setProcessedTables] = useState([]);
   const [processedAssignments, setProcessedAssignments] = useState([]);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState({ type: '', data: null });
 
   // 웹소켓 데이터 업데이트 시 로딩 해제
   useEffect(() => {
@@ -40,8 +40,6 @@ const CustomerPage = () => {
       setLastUpdateTime(new Date());  // 데이터 업데이트 시간 갱신
     }
   }, [data]);
-
-  // console.log('WebSocket Data:', data);
 
   // 테이블 배정 정보 처리
   const processedAssignmentsData = useMemo(() => {
@@ -74,7 +72,6 @@ const CustomerPage = () => {
       index === self.findIndex((a) => a && a.id === assignment.id)
     );
     
-    // console.log("테이블 배정 정보:", deduplicated);
     return deduplicated;
   }, [data]);
 
@@ -139,10 +136,6 @@ const CustomerPage = () => {
   useEffect(() => {
     setProcessedCustomers(processedCustomersData);
   }, [processedCustomersData]);
-
-  // console.log('Processed Customers:', processedCustomersData);
-  // console.log('Processed Tables:', processedTablesData);
-  // console.log('Processed Assignments:', processedAssignmentsData);
 
   const handleWebSocketUpdate = useCallback((newData) => {
     // 웹소켓으로 받은 데이터를 직접 처리하여 로컬 상태 업데이트
@@ -359,194 +352,79 @@ const CustomerPage = () => {
     }
   };
 
+  // 테이블 클릭 핸들러 - 상태 변경 로직
   const handleTableClick = (tableId) => {
     const table = processedTablesData.find(t => t.id === tableId);
     if (!table) return;
     
-    // 테이블이 배정되어 있는지 확인
-    const assignment = processedAssignmentsData.find(a => a.table_id === tableId);
-    
-    // 테이블이 이미 배정된 상태
-    if (assignment || table.status === 'OCCUPIED') {
-      // 배정 해제 프로세스 시작
-      handleReleaseTable(tableId);
-    } 
-    // 테이블이 배정되지 않은 상태이고 고객이 선택되어 있음
-    else if (selectedCustomer) {
-      // 고객이 이미 다른 테이블에 배정되어 있는지 확인
-      const existingAssignment = processedAssignmentsData.find(a => a.customer_id === selectedCustomer.id);
-      // console.log('Existing Assignment:', existingAssignment);
-      
-      if (existingAssignment) {
-        // 이미 다른 테이블에 배정되어 있으면 알림
-        handleApiResponse('assign', false, `해당 고객은 이미 테이블 ${existingAssignment.table_id}번에 배정되어 있습니다`);
-      } else {
-        // 배정 프로세스 시작
-        handleAssignTable(selectedCustomer.id, tableId);
-      }
-    } else {
-      // 고객 선택 안내 메시지
-      handleApiResponse('select', false, '먼저 고객을 선택한 후 테이블을 클릭하세요');
-    }
-  };
-
-  const handleAssignTable = async (customerId, tableId) => {
-    // 확인 모달 표시
-    setConfirmAction({
-      type: 'assign',
-      data: { customerId, tableId }
-    });
-    setIsConfirmModalOpen(true);
-  };
-
-  const handleReleaseTable = async (tableId) => {
-    // 확인 모달 표시
-    setConfirmAction({
-      type: 'release',
-      data: { tableId }
-    });
-    setIsConfirmModalOpen(true);
-  };
-
-  const executeAssignTable = async (customerId, tableId) => {
-    try {
-      setIsLoading(true);
-      
-      // console.log(`Assigning customer ${customerId} to table ${tableId}`);
-      
-      // 테이블 배정 API 호출
-      const response = await apiCall(`/api/tables/${tableId}/assign`, 'POST', {
-        customer_id: customerId
+    // 테이블이 이미 배정된 상태 (OCCUPIED)
+    if (table.status === 'OCCUPIED') {
+      // 배정 해제 확인 모달 표시
+      setConfirmAction({
+        type: 'release',
+        data: { tableId }
       });
-
-      // console.log("Assignment API response:", response);
-
-      // API 응답 성공 시 로컬 데이터 업데이트
-      if (response) {
-        // 새로운 배정 정보 생성 (API 응답 형식에 맞춤)
-        const newAssignment = {
-          'GroupAssignment.id': Date.now(), // 임시 ID
-          'GroupAssignment.table_id': tableId,
-          'GroupAssignment.customer_id': customerId,
-          'GroupAssignment.timestamp': new Date().toISOString(),
-          'GroupAssignment.released_at': null
-        };
-
-        // console.log("New assignment data:", newAssignment);
-
-        // 원본 데이터에 배정 정보 추가
-        if (data.tables) {
-          if (!data.tables.assignments) {
-            data.tables.assignments = [];
-          }
-          data.tables.assignments.push(newAssignment);
-        }
-        
-        if (data.customers) {
-          if (!data.customers.assignments) {
-            data.customers.assignments = [];
-          }
-          data.customers.assignments.push(newAssignment);
-        }
-        
-        // 테이블 상태 업데이트
-        if (data.tables && Array.isArray(data.tables.tables)) {
-          data.tables.tables = data.tables.tables.map(t => 
-            t['Table.id'] === tableId 
-              ? { ...t, 'Table.status': 'OCCUPIED' } 
-              : t
-          );
-        }
-        
-        // 선택된 고객 정보 초기화
-        setSelectedCustomer(null);
-        
-        // 할당 정보를 기반으로 프로세스된 데이터 다시 계산하기 위해 설정
-        setLastUpdateTime(new Date());
-        
-        handleApiResponse('assign', true, `테이블 ${tableId}번 배정이`);
-      }
-    } catch (error) {
-      console.error(`Failed to assign table:`, error);
-      handleApiResponse('assign', false, '테이블 배정이');
-      
-      // 수동으로 데이터 새로고침
-      refreshTopic('tables');
-      refreshTopic('customers');
-    } finally {
-      setIsLoading(false);
+      setIsConfirmModalOpen(true);
+    } 
+    // 테이블이 청소 중 상태 (CLEANING)
+    else if (table.status === 'CLEANING') {
+      // 청소 완료 확인 모달 표시
+      setConfirmAction({
+        type: 'clean',
+        data: { tableId }
+      });
+      setIsConfirmModalOpen(true);
     }
   };
 
+  // 테이블 배정 해제 실행
   const executeReleaseTable = async (tableId) => {
     try {
       setIsLoading(true);
-      
-      // console.log(`Releasing table ${tableId}`);
-      
       // 테이블 배정 해제 API 호출
-      const response = await apiCall(`/api/tables/${tableId}/release`, 'PUT');
-      
-      // console.log("Release API response:", response);
-      
-      // API 응답 성공 시 로컬 데이터 업데이트
-      if (response) {
-        if (data.tables && Array.isArray(data.tables.assignments)) {
-          // 배정 정보 삭제 대신 released_at 업데이트
-          data.tables.assignments = data.tables.assignments.map(a => 
-            a['GroupAssignment.table_id'] === tableId 
-              ? { ...a, 'GroupAssignment.released_at': new Date().toISOString() } 
-              : a
-          );
-        }
-        
-        if (data.customers && Array.isArray(data.customers.assignments)) {
-          // 배정 정보 삭제 대신 released_at 업데이트
-          data.customers.assignments = data.customers.assignments.map(a => 
-            a['GroupAssignment.table_id'] === tableId 
-              ? { ...a, 'GroupAssignment.released_at': new Date().toISOString() } 
-              : a
-          );
-        }
-        
-        // 테이블 상태 업데이트
-        if (data.tables && Array.isArray(data.tables.tables)) {
-          data.tables.tables = data.tables.tables.map(t => 
-            t['Table.id'] === tableId 
-              ? { ...t, 'Table.status': 'AVAILABLE' } 
-              : t
-          );
-        }
-        
-        // 할당 정보를 기반으로 프로세스된 데이터 다시 계산하기 위해 설정
-        setLastUpdateTime(new Date());
-        
-        handleApiResponse('release', true, `테이블 ${tableId}번 배정 해제가`);
-      }
-    } catch (error) {
-      console.error(`Failed to release table:`, error);
-      handleApiResponse('release', false, '테이블 배정 해제가');
-      
-      // 수동으로 데이터 새로고침
+      await apiCall(`/api/tables/${tableId}/release`, 'PUT');
+      handleApiResponse('release', true, `테이블 ${tableId}번 배정 해제가`);
       refreshTopic('tables');
-      refreshTopic('customers');
+    } catch (error) {
+      console.error('테이블 배정 해제 오류:', error);
+      handleApiResponse('release', false, '테이블 배정 해제가');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleConfirmAction = () => {
-    setIsConfirmModalOpen(false);
-    
-    if (confirmAction.type === 'assign') {
-      const { customerId, tableId } = confirmAction.data;
-      executeAssignTable(customerId, tableId);
-    } else if (confirmAction.type === 'release') {
-      const { tableId } = confirmAction.data;
-      executeReleaseTable(tableId);
+  // 테이블 청소 완료 처리 실행
+  const executeCleanTable = async (tableId) => {
+    try {
+      setIsLoading(true);
+      // 테이블 상태 변경 API 호출 (청소 중 -> 사용 가능)
+      await apiCall(`/api/tables/${tableId}/status`, 'PUT', {
+        status: 'AVAILABLE'
+      });
+      handleApiResponse('status', true, `테이블 ${tableId}번 상태가 이용 가능으로 변경`);
+      refreshTopic('tables');
+    } catch (error) {
+      console.error('테이블 상태 변경 오류:', error);
+      handleApiResponse('status', false, '테이블 상태 변경이');
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // 확인 모달 동작 수행
+  const handleConfirmAction = () => {
+    setIsConfirmModalOpen(false);
+    
+    if (confirmAction.type === 'release') {
+      const { tableId } = confirmAction.data;
+      executeReleaseTable(tableId);
+    } else if (confirmAction.type === 'clean') {
+      const { tableId } = confirmAction.data;
+      executeCleanTable(tableId);
+    }
+  };
+
+  // 확인 모달 취소
   const handleCancelAction = () => {
     setIsConfirmModalOpen(false);
     setConfirmAction({ type: '', data: null });
@@ -589,10 +467,10 @@ const CustomerPage = () => {
           <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded mb-6 flex items-start">
             <HelpCircle className="mr-2 mt-0.5 flex-shrink-0" size={20} />
             <div>
-              <h3 className="font-medium">테이블 배정 방법</h3>
+              <h3 className="font-medium">테이블 상태 관리</h3>
               <ul className="list-disc list-inside text-sm mt-1 space-y-1">
-                <li>고객 목록에서 고객을 선택한 후 배정할 테이블을 클릭하세요</li>
-                <li>이미 사용 중인 테이블(빨간색)을 클릭하면 배정을 해제할 수 있습니다</li>
+                <li>이용 중인 테이블(빨간색)을 클릭하면 배정을 해제할 수 있습니다</li>
+                <li>청소 중인 테이블(노란색)을 클릭하면 이용 가능 상태로 변경됩니다</li>
                 <li>배정된 테이블은 고객 정보 아래에 표시됩니다</li>
               </ul>
             </div>
@@ -633,7 +511,6 @@ const CustomerPage = () => {
               <TableMap 
                 tables={processedTablesData || []}
                 assignments={processedAssignmentsData || []}
-                selectedCustomer={selectedCustomer}
                 onTableClick={handleTableClick}
               />
             </div>
@@ -744,13 +621,13 @@ const CustomerPage = () => {
           </div>
         )}
 
-        {/* 확인 모달 */}
+        {/* 테이블 상태 변경 확인 모달 */}
         {isConfirmModalOpen && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
               <div className="flex justify-between items-center border-b px-6 py-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  {confirmAction.type === 'assign' ? '테이블 배정 확인' : '테이블 배정 해제 확인'}
+                  {confirmAction.type === 'release' ? '테이블 배정 해제 확인' : '청소 완료 확인'}
                 </h3>
                 <button
                   onClick={handleCancelAction}
@@ -761,16 +638,15 @@ const CustomerPage = () => {
               </div>
               
               <div className="px-6 py-4">
-                {confirmAction.type === 'assign' && (
-                  <p className="text-gray-700">
-                    <span className="font-medium">테이블 {confirmAction.data?.tableId}번</span>에 
-                    <span className="font-medium"> {selectedCustomer?.count}명</span> 고객을 배정하시겠습니까?
-                  </p>
-                )}
-                
                 {confirmAction.type === 'release' && (
                   <p className="text-gray-700">
                     <span className="font-medium">테이블 {confirmAction.data?.tableId}번</span>의 배정을 해제하시겠습니까?
+                  </p>
+                )}
+                
+                {confirmAction.type === 'clean' && (
+                  <p className="text-gray-700">
+                    <span className="font-medium">테이블 {confirmAction.data?.tableId}번</span>의 청소가 완료되었습니까?
                   </p>
                 )}
               </div>
@@ -785,17 +661,18 @@ const CustomerPage = () => {
                 <button
                   onClick={handleConfirmAction}
                   className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                    confirmAction.type === 'assign' 
-                      ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
-                      : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                    confirmAction.type === 'clean' 
+                      ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' 
+                      : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
                   } focus:outline-none focus:ring-2 focus:ring-offset-2`}
                 >
-                  {confirmAction.type === 'assign' ? '배정하기' : '배정 해제하기'}
+                  {confirmAction.type === 'release' ? '배정 해제하기' : '이용 가능으로 변경'}
                 </button>
               </div>
             </div>
           </div>
         )}
+
       </Layout>
     );
   };

@@ -102,7 +102,8 @@ export async function createCustomer(count) {
     } else {
       // 2b) 사용 가능 테이블이면 새 고객 생성
       const response = await axios.post(`${API_URL}/customers`, { count });
-      customerId = response.data.customer_id;
+      console.log('새 고객 생성 응답:', response.data);
+      customerId = response.data.id;
 
       // 3) 새로 생성된 고객을 테이블에 할당
       await assignCustomerToTable(customerId, tableId);

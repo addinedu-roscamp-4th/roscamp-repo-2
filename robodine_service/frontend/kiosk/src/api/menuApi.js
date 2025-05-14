@@ -30,8 +30,12 @@ export const filterMenuByCategory = (menuItems, category) => {
   if (!category || category === '전체') return menuItems;
   
   // 추천 메뉴는 샐러드 필터링
-  if (category === '추천 메뉴') {
+  if (category === '추천') {
     return menuItems.filter(item => item.name.includes('샐러드'));
+  }
+
+  if (category === '디저트') {
+    return menuItems.filter(item => item.name.includes('디저트'));
   }
   
   // 음식 / 음료 카테고리에 따라 필터링
