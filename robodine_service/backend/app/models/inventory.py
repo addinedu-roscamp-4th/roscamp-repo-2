@@ -36,6 +36,7 @@ class MenuItem(SQLModel, table=True):
     price: Optional[float] = None
     prepare_time: Optional[int] = None
     image_url: Optional[str] = None
+    description: Optional[str] = None
     
     menu_ingredients: List["MenuIngredient"] = Relationship(back_populates="menu_item")
     order_items: List["OrderItem"] = Relationship(back_populates="menu_item")

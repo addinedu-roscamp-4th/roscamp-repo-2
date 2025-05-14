@@ -57,11 +57,15 @@ const CheckoutPage = () => {
       
       // 1. 고객 정보 생성 (인원 수)
       const customerResponse = await createCustomer(customerCount);
-      const customerId = customerResponse.id;
+      console.log('response:', customerResponse);
+      const customerId = customerResponse.customer_id;
       if (!customerId) {
         throw new Error('고객 정보 생성 실패');
       }
       const tableId = customerResponse.tableId;
+      if (!tableId) {
+        throw new Error('테이블 정보 생성 실패');
+      }
       
       // 2. 주문 데이터 준비 및 생성
       const orderData = prepareOrderData(customerId, tableId);

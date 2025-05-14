@@ -32,16 +32,21 @@ const MenuPage = () => {
     setError(null);
     
     try {
-      // 초기 로딩 시에만 API 호출
-      if (!data.menu || !data.menu.items || !data.menu.ingredients) {
-        // 메뉴 항목 데이터 가져오기
-        const menuItemsData = await apiCall('/api/menu/items');
-        setMenuItems(menuItemsData);
-        
-        // 메뉴 재료 데이터 가져오기
-        const menuIngredientsData = await apiCall('/api/menu/ingredients');
-        setMenuIngredients(menuIngredientsData);
-      }
+      // 메뉴 항목 데이터 가져오기
+      const menuItemsData = await apiCall('/api/menu/items');
+      
+      // 이미지 URL과 설명 필드가 null이면 빈 문자열로 변환
+      const processedMenuItems = menuItemsData.map(item => ({
+        ...item,
+        image_url: item.image_url || '',
+        description: item.description || ''
+      }));
+      
+      setMenuItems(processedMenuItems);
+      
+      // 메뉴 재료 데이터 가져오기
+      const menuIngredientsData = await apiCall('/api/menu/ingredients');
+      setMenuIngredients(menuIngredientsData);
       
       setIsLoading(false);
     } catch (err) {
@@ -49,7 +54,7 @@ const MenuPage = () => {
       setError('데이터를 불러올 수 없습니다');
       setIsLoading(false);
     }
-  }, [apiCall, data.menu]);
+  }, [apiCall]);
 
   // 초기 데이터 로딩
   useEffect(() => {
@@ -77,12 +82,19 @@ const MenuPage = () => {
           }
           
           const prepare_time = item["MenuItem.prepare_time"] || item.prepare_time || 0;
+          // null 값은 빈 문자열로 처리
+          const image_url = (item["MenuItem.image_url"] === null ? '' : item["MenuItem.image_url"]) || 
+                           (item.image_url === null ? '' : item.image_url) || '';
+          const description = (item["MenuItem.description"] === null ? '' : item["MenuItem.description"]) || 
+                             (item.description === null ? '' : item.description) || '';
           
           return {
             id,
             name,
             price,
-            prepare_time
+            prepare_time,
+            image_url,
+            description
           };
         });
         
@@ -201,7 +213,9 @@ const MenuPage = () => {
     setCurrentMenuItem({
       name: '',
       price: '',
-      prepare_time: ''
+      prepare_time: '',
+      image_url: '',
+      description: ''
     });
     setError('');
     setIsItemModalOpen(true);
@@ -209,7 +223,15 @@ const MenuPage = () => {
 
   // 메뉴 항목 수정 모달 열기
   const handleEditMenuItem = (item) => {
-    setCurrentMenuItem(item);
+    // 깊은 복사를 통해 현재 메뉴 아이템의 모든 속성을 복사
+    setCurrentMenuItem({
+      id: item.id,
+      name: item.name || '',
+      price: item.price || 0,
+      prepare_time: item.prepare_time || 0,
+      image_url: item.image_url || '',
+      description: item.description || ''
+    });
     setError('');
     setIsItemModalOpen(true);
   };
@@ -266,29 +288,51 @@ const MenuPage = () => {
         return;
       }
       
-      const payload = {
-        name: currentMenuItem.name.trim(),
-        price: price,
-        prepare_time: prepareTime
-      };
+      const form = new FormData();
+      form.append('name', currentMenuItem.name);
+      form.append('price', currentMenuItem.price);
+      form.append('prepare_time', currentMenuItem.prepare_time);
+      form.append('description', currentMenuItem.description);
+      if (currentMenuItem.file) {
+        form.append('image', currentMenuItem.file);
+      }
+      form.append('image_url', currentMenuItem.image_url);
+
+      for (let [key, value] of form.entries()) {
+        console.log(key, value);
+      }
+
+      console.table(Array.from(form.entries()));
+
       
       let response;
       
       if (currentMenuItem.id) {
         // 기존 메뉴 수정
-        response = await apiCall(`/api/menu/items/${currentMenuItem.id}`, 'PUT', payload);
+        response = await apiCall(`/api/menu/items/${currentMenuItem.id}`, 'PUT', form);
         
         // 웹소켓으로 데이터가 업데이트될 때까지 UI 미리 업데이트
         setMenuItems(prev => prev.map(item => 
-          item.id === currentMenuItem.id ? { ...item, ...payload, id: currentMenuItem.id } : item
+          item.id === currentMenuItem.id ? { 
+            ...item, 
+            ...form, 
+            id: currentMenuItem.id
+          } : item
         ));
       } else {
         // 새 메뉴 추가
-        response = await apiCall('/api/menu/items', 'POST', payload);
-        
-        // 응답에서 새 메뉴 ID를 가져와 UI에 추가
+        try {
+          response = await apiCall('/api/menu/items', 'POST', form);
+        } catch (err) {
+          // FastAPI가 보낸 에러 디테일을 보기
+          const json = await err.response.json();
+          console.error('Validation errors:', json);
+        }        // 응답에서 새 메뉴 ID를 가져와 UI에 추가
         if (response && response.id) {
-          const newItem = { ...payload, id: response.id };
+          const newItem = { 
+            ...form, 
+            id: response.id 
+          };
           setMenuItems(prev => [...prev, newItem]);
         }
       }
@@ -472,7 +516,7 @@ const MenuPage = () => {
                     >
                       이름
                       {sortConfig.key === 'name' && (
-                        <span className="ml-1" key="name-sort-arrow">
+                        <span className="ml-1" key={`name-sort-indicator-${sortConfig.direction}`}>
                           {sortConfig.direction === 'ascending' ? '↑' : '↓'}
                         </span>
                       )}
@@ -483,7 +527,7 @@ const MenuPage = () => {
                     >
                       가격
                       {sortConfig.key === 'price' && (
-                        <span className="ml-1" key="price-sort-arrow">
+                        <span className="ml-1" key={`price-sort-indicator-${sortConfig.direction}`}>
                           {sortConfig.direction === 'ascending' ? '↑' : '↓'}
                         </span>
                       )}
@@ -494,10 +538,16 @@ const MenuPage = () => {
                     >
                       준비시간
                       {sortConfig.key === 'prepare_time' && (
-                        <span className="ml-1" key="prepare-time-sort-arrow">
+                        <span className="ml-1" key={`prepare-time-sort-indicator-${sortConfig.direction}`}>
                           {sortConfig.direction === 'ascending' ? '↑' : '↓'}
                         </span>
                       )}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      이미지
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      설명
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       재료
@@ -509,7 +559,7 @@ const MenuPage = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredMenuItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
+                    <tr key={`menu-item-${item.id}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {item.name}
                       </td>
@@ -519,13 +569,34 @@ const MenuPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {item.prepare_time || 0}분
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {item.image_url ? (
+                          <div className="h-12 w-12 relative">
+                            <img 
+                              src={item.image_url} 
+                              alt={item.name} 
+                              className="h-full w-full object-cover rounded"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">이미지 없음</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                        <div className="truncate">
+                          {item.description || <span className="text-xs text-gray-400">설명 없음</span>}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         <div className="flex flex-wrap gap-1">
                           {menuIngredients
                             .filter(ing => ing.menu_item_id === item.id)
                             .map(ing => (
                               <span 
-                                key={`menu-${item.id}-ing-${ing.id}`} 
+                                key={`menu-${item.id}-ing-${ing.id}-${ing.name}`} 
                                 className="px-2 py-1 text-xs bg-gray-100 rounded-full flex items-center"
                                 title="클릭하여 재료 수정"
                                 onClick={() => handleEditIngredient(ing)}
@@ -634,6 +705,56 @@ const MenuPage = () => {
                   onChange={(e) => setCurrentMenuItem({...currentMenuItem, prepare_time: e.target.value})}
                 />
               </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  설명
+                </label>
+                <textarea
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  value={currentMenuItem.description}
+                  onChange={(e) => setCurrentMenuItem({...currentMenuItem, description: e.target.value})}
+                ></textarea>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  이미지 URL
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  value={currentMenuItem.image_url}
+                  onChange={(e) => setCurrentMenuItem({...currentMenuItem, image_url: e.target.value})}
+                />
+              </div>
+
+            {/* 파일 업로드 입력 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                이미지 파일
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  setCurrentMenuItem(prev => ({ ...prev, file }));
+                  // 미리보기
+                  const reader = new FileReader();
+                  reader.onload = () => setCurrentMenuItem(prev => ({ ...prev, preview: reader.result }));
+                  reader.readAsDataURL(file);
+                }}
+              />
+              {currentMenuItem.preview && (
+                <img
+                  src={currentMenuItem.preview}
+                  alt="preview"
+                  className="mt-2 h-24 w-24 object-cover rounded"
+                />
+              )}
+            </div>
               
               {error && (
                 <div className="mb-4 p-2 bg-red-100 border border-red-400 text-red-700 rounded">

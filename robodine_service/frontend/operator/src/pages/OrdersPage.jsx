@@ -542,7 +542,7 @@ const OrdersPage = () => {
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
-                  <tr>
+                  <tr key="order-list-header">
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       주문번호
                     </th>
@@ -660,7 +660,7 @@ const OrdersPage = () => {
                     <div className="bg-gray-50 rounded-lg p-4">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead>
-                          <tr>
+                          <tr key="order-detail-header">
                             <th className="pb-2 text-left text-sm font-semibold text-gray-500">메뉴 이름</th>
                             <th className="pb-2 text-center text-sm font-semibold text-gray-500">수량</th>
                             <th className="pb-2 text-right text-sm font-semibold text-gray-500">가격</th>
@@ -676,7 +676,7 @@ const OrdersPage = () => {
                           ))}
                           
                           {/* 총계 행 */}
-                          <tr className="border-t border-gray-300">
+                          <tr key="total-row" className="border-t border-gray-300">
                             <td className="py-2 text-sm font-bold">총계</td>
                             <td className="py-2 text-sm font-bold text-center">
                               {selectedOrder.totalQuantity}개

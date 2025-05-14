@@ -165,7 +165,7 @@ def _chatbot(session: Session, data: Dict[str, Any]):
         # -- 이미지 저장 --
         img_bytes = base64.b64decode(data["response_image"])
         fname     = f"{uuid.uuid4().hex}.png"
-        out_path  = os.path.join(IMAGES_DIR, fname)
+        out_path  = os.path.join(IMAGES_DIR, "chatbot", fname)
         with open(out_path, "wb") as wf:
             wf.write(img_bytes)
 

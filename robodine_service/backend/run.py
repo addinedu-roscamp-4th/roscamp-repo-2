@@ -256,7 +256,9 @@ def serialize_menuitem(menuitem):
         "MenuItem.id": menuitem.id,
         "MenuItem.name": menuitem.name,
         "MenuItem.price": menuitem.price,
-        "MenuItem.prepare_time": menuitem.prepare_time
+        "MenuItem.prepare_time": menuitem.prepare_time,
+        "MenuItem.image_url": menuitem.image_url,
+        "MenuItem.description": menuitem.description,
     }
 
 def serialize_menu_ingredient(ingredient):

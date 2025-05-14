@@ -66,7 +66,6 @@ class InventoryStatus(str, Enum):
 class TableStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
     OCCUPIED = "OCCUPIED"
-    CALLING = "CALLING"
 
 class OrderStatus(str, Enum):
     PLACED = "PLACED"

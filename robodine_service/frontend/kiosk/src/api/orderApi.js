@@ -54,6 +54,24 @@ export const getKioskTableInfo = async (kioskId) => {
   }
 }
 
+// 고객이 속한 그룹 정보 조회
+export const getCustomerGroupInfo = async (table_id) => {
+  try {
+    const response = await axios.get(`${API_URL}/tables/assignments`);
+    const tables = response.data;
+    const table = tables.find(t => t.table_id === table_id);
+    if (!table) {
+      throw new Error(`테이블 ${table_id}를 찾을 수 없습니다.`);
+    }
+    return {
+      customerId: table.customer_id
+    };
+  } catch (error) {
+    console.error('고객 그룹 정보 조회 중 오류 발생:', error);
+    throw error;
+  }
+}
+    
 
 // 고객을 테이블에 할당
 export const assignCustomerToTable = async (customerId, tableId) => {
@@ -69,30 +87,31 @@ export const assignCustomerToTable = async (customerId, tableId) => {
 };
 
 // 새 고객 생성 (테이블 주문 시 필요)
-export const createCustomer = async (customerCount) => {
+export async function createCustomer(count) {
   try {
-    const response = await axios.post(`${API_URL}/customers`, {
-      count: customerCount
-    });
-    console.log('고객 생성 응답:', response.data);
-    // 테이블 번호 조회
-    getKioskTableInfo(KIOSK_ID)
-      .then((tableInfo) => {
-        const tableId = tableInfo.tableId;
-        // 데이터에 테이블 번호 추가
-        response.data.table_id = tableId;
-        // 고객을 테이블에 할당
-        assignCustomerToTable(response.data.id, tableId);
-      })
-      .catch((error) => {
-        console.error('테이블 정보 조회 중 오류 발생:', error);
-      });
-    // 고객 생성 후 테이블 번호를 할당
-    console.log('고객 생성 완료:', response.data);
-    return response.data;
-  }
-  catch (error) {
-    console.error('고객 생성 중 오류 발생:', error);
+    // 1) 키오스크가 속한 테이블 정보 조회
+    const tableInfo = await getKioskTableInfo(KIOSK_ID);
+    const { tableId, status } = tableInfo;
+
+    let customerId;
+
+    if (status !== 'AVAILABLE') {
+      // 2a) 사용 중인 테이블이면 기존 고객 ID 조회
+      const { customerId: existingId } = await getCustomerGroupInfo(tableId);
+      customerId = existingId;
+    } else {
+      // 2b) 사용 가능 테이블이면 새 고객 생성
+      const response = await axios.post(`${API_URL}/customers`, { count });
+      customerId = response.data.customer_id;
+
+      // 3) 새로 생성된 고객을 테이블에 할당
+      await assignCustomerToTable(customerId, tableId);
+    }
+
+    // 4) 최종 결과 반환
+    return { customer_id: customerId, tableId };
+  } catch (error) {
+    console.error('createCustomer error:', error);
     throw error;
   }
 }
