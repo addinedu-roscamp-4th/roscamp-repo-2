@@ -13,7 +13,7 @@ import time
 import threading
 import os
 from ament_index_python.packages import get_package_share_directory
-from concurrent.futures import ThreadPoolExecutor
+#from concurrent.futures import ThreadPoolExecutor
 
 # ✅ 파일 경로 확보
 pkg_path = get_package_share_directory('cookM')
@@ -134,6 +134,8 @@ class CookGPTServiceNode(Node):
                     tvecs.append(closest[0])
                     rvecs.append(closest[1])
 
+                #이제 tvecs와 rvecs에는 매프레임의 가장 가까운 블럭의 tvec rvec 저장됨
+
                 if len(tvecs) == 0:
                     self.get_logger().warn(f"{robot_id} - pose 없음 (cmd {cmd})")
                     return response
@@ -142,7 +144,7 @@ class CookGPTServiceNode(Node):
                 tvecs_np = np.array(tvecs).reshape(-1, 3)
                 avg_tvec = np.mean(tvecs_np, axis=0)
 
-                # rvec → quaternion → 평균 → RPY
+                # rvec > quaternion > 평균 > RPY
                 quats = []
                 for rvec in rvecs:
                     R_mat, _ = cv2.Rodrigues(rvec)
@@ -157,7 +159,7 @@ class CookGPTServiceNode(Node):
 
                 response.x, response.y, response.z = avg_tvec
                 response.rx, response.ry, response.rz = rpy
-                self.get_logger().info(f"✅ {robot_id} - 평균 pose 추정 완료")
+                self.get_logger().info(f"{robot_id} - 평균 pose 추정 완료")
 
             except Exception as e:
                 self.get_logger().warn(f"YOLO/solvePnP 평균 오류: {e}")
@@ -179,10 +181,6 @@ class CookGPTServiceNode(Node):
 
         return response
     
-    def prevent_collision(self):
-
-
-        return
     
     def imshow_loop(self):
         print("✅ imshow_loop 실행됨")
