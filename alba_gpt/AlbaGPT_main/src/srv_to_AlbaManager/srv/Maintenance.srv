@@ -1,0 +1,6 @@
+# Request
+string task
+int robot_id
+---
+# Response
+string response
