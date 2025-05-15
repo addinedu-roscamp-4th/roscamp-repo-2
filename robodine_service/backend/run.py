@@ -560,7 +560,7 @@ async def broadcast_entity_update(entity_type, entity_id):
                     orderitems = session.exec(
                         select(OrderItem)
                         .order_by(OrderItem.order_id.desc())
-                        .distinct(OrderItem.order_id)
+                        # .distinct(OrderItem.order_id)
                     ).all()
                     out['orderitems'] = orderitems
                     kioskterminals = session.exec(

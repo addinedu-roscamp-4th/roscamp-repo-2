@@ -19,33 +19,56 @@ const HomePage = ({ selectedCategory, onSelectCategory, setNotifications }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [visibleCategory, setVisibleCategory] = useState(selectedCategory || '추천');
+  const [isScrolling, setIsScrolling] = useState(false); // 스크롤 중인지 추적
   
   // 카테고리 참조
   const categoryRefs = useRef({});
   // 컨텐츠 영역 참조
   const contentRef = useRef(null);
+  // 스크롤 타이머 참조
+  const scrollTimerRef = useRef(null);
 
   // 카테고리 목록
   const categories = ['추천', '음식', '음료'];
 
-  // 선택된 카테고리가 변경될 때 스크롤 이동
-  useEffect(() => {
-    if (selectedCategory && categoryRefs.current[selectedCategory] && contentRef.current) {
-      // 스크롤 위치 계산: 카테고리 요소의 상단 위치 - 상단 여백
+  // 카테고리 변경시 스크롤 처리
+  const scrollToCategory = (category) => {
+    if (categoryRefs.current[category] && contentRef.current) {
+      // 스크롤 중임을 표시
+      setIsScrolling(true);
+      
+      // 스크롤 위치 계산
       const headerOffset = 10;
-      const elementPosition = categoryRefs.current[selectedCategory].offsetTop;
+      const elementPosition = categoryRefs.current[category].offsetTop;
       const offsetPosition = elementPosition - headerOffset;
       
+      // 부드러운 스크롤 실행
       contentRef.current.scrollTo({
         top: offsetPosition,
         behavior: 'smooth'
       });
+      
+      // 스크롤 완료 후 상태 업데이트 (약 800ms)
+      // 이전 타이머가 있다면 제거
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+      
+      scrollTimerRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 800);
     }
+  };
+
+  // 선택된 카테고리가 변경될 때 스크롤 이동
+  useEffect(() => {
+    scrollToCategory(selectedCategory);
   }, [selectedCategory]);
 
   // 스크롤 감지 핸들러 - 현재 화면에 보이는 카테고리 판별
   const handleScroll = () => {
-    if (!contentRef.current) return;
+    // 스크롤 중인 상태에서는 카테고리 감지를 건너뜀
+    if (isScrolling || !contentRef.current) return;
     
     const scrollPosition = contentRef.current.scrollTop;
     const containerHeight = contentRef.current.clientHeight;
@@ -74,7 +97,7 @@ const HomePage = ({ selectedCategory, onSelectCategory, setNotifications }) => {
     
     if (visibleCategory !== currentCategory) {
       setVisibleCategory(currentCategory);
-      // 사이드바 카테고리 버튼 상태 업데이트
+      // 사이드바 카테고리 버튼 상태 업데이트 (자동 스크롤은 억제)
       if (currentCategory !== selectedCategory) {
         onSelectCategory(currentCategory);
       }
@@ -90,7 +113,16 @@ const HomePage = ({ selectedCategory, onSelectCategory, setNotifications }) => {
         scrollContainer.removeEventListener('scroll', handleScroll);
       };
     }
-  }, [visibleCategory, selectedCategory]);
+  }, [visibleCategory, selectedCategory, isScrolling]);
+
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+    };
+  }, []);
 
   // 메뉴 데이터 로드
   useEffect(() => {

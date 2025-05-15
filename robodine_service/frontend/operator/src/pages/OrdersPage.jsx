@@ -65,6 +65,7 @@ const OrdersPage = () => {
         // });
   
         // 데이터가 비어있는지 확인
+        // console.log('수신된 데이터:', data.orders);
         const isEmpty = 
           (!data.orders.orders || data.orders.orders.length === 0) &&
           (!data.orders.orderitems || data.orders.orderitems.length === 0) &&
@@ -668,7 +669,7 @@ const OrdersPage = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                           {selectedOrder.items.map((item, idx) => (
-                            <tr key={idx}>
+                            <tr key={`item-${item.id || idx}`}>
                               <td className="py-2 text-sm">{item.name}</td>
                               <td className="py-2 text-sm text-center">{item.quantity}개</td>
                               <td className="py-2 text-sm text-right">{formatPrice(item.price * item.quantity)}</td>

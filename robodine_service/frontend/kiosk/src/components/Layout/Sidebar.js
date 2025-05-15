@@ -83,6 +83,7 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
   const [staffCalled, setStaffCalled] = useState(false);
   const [hasActiveOrder, setHasActiveOrder] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isClickDelay, setIsClickDelay] = useState(false); // 빠른 연속 클릭 방지
 
   // 카테고리 목록 및 아이콘
   const iconMap = {
@@ -96,15 +97,24 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
 
   // 카테고리 클릭 처리
   const handleCategoryClick = (category) => {
+    // 이미 클릭 지연 중이면 무시
+    if (isClickDelay) return;
+    
+    // 연속 클릭 방지를 위한 딜레이 설정 (500ms)
+    setIsClickDelay(true);
+    setTimeout(() => {
+      setIsClickDelay(false);
+    }, 500);
+    
     // 홈 페이지가 아닌 경우 홈으로 이동 후 카테고리 설정
-    if (window.location.pathname !== '/') {
+    if (location.pathname !== '/') {
       navigate('/');
-      // 홈 페이지 로드 후 0.5초 후에 카테고리 설정
+      // 홈 페이지 로드 후 카테고리 설정
       setTimeout(() => {
         if (typeof onSelectCategory === 'function') {
           onSelectCategory(category);
         }
-      }, 500);
+      }, 200);
     } else if (typeof onSelectCategory === 'function') {
       // 이미 홈 페이지인 경우 카테고리만 설정
       onSelectCategory(category);
