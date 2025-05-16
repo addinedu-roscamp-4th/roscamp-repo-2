@@ -38,6 +38,7 @@ setup(
         (os.path.join('share', package_name), [
             'cookM/trajectories.yaml',
             'cookM/calibration_refined4.npz',
+            'cookM/calibration_aa48.npz',
             'cookM/best.pt'
         ]),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
