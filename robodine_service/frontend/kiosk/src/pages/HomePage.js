@@ -130,7 +130,7 @@ const HomePage = () => {
     const scrollHeight = contentRef.current.scrollHeight;
     
     // 스크롤이 맨 위에 있는지 확인 (특수 처리)
-    if (scrollPosition <= 5) {
+    if (scrollPosition <= 2) {
       const topCategory = categories[0];
       if (visibleCategory !== topCategory) {
         console.log("맨 위로 스크롤: 첫 번째 카테고리로 설정", scrollPosition);
@@ -553,14 +553,22 @@ const HomePage = () => {
       <div 
         ref={contentRef} 
         className="flex-grow overflow-auto"
+        onScroll={() => {
+          if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+          scrollTimerRef.current = setTimeout(() => {
+            handleScroll();
+            scrollTimerRef.current = null;
+          }, 50);
+        }}
       >
         {/* 메뉴 섹션 */}
-        <div className="pb-20 pt-6">
+        <div className="pb-20 pt-1">
           {categories.map((cat, index) => (
             <div 
               key={cat} 
               ref={el => categoryRefs.current[cat] = el}
-              className={`${index === 0 ? 'min-h-[300px]' : 'min-h-[500px]'} ${index === categories.length - 1 ? 'pb-80' : ''}`}
+              className={`${index === 0 ? 'pt-4 pb-12' : index === categories.length - 1 ? 'pb-80' : 'pb-20'}`}
+              style={{ minHeight: index === 0 ? '50px' : '300px' }}
             >
               <CategoryHeader category={cat} id={cat} />
               <MenuGrid 

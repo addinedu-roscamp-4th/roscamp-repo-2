@@ -135,6 +135,12 @@ const CheckoutPage = () => {
         return;
       }
       
+      // 결제 시각 저장
+      const paymentTime = new Date().toISOString();
+      
+      // localStorage에 결제 시각 저장
+      localStorage.setItem('lastPaymentTime', paymentTime);
+      
       // 성공 메시지 추가
       addNotification('결제가 완료되었습니다! 주문 처리 중입니다.');
       
@@ -148,7 +154,8 @@ const CheckoutPage = () => {
           customerId,
           tableId,
           totalAmount: getTotalAmount(),
-          paymentMethod 
+          paymentMethod,
+          paymentTime
         } 
       });
       

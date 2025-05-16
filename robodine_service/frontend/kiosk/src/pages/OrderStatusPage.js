@@ -8,8 +8,9 @@ import axios from 'axios';
 const Base_API_URL = process.env.REACT_APP_BASE_URL
 
 // 메뉴 아이템 카드 컴포넌트
-const MenuItemCard = ({ item, onCancelItem }) => {
-  // console.log('메뉴 아이템 카드:', item);
+const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
+  const timerRef = useRef(null);
+
   // 상태에 따른 배경색 설정
   const getBgColor = (status) => {
     switch (status) {
@@ -20,9 +21,9 @@ const MenuItemCard = ({ item, onCancelItem }) => {
   };
 
   // 상태 텍스트 변환
-  const getStatusText = (status, eta) => {
+  const getStatusText = (status, time) => {
     switch (status) {
-      case 'cooking': return `조리중 (${eta}분)`;
+      case 'cooking': return `조리중 (${time}분)`;
       case 'ready': return '완료';
       default: return '대기중';
     }
@@ -33,28 +34,32 @@ const MenuItemCard = ({ item, onCancelItem }) => {
   // waiting, cooking 상태일 때만 취소 버튼 활성화
   const canCancel = item.status === 'waiting' || item.status === 'cooking';
 
+  // 시간을 정수로 표시
+  const formattedTime = Math.max(0, remainingTime).toFixed(0);
+
   return (
     <div className={`w-56 rounded-lg shadow-md border-l-4 flex-shrink-0 ${getBgColor(item.status)}`}>
       <div className="p-4 relative">
-        {canCancel && (
-          <button 
-            onClick={() => onCancelItem(item.menuItemId, item.orderId)}
-            className="absolute top-2 right-2 bg-red-100 text-red-700 rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-200 z-10"
-            title="주문 취소"
-          >
-            ×
-          </button>
-        )}
-        <h3 className="text-xl font-bold mb-2 truncate">{item.name}</h3>
-        <div className="h-32 w-full bg-gray-100 mb-3 rounded relative overflow-hidden">
-          <img 
-            src={item.image_url || `http://192.168.0.156:8000/images/menu/${item.name.toLowerCase()}.png`} 
-            alt={item.name} 
-            className="absolute inset-0 w-full h-full object-cover object-center"
-            onError={(e) => {
-              e.target.src = 'http://192.168.0.156:8000/images/menu/default.png';
-            }}
-          />
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-xl font-bold truncate">{item.name}</h3>
+          <span className={`text-sm font-medium px-2 py-1 rounded-full whitespace-nowrap
+            ${item.status === 'ready' ? 'text-green-800 bg-green-100' : 
+              item.status === 'cooking' ? 'text-yellow-800 bg-yellow-100' : 
+              'text-gray-600 bg-gray-200'}`}>
+            {getStatusText(item.status, formattedTime)}
+          </span>
+        </div>
+        <div className="h-36 w-full mb-3 rounded overflow-hidden">
+          <div className="w-full h-full relative">
+            <img 
+              src={item.image_url || `http://192.168.0.156:8000/images/menu/${item.name.toLowerCase()}.png`} 
+              alt={item.name} 
+              className="w-full h-full object-contain bg-gray-100"
+              onError={(e) => {
+                e.target.src = 'http://192.168.0.156:8000/images/menu/default.png';
+              }}
+            />
+          </div>
         </div>
         <div className="flex justify-between items-center mb-2">
           <span className="text-lg">{formattedPrice}원</span>
@@ -62,11 +67,46 @@ const MenuItemCard = ({ item, onCancelItem }) => {
             {item.qty}개
           </span>
         </div>
-        <div className={`text-center py-1 rounded-full font-medium text-sm
-          ${item.status === 'ready' ? 'text-green-800 bg-green-100' : 
-            item.status === 'cooking' ? 'text-yellow-800 bg-yellow-100' : 
-            'text-gray-600 bg-gray-200'}`}>
-          {getStatusText(item.status, item.eta)}
+        
+        {canCancel && (
+          <button 
+            onClick={() => onCancelItem(item.menuItemId, item.orderId)}
+            className="w-full bg-red-100 text-red-700 py-2 rounded-md font-medium hover:bg-red-200 transition-colors"
+          >
+            취소
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 취소 확인 모달 컴포넌트
+const CancelConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isProcessing }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+        <h2 className="text-2xl font-bold mb-4">{title}</h2>
+        <p className="mb-6 text-gray-700">{message}</p>
+        <div className="flex justify-end space-x-4">
+          <button
+            onClick={onClose}
+            disabled={isProcessing}
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+          >
+            취소
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isProcessing}
+            className={`px-4 py-2 rounded-md text-white ${
+              isProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+            }`}
+          >
+            {isProcessing ? '처리 중...' : '확인'}
+          </button>
         </div>
       </div>
     </div>
@@ -76,7 +116,7 @@ const MenuItemCard = ({ item, onCancelItem }) => {
 const OrderStatusPage = () => {
   const navigate = useNavigate();
   // 통합 WebSocket 컨텍스트 사용
-  const { data, connected, errors, currentCustomer, customerOrders, refreshTopic } = useUnifiedWebSockets();
+  const { data, connected, errors, currentCustomer, customerOrders, refreshTopic, orderItemsRemainingTime } = useUnifiedWebSockets();
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -84,6 +124,14 @@ const OrderStatusPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('추천');
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const prevOrderDataRef = useRef(null);
+  
+  // 모달 상태 관리
+  const [cancelOrderModal, setCancelOrderModal] = useState({
+    isOpen: false,
+    itemId: null,
+    orderId: null,
+    isFullOrder: false
+  });
   
   // 테이블 ID는 localStorage에서 가져오기
   const tableId = parseInt(localStorage.getItem('kioskTableId') || '1');
@@ -99,14 +147,51 @@ const OrderStatusPage = () => {
     setNotifications(notifications.filter(n => n.id !== id));
   };
 
-  // 주문 취소 핸들러
-  const handleCancelOrder = async () => {
+  // 주문 취소 모달 열기
+  const openCancelOrderModal = () => {
     if (!currentCustomer || !orderData || isCancellingOrder) return;
     
-    // 확인 창 표시
-    if (!window.confirm("전체 주문을 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")) {
-      return;
+    setCancelOrderModal({
+      isOpen: true,
+      itemId: null,
+      orderId: null,
+      isFullOrder: true
+    });
+  };
+
+  // 주문 항목 취소 모달 열기
+  const openCancelOrderItemModal = (menuItemId, orderId) => {
+    if (!currentCustomer || !orderId || isCancellingOrder) return;
+    
+    setCancelOrderModal({
+      isOpen: true,
+      itemId: menuItemId,
+      orderId: orderId,
+      isFullOrder: false
+    });
+  };
+
+  // 모달 닫기
+  const closeCancelModal = () => {
+    setCancelOrderModal({
+      ...cancelOrderModal,
+      isOpen: false
+    });
+  };
+
+  // 주문 취소 확인 처리
+  const confirmCancelOrder = async () => {
+    if (cancelOrderModal.isFullOrder) {
+      await handleFullOrderCancel();
+    } else {
+      await handleOrderItemCancel(cancelOrderModal.itemId, cancelOrderModal.orderId);
     }
+    closeCancelModal();
+  };
+
+  // 전체 주문 취소 처리
+  const handleFullOrderCancel = async () => {
+    if (!currentCustomer || !orderData || isCancellingOrder) return;
     
     setIsCancellingOrder(true);
     
@@ -136,14 +221,9 @@ const OrderStatusPage = () => {
     }
   };
   
-  // 주문 항목 취소 핸들러
-  const handleCancelOrderItem = async (menuItemId, orderId) => {
+  // 주문 항목 취소 처리
+  const handleOrderItemCancel = async (menuItemId, orderId) => {
     if (!currentCustomer || !orderId || isCancellingOrder) return;
-    
-    // 확인 창 표시
-    if (!window.confirm("선택한 메뉴를 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")) {
-      return;
-    }
     
     try {
       setIsCancellingOrder(true);
@@ -223,10 +303,9 @@ const OrderStatusPage = () => {
       // 주문 시간 가져오기 (가장 최근 주문의 시간)
       const orderTimestamp = latestOrder['Order.timestamp'] || latestOrder.timestamp;
       
-      // 결제 시간 가져오기 (가장 최근 주문의 결제 시간)
-      // served_at이 결제 시각이라고 가정
-      const paidAt = latestOrder['Order.served_at'] || latestOrder.served_at;
-
+      // 결제 시간은 localStorage에서 가져오기 (OrderCompletePage에서 설정한 값)
+      let paymentTimeStr = localStorage.getItem('lastPaymentTime');
+      
       // 주문 아이템 가져오기
       const orderItems = [];
       if (data.orders && data.orders.orderitems && Array.isArray(data.orders.orderitems)) {
@@ -261,6 +340,7 @@ const OrderStatusPage = () => {
             const quantity = item['OrderItem.quantity'] || item.quantity;
             const orderId = item.orderId;
             const orderTimestamp = item.orderTimestamp;
+            const itemId = item['OrderItem.id'] || item.id;
             
             // 메뉴 아이템 찾기
             const menuItem = data.orders.menuitems.find(mi => 
@@ -298,6 +378,7 @@ const OrderStatusPage = () => {
               }
               orderItems.push({
                 id: `${orderId}-${menuItemId}`, // 고유 ID 생성
+                itemId: itemId, // 주문 항목 ID 추가
                 menuItemId,
                 name,
                 qty: quantity,
@@ -327,11 +408,16 @@ const OrderStatusPage = () => {
       // 주문 ID가 없으면 빈 문자열 반환
       const formattedOrderIds = orderIds.length > 0 ? orderIds.join(', #') : '';
 
+      // 결제 시각 포맷팅
+      const formattedPaymentTime = paymentTimeStr 
+        ? formatDateTime(paymentTimeStr) 
+        : '-';
+
       return {
         id: formattedOrderIds, // 모든 주문 ID를 콤마로 구분하여 표시 (취소된 주문 제외)
         tableName: `테이블 ${tableId}`,
         createdAt: formatDateTime(orderTimestamp),
-        paidAt: paidAt ? formatDateTime(paidAt) : '-',
+        paidAt: formattedPaymentTime,
         paymentMethod: '신용카드', // 실제 구현에서는 결제 방법 정보 필요
         total,
         items: orderItems,
@@ -593,6 +679,19 @@ const OrderStatusPage = () => {
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
       />
+      
+      {/* 취소 확인 모달 */}
+      <CancelConfirmModal
+        isOpen={cancelOrderModal.isOpen}
+        onClose={closeCancelModal}
+        onConfirm={confirmCancelOrder}
+        title={cancelOrderModal.isFullOrder ? "전체 주문 취소" : "메뉴 취소"}
+        message={cancelOrderModal.isFullOrder 
+          ? "정말로 전체 주문을 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다." 
+          : "선택한 메뉴를 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다."}
+        isProcessing={isCancellingOrder}
+      />
+      
       <div className="flex-grow overflow-auto p-6">
         {/* 페이지 헤더 */}
         <div className="flex justify-between items-center mb-6">
@@ -607,7 +706,7 @@ const OrderStatusPage = () => {
 
         {/* 주문 요약 카드 */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 items-center">
             <div className="flex-1 min-w-[200px]">
               <p className="text-xl mb-2">
                 <strong>주문 ID:</strong> #{orderData.id.startsWith('#') ? orderData.id.substring(1) : orderData.id}
@@ -640,22 +739,22 @@ const OrderStatusPage = () => {
               <p className="text-xl mb-2 text-blue-600"><strong>메뉴 총 개수:</strong> {orderData.orderCount}개</p>
               <p className="text-lg text-gray-500"><strong>주문 시각:</strong> {orderData.createdAt}</p>
             </div>
+            
+            {/* 주문 취소 버튼 (취소 가능한 상태일 때만 표시) */}
+            {(orderData.status === 'PLACED' || orderData.status === 'PREPARING') && (
+              <div className="flex items-center ml-4">
+                <button
+                  onClick={openCancelOrderModal}
+                  disabled={isCancellingOrder}
+                  className={`px-5 py-3 rounded-lg text-white text-lg font-bold ${
+                    isCancellingOrder ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  {isCancellingOrder ? '취소 중...' : '전체 주문 취소'}
+                </button>
+              </div>
+            )}
           </div>
-          
-          {/* 주문 취소 버튼 (취소 가능한 상태일 때만 표시) */}
-          {(orderData.status === 'PLACED' || orderData.status === 'PREPARING') && (
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={handleCancelOrder}
-                disabled={isCancellingOrder}
-                className={`px-4 py-2 rounded-md text-white ${
-                  isCancellingOrder ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                {isCancellingOrder ? '취소 중...' : '전체 주문 취소'}
-              </button>
-            </div>
-          )}
         </div>
 
         {/* 메뉴별 준비 상태 (카드 형식) */}
@@ -668,7 +767,8 @@ const OrderStatusPage = () => {
                   <MenuItemCard 
                     key={item.id} 
                     item={item} 
-                    onCancelItem={handleCancelOrderItem}
+                    onCancelItem={openCancelOrderItemModal}
+                    remainingTime={orderItemsRemainingTime[item.itemId] || item.eta}
                   />
                 ))}
               </div>

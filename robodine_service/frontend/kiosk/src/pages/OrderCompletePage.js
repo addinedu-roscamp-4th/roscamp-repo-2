@@ -10,7 +10,7 @@ const OrderCompletePage = () => {
   const [notifications, setNotifications] = useState([]);
   
   // 페이지 상태에서 주문 정보 추출
-  const { customerId, totalAmount, paymentMethod } = location.state || {};
+  const { customerId, totalAmount, paymentMethod, paymentTime } = location.state || {};
   
   // 알림 추가 함수
   const addNotification = (message) => {
@@ -35,6 +35,16 @@ const OrderCompletePage = () => {
   
   // 결제 방법 텍스트
   const paymentMethodText = paymentMethod === 'card' ? '신용카드' : '현금';
+  
+  // 결제 시간 표시
+  const formattedPaymentTime = paymentTime ? new Date(paymentTime).toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }) : '-';
   
   // 10초 후 홈으로 자동 이동
   useEffect(() => {
@@ -91,6 +101,10 @@ const OrderCompletePage = () => {
             <div className="flex justify-between py-2">
               <span className="font-medium">결제 금액:</span>
               <span className="text-indigo-600 font-bold">{formattedTotalAmount}</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="font-medium">결제 시각:</span>
+              <span>{formattedPaymentTime}</span>
             </div>
           </div>
           

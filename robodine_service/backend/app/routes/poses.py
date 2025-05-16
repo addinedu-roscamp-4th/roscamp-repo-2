@@ -79,14 +79,14 @@ def create_pose6d(
         # Broadcast to all clients if the entity type is WORLD
         background_tasks.add_task(
             broadcast_entity_update,
-            "albabot",
+            "robot",
             None,
         )
     if pose.entity_type == EntityType.COOKBOT:
         # Broadcast to all clients if the entity type is COOKBOT
         background_tasks.add_task(
             broadcast_entity_update,
-            "cookbot",
+            "robot",
             None,
         )
 

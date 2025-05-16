@@ -186,7 +186,7 @@ def create_albabot_status(
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
     background_tasks.add_task(
         broadcast_entity_update,
-        "albabot",
+        "robot",
         None
     )
     # 시스템 로그 브로드캐스트 예약
@@ -267,6 +267,16 @@ def send_command_to_albabot(
     db.add(new_albabot)
     db.commit()
     db.refresh(new_albabot)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "robot",
+        None
+    )
+
+    
     
     # Log this action
     log_info(db, f"알바봇 {robot_id}에 {command_type} 명령 전송, 상태 변경: {albabot.status} → {new_status}", background_tasks)

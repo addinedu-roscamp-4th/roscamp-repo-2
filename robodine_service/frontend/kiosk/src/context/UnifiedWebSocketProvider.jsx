@@ -19,6 +19,11 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
   const [errors, setErrors] = useState(() => Object.fromEntries(stableTopics.map(t => [t, null])));
   const [currentCustomer, setCurrentCustomer] = useState(null);
   const [customerOrders, setCustomerOrders] = useState([]);
+  // 주문 항목별 남은 시간을 관리하는 상태
+  const [orderItemsRemainingTime, setOrderItemsRemainingTime] = useState({});
+
+  // 타이머 ref
+  const timersRef = useRef({});
 
   // Reconnection state
   const reconnectAttempts = useRef({});
@@ -103,6 +108,11 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
           const msg = JSON.parse(evt.data);
           if (msg.type === 'update' && msg.topic === topic) {
             setData(d => ({ ...d, [topic]: msg.data }));
+            
+            // 주문 항목 상태가 변경되었을 때 타이머 처리
+            if (topic === 'orders' && msg.data && msg.data.orderitems) {
+              processOrderItemUpdates(msg.data.orderitems);
+            }
           }
           // console.log(`WS message: ${topic}`, msg);
         } catch (err) {
@@ -145,6 +155,76 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
       isConnectingRef.current[topic] = false;
     }
   }, []);
+
+  // 주문 항목 업데이트 처리 함수
+  const processOrderItemUpdates = useCallback((orderItems) => {
+    // 현재 타이머 중지
+    Object.keys(timersRef.current).forEach(itemId => {
+      clearInterval(timersRef.current[itemId]);
+      delete timersRef.current[itemId];
+    });
+
+    if (!Array.isArray(orderItems)) return;
+
+    // 주문 항목의 상태 확인 및 타이머 업데이트
+    orderItems.forEach(item => {
+      const itemId = item['OrderItem.id'] || item.id;
+      const orderItemStatus = item['OrderItem.status'] || item.status;
+      const menuItemId = item['OrderItem.menu_item_id'] || item.menu_item_id;
+      
+      // 메뉴 아이템 정보 찾기 (prepare_time 가져오기 위해)
+      if (data.orders && data.orders.menuitems) {
+        const menuItem = data.orders.menuitems.find(mi => 
+          (mi['MenuItem.id'] || mi.id) === menuItemId
+        );
+        
+        if (menuItem) {
+          const prepareTime = menuItem['MenuItem.prepare_time'] || 5; // 기본값 5분
+          
+          // 상태 확인 및 타이머 시작
+          if (orderItemStatus === 'PREPARING' || orderItemStatus === 'COOKING') {
+            // 이미 시작된 타이머가 없으면 새 타이머 시작
+            if (!orderItemsRemainingTime[itemId]) {
+              // 초기 남은 시간 설정 (분 단위)
+              setOrderItemsRemainingTime(prev => ({
+                ...prev,
+                [itemId]: prepareTime
+              }));
+              
+              // 타이머 시작 (60초마다 1분씩 감소)
+              timersRef.current[itemId] = setInterval(() => {
+                setOrderItemsRemainingTime(prev => {
+                  if (!prev[itemId] || prev[itemId] <= 0) {
+                    clearInterval(timersRef.current[itemId]);
+                    delete timersRef.current[itemId];
+                    return prev;
+                  }
+                  
+                  const newValue = {
+                    ...prev,
+                    [itemId]: Math.max(0, prev[itemId] - 1)
+                  };
+                  return newValue;
+                });
+              }, 60000); // 60초마다 1분씩 감소
+            }
+          } else if (orderItemStatus === 'SERVED' || orderItemStatus === 'COMPLETED') {
+            // 서빙 완료된 경우 타이머 제거
+            if (timersRef.current[itemId]) {
+              clearInterval(timersRef.current[itemId]);
+              delete timersRef.current[itemId];
+            }
+            
+            // 남은 시간을 0으로 설정
+            setOrderItemsRemainingTime(prev => ({
+              ...prev,
+              [itemId]: 0
+            }));
+          }
+        }
+      }
+    });
+  }, [data.orders]);
 
   // Manual refresh - close old connections and create new ones
   const refreshTopic = useCallback((topic) => {
@@ -195,6 +275,10 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
       Object.values(reconnectTimers.current).forEach(id => {
         if (id) clearTimeout(id);
       });
+      // 모든 타이머 정리
+      Object.values(timersRef.current).forEach(id => {
+        if (id) clearInterval(id);
+      });
     };
   }, [connectTopic, stableTopics]);
 
@@ -221,7 +305,16 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
     } catch(e){ console.error('Customer error', e);}  
   }, [data.tables, data.orders]);
 
-  const contextValue = { data, connected, errors, currentCustomer, customerOrders, refreshTopic };
+  const contextValue = { 
+    data, 
+    connected, 
+    errors, 
+    currentCustomer, 
+    customerOrders, 
+    refreshTopic,
+    orderItemsRemainingTime // 남은 시간 상태 추가
+  };
+  
   return <WSContext.Provider value={contextValue}>{children}</WSContext.Provider>;
 }
 

@@ -492,9 +492,10 @@ async def broadcast_entity_update(entity_type, entity_id):
                         .order_by(Cookbot.robot_id, Cookbot.id.desc())
                         .distinct(Cookbot.robot_id)
                     ).all()
+                    required_pose_entity_types = ["WORLD", "COOKBOT", "INVENTORY"]
                     poses = session.exec(
                         select(Pose6D)
-                        .where(Pose6D.entity_type == "WORLD")
+                        .where(Pose6D.entity_type.in_(required_pose_entity_types))
                         .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
                     ).all()
@@ -958,6 +959,7 @@ class RoboDineTCPHandler(socketserver.BaseRequestHandler):
 
         # 5) 클라이언트에 응답
         self.request.sendall(response.encode('utf-8'))
+        logger.info(f"[TCP] Sent response: {response}")
 
 # Include routers - API path prefix for all endpoints
 API_PREFIX = "/api"
