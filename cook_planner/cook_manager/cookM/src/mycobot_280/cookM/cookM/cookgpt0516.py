@@ -120,10 +120,10 @@ class CookGPTServiceNode(Node):
                         attempts += 1 
                         continue
 
-                    # 여러 감지된 물체 중에서 y기준으로 가까운 물체 선택
+                    # solvePnP tvec의 y 절댓값 기준으로 가까운 물체 선택
 
                     best_pose = None
-                    min_y = float('inf')
+                    min_abs_y = float('inf')
 
                     for i,kp in enumerate(results.keypoints.xy): # 모든 객체들의 키포인트들  
                         if results.keypoints.cls is None or i >= len(results.keypoints.cls):  # 방어코드
@@ -142,9 +142,9 @@ class CookGPTServiceNode(Node):
                         if not ret:
                             continue
 
-                        if tvec[1] < min_y :
+                        if abs(tvec[1]) < min_abs_y :
                             best_pose = (tvec,rvec)
-                            min_y = tvec[1]
+                            min_abs_y = abs(tvec[1])
 
                     #여기 best_pose는 6D임 6D
                     if best_pose:

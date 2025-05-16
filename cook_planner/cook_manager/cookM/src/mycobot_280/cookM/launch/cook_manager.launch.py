@@ -22,5 +22,11 @@ def generate_launch_description():
             package='cookM',  
             executable='cookgpt',
             name='cookgpt_service_node'
+        ),
+        
+        Node(
+            package='cookM',  
+            executable='avoid_hand',
+            name='avoid_hand_node'
         )
     ])

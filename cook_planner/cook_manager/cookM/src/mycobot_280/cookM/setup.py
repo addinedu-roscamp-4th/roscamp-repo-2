@@ -39,7 +39,8 @@ setup(
             'cookM/trajectories.yaml',
             'cookM/calibration_refined4.npz',
             'cookM/calibration_aa48.npz',
-            'cookM/best.pt'
+            'cookM/best.pt',
+            'cookM/hand_landmarker.task'
         ]),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
@@ -57,6 +58,7 @@ setup(
             'pose_broadcaster = cookM.pose_broadcaster:main',
             'tcp_interface = cookM.tcp_interface:main',
             'cookgpt = cookM.cookgpt:main',
+            'avoid_hand = cookM.avoid_hand:main',
             'cook_comp_test = cookM.cook_comp_test:main',
             'cook_total_test = cookM.cook_total_test:main',
             'gripper_distance_node = cookM.gripper_distance_node:main',

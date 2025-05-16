@@ -103,6 +103,21 @@ class AvoidHandNode(Node):
             self.publishers[name].publish(msg)
             self.get_logger().info(f"{name} 손 감지: {detected}")
 
+            
+def main(args=None):
+    rclpy.init(args=args)
+    node = AvoidHandNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
 # /robot48/hand_detected → std_msgs/Bool
 # /robotb4/hand_detected → std_msgs/Bool
 
