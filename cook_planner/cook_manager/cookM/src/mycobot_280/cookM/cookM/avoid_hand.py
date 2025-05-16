@@ -41,15 +41,15 @@ class AvoidHandNode(Node):
         super().__init__('avoid_hand_node')
         
         self.robot_ports = {'robot48': 5000, 'robotb4': 5001}
-        self.frame = {name: None for name in self.robot_ports}
-        self.frame_lock = {name : threading.Lock() for name in self.robot_ports}
-        self.publishers = {}
+        self.frames = {name: None for name in self.robot_ports}
+        self.frame_locks = {name : threading.Lock() for name in self.robot_ports}
+        self.hand_publishers = {}
 
         self.landmarker = HandLandmarker.create_from_options(options)
 
         for name in self.robot_ports:
             topic_name = f'/{name}/hand_detected'
-            self.publishers[name] = self.create_publisher(Bool, topic_name , 10)
+            self.hand_publishers[name] = self.create_publisher(Bool, topic_name , 10)
 
         for name, port in self.robot_ports.items():
             threading.Thread(target=self.udp_loop, args=(name, port), daemon=True)
@@ -100,7 +100,7 @@ class AvoidHandNode(Node):
 
             msg = Bool()
             msg.data = detected
-            self.publishers[name].publish(msg)
+            self.hand_publishers[name].publish(msg)
             self.get_logger().info(f"{name} 손 감지: {detected}")
 
             
