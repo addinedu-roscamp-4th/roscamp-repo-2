@@ -113,7 +113,7 @@ def alba_udp_thread(udp_stop_event, shared_dict, manager) :
                     logger.info(f"🔌 [INFO] New UDP connection detected from {ip_port}")
                     shared_sub_dict = manager.dict()
                     shared_sub_dict["latest_frame"] = None
-                    shared_sub_dict["detected_object"] = None
+                    shared_sub_dict["robot_id"] = None
                     shared_dict[ip_port] = shared_sub_dict
 
                 if robot_id not in shared_dict:
