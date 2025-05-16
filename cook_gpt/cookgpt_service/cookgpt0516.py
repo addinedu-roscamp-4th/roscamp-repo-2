@@ -101,24 +101,28 @@ class CookGPTServiceNode(Node):
             R_flip = R.from_euler('x', [180], degrees=True).as_matrix()
             tvecs = []
             rvecs = []
+            attempts = 0
+            max_attempts = 30
 
             try:
-                while len(tvecs) < 5:
+                while len(tvecs) < 5 and attempts < max_attempts:
                     with self.frame_locks[robot_id]:
                         frame = self.latest_frames.get(robot_id, None)
 
                     if frame is None:
                         time.sleep(0.05)
+                        attempts += 1
                         continue
 
                     results = model(frame, verbose=False)[0]
 
                     if results.keypoints is None or results.keypoints.xy is None:
+                        attempts += 1 
                         continue
 
                     # 여러 감지된 물체 중에서 y기준으로 가까운 물체 선택
 
-                    best_kpts = None
+                    best_pose = None
                     min_y = float('inf')
 
                     for i,kp in enumerate(results.keypoints.xy): # 모든 객체들의 키포인트들  
@@ -147,6 +151,12 @@ class CookGPTServiceNode(Node):
                         tvecs.append(best_pose[0])
                         rvecs.append(best_pose[1])
 
+                    attempts += 1
+
+                if len(tvecs) < 5:
+                    self.get_logger().warn(f"{robot_id} - 5개 포즈 수집 실패 (성공 {len(tvecs)}개, 시도 {attempts}회)")
+                    return response
+                
                 tvec_avg = np.mean(np.array(tvecs).reshape(-1, 3), axis=0)
 
                 quats = []
