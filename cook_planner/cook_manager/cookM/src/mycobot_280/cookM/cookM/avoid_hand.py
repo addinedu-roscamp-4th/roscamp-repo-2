@@ -33,7 +33,7 @@ options = HandLandmarkerOptions(
 
 
 THRESHOLD_SIZE = 0.4 # 손 크기 TH
-LANDMARK_COUNT_THRESHOLD = 12
+LANDMARK_COUNT_THRESHOLD = 12  #손 랜드마크 개수 TH
 
 #노드만들어염
 class AvoidHandNode(Node):
@@ -54,6 +54,7 @@ class AvoidHandNode(Node):
         for name, port in self.robot_ports.items():
             threading.Thread(target=self.udp_loop, args=(name, port), daemon=True)
 
+        #토픽발행하는 주기
         self.timer = self.create_timer(1.0/30.0 , self.detect_and_publish)
         self.get_logger().info("CookGPT - Avoid Hand 노드 토픽 서버 대기하는중~~~~~~")
 
@@ -85,7 +86,8 @@ class AvoidHandNode(Node):
             result = self.landmarker.detect(mp_image)
 
             detected = False
-            # 1. 손 크기 계산
+            
+            #손에도 TH 적용해염 (완전작은 손도 잘보여서 걸엇어요 가끔 멀리잇는 사람얼굴도 손으로 인지함;;)
             if result.hand_landmarks:
                 for landmarks in result.hand_landmarks:
                     xs = [lm.x for lm in landmarks]
