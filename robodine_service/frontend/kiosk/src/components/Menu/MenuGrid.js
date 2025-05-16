@@ -46,6 +46,8 @@ const MenuGrid = ({ items, onAddToCart, category }) => {
     closeModal();
   };
 
+  
+
   // 메뉴가 없는 경우 메시지 표시
   if (!items || items.length === 0) {
     return (
@@ -79,6 +81,7 @@ const MenuGrid = ({ items, onAddToCart, category }) => {
           </div>
           <h2 className="text-2xl font-bold mt-5">{selectedItem.name}</h2>
           <p className="text-lg text-gray-600 mt-3">{selectedItem.description || '설명이 없습니다.'}</p>
+          <p className="text-sm text-gray-500 mt-1">예상 조리시간: {selectedItem.prepare_time || '?'}분</p>
           
           <div className="flex items-center justify-between mt-6">
             <span className="text-xl font-medium">

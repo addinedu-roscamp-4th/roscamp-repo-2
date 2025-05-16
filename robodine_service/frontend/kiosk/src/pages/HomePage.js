@@ -299,6 +299,7 @@ const HomePage = () => {
           const categoryId = item['MenuItem.category_id'] || item.category_id || 1;
           const available = item['MenuItem.available'] !== undefined ? item['MenuItem.available'] : 
                           (item.available !== undefined ? item.available : true);
+          const prepare_time = item['MenuItem.prepare_time'] || item.prepare_time || 0;
           
           // 카테고리 설정 - 실제 데이터 구조에 맞게 수정
           let category = '추천'; // 기본값
@@ -322,7 +323,8 @@ const HomePage = () => {
             image_url,
             category,
             categoryId,
-            available
+            available,
+            prepare_time,
           };
         });
 

@@ -68,11 +68,11 @@ const CategoryButton = ({ icon, label, selected, active, onClick, className, ...
 const FunctionButton = ({ icon, label, color, onClick }) => {
   return (
     <button
-      className={`w-full h-16 flex items-center justify-center rounded-md transition-colors duration-200 ${color} text-white my-2`}
+      className={`w-full h-20 flex items-center justify-center rounded-md transition-colors duration-200 ${color} text-white my-2`}
       onClick={onClick}
     >
-      <span className="text-2xl mr-2">{icon}</span>
-      <span className="text-lg font-medium">{label}</span>
+      <span className="text-3xl mr-2">{icon}</span>
+      <span className="text-xl font-medium">{label}</span>
     </button>
   );
 };

@@ -8,6 +8,9 @@ const MenuCard = ({ item, onTap, onAdd }) => {
     minimumFractionDigits: 0,
   }).format(item.price);
 
+  // 메뉴 준비 시간 표시
+  const prepareTime = item.prepare_time || '?';
+
   return (
     <div 
       className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200"
@@ -26,6 +29,7 @@ const MenuCard = ({ item, onTap, onAdd }) => {
 
       <div className="p-5">
         <h3 className="text-2xl font-bold">{item.name}</h3>
+        <p className="text-sm text-gray-500 mt-1">예상 조리시간: {prepareTime}분</p>
         <div className="flex justify-between items-center mt-4">
           <span className="text-xl font-medium">{formattedPrice}</span>
           <button

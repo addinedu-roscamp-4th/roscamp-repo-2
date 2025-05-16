@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Layout/Sidebar';
 import NotificationOverlay from '../components/Notifications/NotificationOverlay';
@@ -8,14 +8,19 @@ const OrderCompletePage = () => {
   const location = useLocation();
   const [selectedCategory, setSelectedCategory] = useState('추천');
   const [notifications, setNotifications] = useState([]);
+  const notificationDisplayed = useRef(false);
   
   // 페이지 상태에서 주문 정보 추출
   const { customerId, totalAmount, paymentMethod, paymentTime } = location.state || {};
   
   // 알림 추가 함수
   const addNotification = (message) => {
+    // 이미 표시된 알림이면 추가하지 않음
+    if (notificationDisplayed.current) return;
+    
     const id = Date.now();
     setNotifications(prev => [...prev, { id, message }]);
+    notificationDisplayed.current = true;
   };
 
   // 알림 닫기 처리
@@ -62,9 +67,9 @@ const OrderCompletePage = () => {
     }
   }, [customerId, navigate]);
 
-  // 주문 완료 메시지 표시
+  // 주문 완료 메시지 표시 (최초 1회만)
   useEffect(() => {
-    if (customerId) {
+    if (customerId && !notificationDisplayed.current) {
       addNotification('주문이 완료되었습니다! 음식이 준비되면 서빙됩니다.');
     }
   }, [customerId]);

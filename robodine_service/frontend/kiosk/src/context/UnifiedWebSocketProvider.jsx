@@ -157,74 +157,66 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
   }, []);
 
   // 주문 항목 업데이트 처리 함수
-  const processOrderItemUpdates = useCallback((orderItems) => {
-    // 현재 타이머 중지
-    Object.keys(timersRef.current).forEach(itemId => {
+const processOrderItemUpdates = useCallback(() => {
+  const orderItems = data.orders?.orderitems || [];
+  if (!orderItems || orderItems.length === 0) return;
+  const menu = data.orders?.menuitems || [];
+
+  orderItems.forEach(item => {
+    const orderId = item['OrderItem.order_id'] || item.id;
+    const status = item['OrderItem.status'] || item.status;
+    const menuId = item['OrderItem.menu_item_id'] || item.menu_item_id;
+    const itemId = `${orderId}-${menuId}`; // itemId 생성 (orderId와 menuId의 조합)
+    console.log(`Processing item ${itemId} with status ${status}`);
+
+    // 메뉴 준비 시간 가져오기
+    const menuItem = menu.find(m => m['MenuItem.id'] === menuId);
+    if (!menuItem) {
+      console.log(`Menu item not found for menuId: ${menuId}`);
+    }
+
+    const prepareTime = menuItem ? menuItem['MenuItem.prepare_time'] : 0; // 준비 시간 (분 단위)
+
+    console.log(`Processing item ${itemId} with status ${status} and prepare time ${prepareTime}`);
+
+    // 요리 중 상태일 때만 타이머가 없다면 새로 생성
+    if ((status === 'PREPARING' || status === 'COOKING') && !timersRef.current[itemId]) {
+      console.log(`Starting timer for item ${itemId}`);
+      setOrderItemsRemainingTime(prev => ({
+        ...prev,
+        [itemId]: prepareTime // 타이머 시작 시 준비 시간 설정
+      }));
+
+      // setInterval 중복 실행 방지
+      const timer = setInterval(() => {
+        setOrderItemsRemainingTime(prev => {
+          const remaining = (prev[itemId] || 0) - 1;
+          console.log(`Remaining time for item ${itemId}: ${remaining} minutes`);
+          if (remaining <= 0) {
+            clearInterval(timer); // 타이머 종료
+            delete timersRef.current[itemId]; // 타이머 제거
+            console.log(`Stopping timer for item ${itemId}`);
+            return { ...prev, [itemId]: 0 }; // 0분이 되면 타이머 중지
+          }
+          return { ...prev, [itemId]: remaining }; // 남은 시간 업데이트
+        });
+      }, 6000); // 1분마다 업데이트 (3000ms 대신 60000ms로 설정)
+
+      timersRef.current[itemId] = timer; // 타이머 ID 저장
+    }
+
+    // 완료된 항목은 타이머 삭제
+    if ((status === 'SERVED' || status === 'COMPLETED' || status === 'CANCELLED') && timersRef.current[itemId]) {
       clearInterval(timersRef.current[itemId]);
       delete timersRef.current[itemId];
-    });
+      setOrderItemsRemainingTime(prev => ({ ...prev, [itemId]: 0 })); // 취소된 항목은 0으로 설정
+    }
+  });
+}, [data.orders, data.orders?.menuitems]);
 
-    if (!Array.isArray(orderItems)) return;
-
-    // 주문 항목의 상태 확인 및 타이머 업데이트
-    orderItems.forEach(item => {
-      const itemId = item['OrderItem.id'] || item.id;
-      const orderItemStatus = item['OrderItem.status'] || item.status;
-      const menuItemId = item['OrderItem.menu_item_id'] || item.menu_item_id;
-      
-      // 메뉴 아이템 정보 찾기 (prepare_time 가져오기 위해)
-      if (data.orders && data.orders.menuitems) {
-        const menuItem = data.orders.menuitems.find(mi => 
-          (mi['MenuItem.id'] || mi.id) === menuItemId
-        );
-        
-        if (menuItem) {
-          const prepareTime = menuItem['MenuItem.prepare_time'] || 5; // 기본값 5분
-          
-          // 상태 확인 및 타이머 시작
-          if (orderItemStatus === 'PREPARING' || orderItemStatus === 'COOKING') {
-            // 이미 시작된 타이머가 없으면 새 타이머 시작
-            if (!orderItemsRemainingTime[itemId]) {
-              // 초기 남은 시간 설정 (분 단위)
-              setOrderItemsRemainingTime(prev => ({
-                ...prev,
-                [itemId]: prepareTime
-              }));
-              
-              // 타이머 시작 (60초마다 1분씩 감소)
-              timersRef.current[itemId] = setInterval(() => {
-                setOrderItemsRemainingTime(prev => {
-                  if (!prev[itemId] || prev[itemId] <= 0) {
-                    clearInterval(timersRef.current[itemId]);
-                    delete timersRef.current[itemId];
-                    return prev;
-                  }
-                  
-                  const newValue = {
-                    ...prev,
-                    [itemId]: Math.max(0, prev[itemId] - 1)
-                  };
-                  return newValue;
-                });
-              }, 60000); // 60초마다 1분씩 감소
-            }
-          } else if (orderItemStatus === 'SERVED' || orderItemStatus === 'COMPLETED') {
-            // 서빙 완료된 경우 타이머 제거
-            if (timersRef.current[itemId]) {
-              clearInterval(timersRef.current[itemId]);
-              delete timersRef.current[itemId];
-            }
-            
-            // 남은 시간을 0으로 설정
-            setOrderItemsRemainingTime(prev => ({
-              ...prev,
-              [itemId]: 0
-            }));
-          }
-        }
-      }
-    });
-  }, [data.orders]);
+  
+  
+  
 
   // Manual refresh - close old connections and create new ones
   const refreshTopic = useCallback((topic) => {
@@ -249,10 +241,10 @@ export function UnifiedWebSocketProvider({ topics = ['orders', 'menu', 'tables']
     // 연결 상태 초기화
     resetReconnection(topic);
     
-    // 약간의 지연 후 새 연결 시도
+    // 약간의 지연 후 새 연결 시도 (1초로 늘림)
     setTimeout(() => {
       connectTopic(topic);
-    }, 500);
+    }, 1000);
   }, [connectTopic]);
 
   // On mount: connect once

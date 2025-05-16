@@ -119,17 +119,17 @@ const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease 
                 item={item}
                 onIncrease={() => {
                   onIncrease(item.id);
-                  addNotification(`${item.name} 수량이 증가했습니다.`);
+                  // addNotification(`${item.name} 수량이 증가했습니다.`);
                 }}
                 onDecrease={() => {
                   onDecrease(item.id);
                   if (item.quantity > 1) {
-                    addNotification(`${item.name} 수량이 감소했습니다.`);
+                    // addNotification(`${item.name} 수량이 감소했습니다.`);
                   }
                 }}
                 onRemove={() => {
                   onRemove(item.id);
-                  addNotification(`${item.name}이(가) 장바구니에서 제거되었습니다.`);
+                  // addNotification(`${item.name}이(가) 장바구니에서 제거되었습니다.`);
                 }}
               />
             ))}

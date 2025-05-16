@@ -23,7 +23,7 @@ const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
   // 상태 텍스트 변환
   const getStatusText = (status, time) => {
     switch (status) {
-      case 'cooking': return `조리중 (${time}분)`;
+      case 'cooking': return '조리중';
       case 'ready': return '완료';
       default: return '대기중';
     }
@@ -123,7 +123,9 @@ const OrderStatusPage = () => {
   const [notifications, setNotifications] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('추천');
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+  const [cancelLoadingFlag, setCancelLoadingFlag] = useState(false);
   const prevOrderDataRef = useRef(null);
+  const notificationTimeoutRef = useRef(null);
   
   // 모달 상태 관리
   const [cancelOrderModal, setCancelOrderModal] = useState({
@@ -136,10 +138,25 @@ const OrderStatusPage = () => {
   // 테이블 ID는 localStorage에서 가져오기
   const tableId = parseInt(localStorage.getItem('kioskTableId') || '1');
 
-  // 알림 추가 함수
+  // 알림 추가 함수 (중복 방지)
   const addNotification = (message) => {
     const id = Date.now();
+    
+    // 동일한 메시지가 있는지 확인
+    const isDuplicate = notifications.some(n => n.message === message);
+    if (isDuplicate) return;
+    
+    // 이전 타이머 취소
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current);
+    }
+    
     setNotifications(prev => [...prev, { id, message }]);
+    
+    // 5초 후 자동으로 알림 제거
+    notificationTimeoutRef.current = setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
   };
 
   // 알림 닫기 핸들러
@@ -196,6 +213,9 @@ const OrderStatusPage = () => {
     setIsCancellingOrder(true);
     
     try {
+      // 취소 후 데이터가 갱신될 때까지 로딩 표시를 위한 플래그
+      setCancelLoadingFlag(true);
+      
       const response = await fetch(`${Base_API_URL}/orders/cancel_order/${currentCustomer}`, {
         method: 'PUT',
         headers: {
@@ -210,12 +230,15 @@ const OrderStatusPage = () => {
       // 성공 알림
       addNotification('주문이 성공적으로 취소되었습니다.');
       
-      // 주문 데이터 새로고침
-      refreshTopic('orders');
-      refreshTopic('tables');
+      // 백엔드에서 웹소켓으로 자동 업데이트가 전송되므로
+      // 일정 시간 후 로딩 상태만 해제 (2초로 단축)
+      setTimeout(() => {
+        setCancelLoadingFlag(false);
+      }, 2000);
     } catch (err) {
       console.error('주문 취소 중 오류:', err);
       addNotification('주문 취소 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setCancelLoadingFlag(false);
     } finally {
       setIsCancellingOrder(false);
     }
@@ -228,6 +251,9 @@ const OrderStatusPage = () => {
     try {
       setIsCancellingOrder(true);
       
+      // 취소 후 데이터가 갱신될 때까지 로딩 표시를 위한 플래그
+      setCancelLoadingFlag(true);
+      
       await axios.put(
         `${Base_API_URL}/orders/${orderId}/items/${menuItemId}/status`,
         { status: "CANCELLED" },
@@ -236,10 +262,15 @@ const OrderStatusPage = () => {
       // 성공 알림
       addNotification('선택한 메뉴가 취소되었습니다.');
       
-      // 주문 데이터 새로고침
+      // 백엔드에서 웹소켓으로 자동 업데이트가 전송되므로
+      // 일정 시간 후 로딩 상태만 해제 (2초로 단축)
+      setTimeout(() => {
+        setCancelLoadingFlag(false);
+      }, 1000);
     } catch (err) {
       console.error('주문 항목 취소 중 오류:', err);
       addNotification('주문 항목 취소 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setCancelLoadingFlag(false);
     } finally {
       setIsCancellingOrder(false);
     }
@@ -247,18 +278,35 @@ const OrderStatusPage = () => {
 
   // 초기 로딩 처리
   useEffect(() => {
-    if (connected.orders && connected.tables) {
-      setIsLoading(false);
-    } else {
+    // 취소 중인 경우 로딩 상태를 유지함
+    if (cancelLoadingFlag) {
       setIsLoading(true);
-      // 연결이 되어 있지 않으면 토픽 리프레시
+      return;
+    }
+
+    // 연결이 되어 있고 주문 데이터가 있는 경우 로딩 상태 해제
+    if (connected.orders && connected.tables && 
+        data.orders && data.tables) {
+      // 주문 데이터가 비어있지 않은지 확인
+      if (data.orders.orderitems && data.orders.orderitems.length > 0) {
+        setIsLoading(false);
+      } else if (customerOrders && customerOrders.length > 0) {
+        setIsLoading(false);
+      }
+    } else {
+      // 연결이 안되어 있으면 토픽 리프레시
       if (!connected.orders) refreshTopic('orders');
       if (!connected.tables) refreshTopic('tables');
     }
-  }, [connected.orders, connected.tables, refreshTopic]);
+  }, [connected.orders, connected.tables, data.orders, data.tables, customerOrders, refreshTopic, cancelLoadingFlag]);
 
   // 주문 정보 추출 및 처리
   const getOrderData = () => {
+    // 취소 중이거나 로딩 중일 때는 이전 데이터 유지
+    if (cancelLoadingFlag && prevOrderDataRef.current) {
+      return prevOrderDataRef.current;
+    }
+    
     // 고객 ID가 없거나 고객 주문이 없으면 null 반환
     if (!currentCustomer || !customerOrders || customerOrders.length === 0) {
       return null;
@@ -335,12 +383,14 @@ const OrderStatusPage = () => {
         
         // 각 메뉴 아이템 정보와 결합
         if (data.orders.menuitems && Array.isArray(data.orders.menuitems)) {
+          // console.log('모든 아이템:', allItems);
           allItems.forEach(item => {
             const menuItemId = item['OrderItem.menu_item_id'] || item.menu_item_id;
             const quantity = item['OrderItem.quantity'] || item.quantity;
-            const orderId = item.orderId;
             const orderTimestamp = item.orderTimestamp;
-            const itemId = item['OrderItem.id'] || item.id;
+            const orderId = item['OrderItem.order_id'] || item.id;
+
+            // console.log('주문 아이템:', item);
             
             // 메뉴 아이템 찾기
             const menuItem = data.orders.menuitems.find(mi => 
@@ -378,7 +428,7 @@ const OrderStatusPage = () => {
               }
               orderItems.push({
                 id: `${orderId}-${menuItemId}`, // 고유 ID 생성
-                itemId: itemId, // 주문 항목 ID 추가
+                orderId: orderId,
                 menuItemId,
                 name,
                 qty: quantity,
@@ -386,11 +436,10 @@ const OrderStatusPage = () => {
                 status,
                 eta,
                 orderTimestamp,
-                orderId,
                 image_url
               });
+              // console.log('메뉴 아이템:', orderItems);
             }
-            // console.log('메뉴 아이템:', orderItems);
           });
         }
       }
@@ -455,6 +504,12 @@ const OrderStatusPage = () => {
   // 주문 상태 변경 감지 및 알림
   useEffect(() => {
     const orderData = getOrderData();
+    
+    // 취소 로딩 중이 아닐 때만 이전 주문 데이터 갱신
+    if (!cancelLoadingFlag && orderData) {
+      prevOrderDataRef.current = orderData;
+    }
+    
     const prevOrderData = prevOrderDataRef.current;
     
     if (orderData && prevOrderData) {
@@ -473,13 +528,15 @@ const OrderStatusPage = () => {
         addNotification(`주문 상태가 ${statusText}(으)로 변경되었습니다.`);
       }
       
-      // 각 메뉴 아이템 상태 변경 확인
+      // 각 메뉴 아이템 상태 변경 확인 (상태 변경된 항목만 1회 알림)
+      const changedItems = new Set();
+      
       orderData.items.forEach(item => {
         // 이전 데이터에서 같은 아이템 찾기
         const prevItem = prevOrderData.items.find(pi => pi.id === item.id);
         
-        // 이전 아이템이 있고, 상태가 변경되었을 때 알림
-        if (prevItem && prevItem.status !== item.status) {
+        // 이전 아이템이 있고, 상태가 변경되었을 때 알림 (중복 알림 방지)
+        if (prevItem && prevItem.status !== item.status && !changedItems.has(item.id)) {
           let statusMessage = '';
           
           switch(item.status) {
@@ -496,15 +553,20 @@ const OrderStatusPage = () => {
               statusMessage = `${item.name} 메뉴의 상태가 변경되었습니다.`;
           }
           
-          // 알림 추가
+          // 알림 추가 및 중복 방지 표시
           addNotification(statusMessage);
+          changedItems.add(item.id);
         }
       });
     }
     
-    // 현재 상태 저장
-    prevOrderDataRef.current = orderData;
-  }, [customerOrders, data.orders]);
+    // 컴포넌트 언마운트 시 타임아웃 정리
+    return () => {
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+      }
+    };
+  }, [customerOrders, data.orders, cancelLoadingFlag]);
 
   // 현재 주문 상태
   const orderData = getOrderData();
@@ -565,7 +627,7 @@ const OrderStatusPage = () => {
   }
 
   // 로딩 중인 경우
-  if (isLoading) {
+  if (isLoading || cancelLoadingFlag) {
     return (
       <div className="flex h-screen bg-gray-100">
         <NotificationOverlay 
@@ -578,7 +640,14 @@ const OrderStatusPage = () => {
         />
         <div className="flex flex-col items-center justify-center p-6 h-full flex-grow">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C49E69]"></div>
-          <p className="mt-4 text-gray-600">주문 정보를 불러오는 중...</p>
+          {cancelLoadingFlag ? (
+            <>
+              <p className="mt-4 text-gray-700 text-xl font-medium">주문 취소 처리 완료</p>
+              <p className="mt-2 text-gray-500">주문 정보가 업데이트 중입니다. 잠시만 기다려주세요.</p>
+            </>
+          ) : (
+            <p className="mt-4 text-gray-600">주문 정보를 불러오는 중...</p>
+          )}
         </div>
       </div>
     );
@@ -757,12 +826,12 @@ const OrderStatusPage = () => {
           </div>
         </div>
 
-        {/* 메뉴별 준비 상태 (카드 형식) */}
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-2xl font-medium mb-4">메뉴 준비 상태</h2>
+        {/* 메뉴별 준비 상태 (카드 형식) - 높이 최적화 */}
+        <div className="bg-white rounded-lg shadow p-4 mb-4">
+          <h2 className="text-xl font-medium mb-3">메뉴 준비 상태</h2>
           {sortedMenuItems.length > 0 ? (
-            <div className="overflow-x-auto pb-4">
-              <div className="flex space-x-4 min-w-max">
+            <div className="overflow-x-auto pb-2">
+              <div className="flex space-x-3 min-w-max">
                 {sortedMenuItems.map(item => (
                   <MenuItemCard 
                     key={item.id} 
