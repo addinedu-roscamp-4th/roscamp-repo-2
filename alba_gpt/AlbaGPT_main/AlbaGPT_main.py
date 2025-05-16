@@ -84,10 +84,10 @@ def alba_udp_thread(udp_stop_event, shared_dict, manager) :
                                            running_mode=VisionRunningMode.IMAGE)
     detector = vision.ObjectDetector.create_from_options(options)
 
-    # 서버 설정
+    # UDP 서버 설정
     UDP_IP = "0.0.0.0"
     UDP_PORT = 5000
-    BUFFER_SIZE = 65535  # 일반적인 UDP 최대 수신 버퍼 크기
+    BUFFER_SIZE = 65535
 
     # 소켓 설정
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
