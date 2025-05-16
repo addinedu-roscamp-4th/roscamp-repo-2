@@ -1,0 +1,62 @@
+prompt,result
+안녕 핑키!,GREETINGS
+좋은 아침이야 핑키!,GREETINGS
+핑키야 오늘 어때?,GREETINGS
+잘 지냈어 핑키?,GREETINGS
+하이 핑키!,GREETINGS
+핑키야 좋은 하루!,GREETINGS
+핑키야 힘내자!,GREETINGS
+오늘도 잘 부탁해 핑키!,GREETINGS
+오랜만이야 핑키!,GREETINGS
+핑키야 기분 좋아 보여!,GREETINGS
+핑키야 하이루~,GREETINGS
+오늘도 밝게 인사해줘 핑키!,GREETINGS
+좋은 하루 보내자 핑키!,GREETINGS
+핑키야 아자아자!,GREETINGS
+핑키야 오늘은 어때?,GREETINGS
+핑키야 웃어줘!,GREETINGS
+핑키야 반가워!,GREETINGS
+핑키야 오늘 파이팅!,GREETINGS
+핑키야 오늘도 화이팅!,GREETINGS
+핑키야 반갑습니다!,GREETINGS
+2번 핑키 지금 뭐가 보여?,TAKE_PICTURE
+1번 핑키 뭐가 보이는지 설명해,TAKE_PICTURE
+3번 핑키 카메라 켜서 뭐가 보이는지 말해줘,TAKE_PICTURE
+2번 핑키 주변 상황 보여줘,TAKE_PICTURE
+3번 핑키 시야를 공유해줘,TAKE_PICTURE
+4번 핑키 카메라로 현재 상태 알려줘,TAKE_PICTURE
+1번 핑키 화면 공유해줘,TAKE_PICTURE
+2번 핑키 주변 촬영해줘,TAKE_PICTURE
+3번 핑키 앞쪽 모습 보여줘,TAKE_PICTURE
+4번 핑키 테이블 상황 확인해줘,TAKE_PICTURE
+5번 핑키 카메라로 확인해줘,TAKE_PICTURE
+1번 핑키 주변 영상 보여줘,TAKE_PICTURE
+2번 핑키 카메라로 주변 알려줘,TAKE_PICTURE
+3번 핑키 1번 테이블 보여줘,TAKE_PICTURE
+4번 핑키 2번 테이블 상황 보여줘,TAKE_PICTURE
+5번 핑키 3번 테이블 상황 보여줘,TAKE_PICTURE
+1번 핑키 전방 촬영해줘,TAKE_PICTURE
+2번 핑키 실시간 화면 보여줘,TAKE_PICTURE
+3번 핑키 바로 앞 테이블 보여줘,TAKE_PICTURE
+4번 핑키 카메라 각도 조정해서 보여줘,TAKE_PICTURE
+2번 핑키 뭐 때문에 못 가고 있는거야?,TAKE_PICTURE
+1번 핑키 베터리가 부족해 보이는데,MAINTENANCE
+2번 핑키 베터리 충전하러 가,MAINTENANCE
+3번 핑키 배터리 잔량 얼마 안 남은 것 같아,MAINTENANCE
+4번 핑키 충전기 꽂고 와,MAINTENANCE
+5번 핑키 충전 좀 하고 와야겠어,MAINTENANCE
+6번 핑키 배터리 경고 떴어,MAINTENANCE
+7번 핑키 전원 꺼질 것 같아,MAINTENANCE
+8번 핑키 방전되기 전에 충전하자,MAINTENANCE
+9번 핑키 배터리 상태 확인해 줘,MAINTENANCE
+10번 핑키 충전 스테이션으로 가자,MAINTENANCE
+11번 핑키 전력 부족 알림 받았어,MAINTENANCE
+12번 핑키 전력 좀 채우자,MAINTENANCE
+13번 핑키 배터리 모드 전환해,MAINTENANCE
+14번 핑키 파워 세이브 모드 들어가,MAINTENANCE
+15번 핑키 전원 상태 좀 체크해 줘,MAINTENANCE
+16번 핑키 오늘 충전 안 했지?,MAINTENANCE
+17번 핑키 에너지 부족 메시지 떴어,MAINTENANCE
+18번 핑키 너무 오래 움직였어, 충전하자,MAINTENANCE
+19번 핑키 전원 꺼지기 전에 베이스로 돌아가,MAINTENANCE
+20번 핑키 충전소로 복귀해,MAINTENANCE
