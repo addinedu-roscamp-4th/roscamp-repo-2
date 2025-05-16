@@ -26,6 +26,7 @@ class Receiver(Node):
 
     def subscribe_obstacle_information(self, msg):
         self.get_logger().info(f"Received message : {msg.data}")
+        
 def main(args=None):
     rclpy.init(args=args)
     node=Receiver()

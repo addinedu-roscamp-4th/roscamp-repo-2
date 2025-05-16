@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'obstacle_receiver'
+package_name = 'albagpt_server'
 
 setup(
     name=package_name,
@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'receiver = obstacle_receiver.receiver:main',
+            'main_node = albagpt_server.main_node:main'
         ],
     },
 )
