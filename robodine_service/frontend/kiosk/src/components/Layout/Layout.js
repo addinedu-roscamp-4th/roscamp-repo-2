@@ -1,27 +1,43 @@
-import React from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import NotificationOverlay from '../Notification/NotificationOverlay';
+import NotificationOverlay from '../Notifications/NotificationOverlay';
 
-const Layout = ({ 
-  selectedCategory, 
-  onSelectCategory, 
-  notifications, 
-  onCloseNotification 
-}) => {
+const Layout = () => {
+  const [selectedCategory, setSelectedCategory] = useState('추천');
+  const [notifications, setNotifications] = useState([]);
+  const location = useLocation();
+
+  // 페이지 변경 시 알림 초기화
+  useEffect(() => {
+    setNotifications([]);
+  }, [location.pathname]);
+
+  // 알림 닫기 핸들러
+  const handleCloseNotification = (id) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+  };
+  
   return (
-    <div className="flex h-screen w-screen bg-[#F7F9FA] overflow-hidden">
+    <div className="flex h-screen bg-gray-100">
       <Sidebar 
         selectedCategory={selectedCategory} 
-        onSelectCategory={onSelectCategory} 
+        onSelectCategory={setSelectedCategory} 
       />
       
-      <main className="flex-1 overflow-auto relative">
-        <Outlet />
-        <NotificationOverlay
-          notifications={notifications}
-          onClose={onCloseNotification}
+      <main className="flex-grow flex flex-col relative">
+        {/* 알림 오버레이 */}
+        <NotificationOverlay 
+          notifications={notifications} 
+          onClose={handleCloseNotification} 
         />
+        
+        {/* 메인 컨텐츠 */}
+        <Outlet context={{ 
+          selectedCategory, 
+          onSelectCategory: setSelectedCategory,
+          setNotifications
+        }} />
       </main>
     </div>
   );

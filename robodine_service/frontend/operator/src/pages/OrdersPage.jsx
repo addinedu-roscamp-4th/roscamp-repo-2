@@ -87,7 +87,7 @@ const OrdersPage = () => {
         // console.log('수신된 주문 데이터:', newOrdersData);
   
         // 첫 로드 시 데이터 저장
-        if (!initialLoadDone) {
+        if (!initialLoadDone ) {
           // console.log('첫 로드: 데이터 전체 저장');
           ordersDataRef.current = newOrdersData;
           setInitialLoadDone(true);

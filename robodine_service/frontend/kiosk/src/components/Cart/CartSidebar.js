@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import NotificationOverlay from '../Notifications/NotificationOverlay';
 
 // 미니 장바구니 아이템 컴포넌트
 const MiniCartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
@@ -15,7 +16,7 @@ const MiniCartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
       {/* 이미지 */}
       <div className="w-28 h-28 bg-gray-100 rounded mr-5 overflow-hidden">
         <img
-          src={item.image_url}
+          src={item.image_url || item.image}
           alt={item.name}
           className="w-full h-full object-cover"
         />
@@ -60,6 +61,7 @@ const MiniCartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
 
 const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease }) => {
   const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
 
   // 가격 포맷
   const formattedTotalAmount = new Intl.NumberFormat('ko-KR', {
@@ -70,11 +72,35 @@ const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease 
 
   // 결제 페이지로 이동
   const handleCheckout = () => {
-    navigate('/checkout');
+    if (cartItems.length > 0) {
+      navigate('/checkout');
+    } else {
+      addNotification("장바구니가 비어 있습니다. 메뉴를 선택해주세요.");
+    }
+  };
+
+  // 알림 추가 함수
+  const addNotification = (message) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message }]);
+    
+    // 알림 제거 (5초 후)
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  // 알림 닫기 핸들러
+  const handleCloseNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   return (
     <div className="w-120 bg-white border-l border-gray-200 flex flex-col">
+      <NotificationOverlay 
+        notifications={notifications} 
+        onClose={handleCloseNotification} 
+      />
       <div className="p-6 border-b border-gray-200 bg-[#F7F3EE]">
         <h2 className="text-3xl font-bold">장바구니</h2>
       </div>
@@ -91,9 +117,20 @@ const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease 
               <MiniCartItem
                 key={item.id}
                 item={item}
-                onIncrease={onIncrease}
-                onDecrease={onDecrease}
-                onRemove={onRemove}
+                onIncrease={() => {
+                  onIncrease(item.id);
+                  addNotification(`${item.name} 수량이 증가했습니다.`);
+                }}
+                onDecrease={() => {
+                  onDecrease(item.id);
+                  if (item.quantity > 1) {
+                    addNotification(`${item.name} 수량이 감소했습니다.`);
+                  }
+                }}
+                onRemove={() => {
+                  onRemove(item.id);
+                  addNotification(`${item.name}이(가) 장바구니에서 제거되었습니다.`);
+                }}
               />
             ))}
           </div>

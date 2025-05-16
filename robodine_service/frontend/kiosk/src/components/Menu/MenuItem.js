@@ -18,7 +18,7 @@ const MenuCard = ({ item, onTap, onAdd }) => {
     >
       <div className="h-56 w-full flex items-center justify-center bg-gray-50">
         <img
-          src={item.image_url}
+          src={item.image_url || item.image}
           alt={item.name}
           className="h-full object-cover"
         />

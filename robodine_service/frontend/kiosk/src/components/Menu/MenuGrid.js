@@ -72,7 +72,7 @@ const MenuGrid = ({ items, onAddToCart, category }) => {
         <MenuDetailModal isOpen={isModalOpen} onClose={closeModal}>
           <div className="h-56 w-full flex items-center justify-center bg-gray-50">
             <img 
-              src={selectedItem.image_url} 
+              src={selectedItem.image_url || selectedItem.image} 
               alt={selectedItem.name} 
               className="h-full object-cover"
             />

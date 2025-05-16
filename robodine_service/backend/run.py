@@ -247,7 +247,8 @@ def serialize_orderitem(orderitem):
     return {
         "OrderItem.order_id": orderitem.order_id,
         "OrderItem.menu_item_id": orderitem.menu_item_id,
-        "OrderItem.quantity": orderitem.quantity
+        "OrderItem.quantity": orderitem.quantity,
+        "OrderItem.status": str(orderitem.status).replace('OrderStatus.', '') if orderitem.status else None,
     }
 
 def serialize_menuitem(menuitem):
@@ -553,7 +554,7 @@ async def broadcast_entity_update(entity_type, entity_id):
                                     else_=1
                                 ),
                                 Order.id.desc())
-                            .limit(20)
+                            # .limit(20)
                         ).all()
                         out['data'] = [serialize_order(order) for order in orders]
                     # # 주문 아이템 및 키오스크 단말기 정보 추가

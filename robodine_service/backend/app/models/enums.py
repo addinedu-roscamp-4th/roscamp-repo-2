@@ -71,6 +71,7 @@ class TableStatus(str, Enum):
 class OrderStatus(str, Enum):
     PLACED = "PLACED"
     PREPARING = "PREPARING"
+    COMPLETED = "COMPLETED"
     SERVED = "SERVED"
     CANCELLED = "CANCELLED"
 

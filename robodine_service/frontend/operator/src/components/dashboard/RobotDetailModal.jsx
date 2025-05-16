@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Send, RotateCw } from 'react-feather';
 
+
 const RobotDetailModal = ({ robot, onClose, batteryLevel }) => {
   const [commands, setCommands] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
