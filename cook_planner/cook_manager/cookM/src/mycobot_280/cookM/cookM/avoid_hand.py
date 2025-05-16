@@ -7,7 +7,7 @@ import numpy as np
 from ultralytics import YOLO
 from scipy.spatial.transform import Rotation as R
 import socket
-import struct
+from std_msgs.msg import Bool
 import time
 import threading
 import os
@@ -15,19 +15,15 @@ from ament_index_python.packages import get_package_share_directory
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-from mediapipe.framework.formats import landmark_pb2
 
 
 #불러올 거 불러오기
-pkg_path = get_package_share_directory('cookM')
-model_path = 'hand_landmarker.task'  # 실제 경로로 바꿔주세요
-recording = False
-writer = None
+model_path = os.path.join(get_package_share_directory('cookM'), 'hand_landmarker.task')
 
 BaseOptions = mp.tasks.BaseOptions
-HandLandmarker = mp.tasks.vision.HandLandmarker
-HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
-VisionRunningMode = mp.tasks.vision.RunningMode
+HandLandmarker = vision.HandLandmarker
+HandLandmarkerOptions = vision.HandLandmarkerOptions
+VisionRunningMode = vision.RunningMode
 
 options = HandLandmarkerOptions(
     base_options=BaseOptions(model_asset_path=model_path),
@@ -36,72 +32,76 @@ options = HandLandmarkerOptions(
 )
 
 
-THRESHOLD_SIZE = 0.4 # 손 크기 임계값
+THRESHOLD_SIZE = 0.4 # 손 크기 TH
 LANDMARK_COUNT_THRESHOLD = 12
 
 #노드만들어염
 class AvoidHandNode(Node):
     def __init__(self):
         super().__init__('avoid_hand_node')
-        self.frame_locks = {name: threading.Lock() for name in self.robot_ports}
+        
         self.robot_ports = {'robot48': 5000, 'robotb4': 5001}
-        pkg_path = get_package_share_directory('cookM')
+        self.frame = {name: None for name in self.robot_ports}
+        self.frame_lock = {name : threading.Lock() for name in self.robot_ports}
+        self.publishers = {}
 
+        self.landmarker = HandLandmarker.create_from_options(options)
+
+        for name in self.robot_ports:
+            topic_name = f'/{name}/hand_detected'
+            self.publishers[name] = self.create_publisher(Bool, topic_name , 10)
 
         for name, port in self.robot_ports.items():
-            t = threading.Thread(target=self.udp_loop, args=(name, port), daemon=True)
-            t.start()
-            self.get_logger().info(f"{name} 카메라 수신 스레드 시작됨 (port {port})")
-        self.srv = self.create_service(CookGPTsrv, 'CookGPTsrv', self.handle_request)
-        self.get_logger().info("CookGPT - Avoid Hand 노드 서비스 서버 대기 중...")
+            threading.Thread(target=self.udp_loop, args=(name, port), daemon=True)
+
+        self.timer = self.create_timer(1.0/30.0 , self.detect_and_publish)
+        self.get_logger().info("CookGPT - Avoid Hand 노드 토픽 서버 대기하는중~~~~~~")
 
 
     def udp_loop(self, robot_name, port):
-        camera_matrix, dist_coeffs = self.camera_params[robot_name]
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(('0.0.0.0', port))
         sock.settimeout(1.0)
         while True:
             try:
                 packet, _ = sock.recvfrom(65536)
-                if len(packet) <= 8:
-                    continue
                 jpeg_data = packet[8:]
-                npdata = np.frombuffer(jpeg_data, dtype=np.uint8)
-                self.frame = cv2.imdecode(npdata, cv2.IMREAD_COLOR)
-                if self.frame is None:
-                    continue
+                frame = cv2.imdecode(np.frombuffer(jpeg_data, np.uint8), cv2.IMREAD_COLOR)
+                if frame is not None:
+                    with self.frame_locks[robot_name]:
+                        self.frames[robot_name] = frame.copy()
             except socket.timeout:
                 continue
 
-    def handle_request(self, request, response):
-        robot_id = request.robot_id
+    def detect_and_publish(self):
+        for name in self.robot_ports:
+            with self.frame_locks[name]:
+                frame = self.frames[name]
+            if frame is None:
+                continue
 
-        with HandLandmarker.create_from_options(options) as landmarker:
-            rgb_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            result = landmarker.detect(mp_image)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data =rgb)
+            result = self.landmarker.detect(mp_image)
 
-            detection_flag = 0
-            response = detection_flag
+            detected = False
+            # 1. 손 크기 계산
+            if result.hand_landmarks:
+                for landmarks in result.hand_landmarks:
+                    xs = [lm.x for lm in landmarks]
+                    ys = [lm.y for lm in landmarks]
+                    width = max(xs) - min(xs)
+                    height = max(ys) - min(ys)
+                    if max(width, height) >= THRESHOLD_SIZE and len(landmarks) >= LANDMARK_COUNT_THRESHOLD:
+                        detected = True
+                        break
 
-        if result.hand_landmarks:
-            for landmarks in result.hand_landmarks:
-                # 1. 손 크기 계산
-                xs = [lm.x for lm in landmarks]
-                ys = [lm.y for lm in landmarks]
-                width = max(xs) - min(xs)
-                height = max(ys) - min(ys)
-                hand_size = max(width, height)
+            msg = Bool()
+            msg.data = detected
+            self.publishers[name].publish(msg)
+            self.get_logger().info(f"{name} 손 감지: {detected}")
 
-
-                if hand_size < THRESHOLD_SIZE:
-                    continue
-
-                if len(landmarks) >= LANDMARK_COUNT_THRESHOLD:
-                    detection_flag = 1
-                    response = detection_flag
-
-        return response
+# /robot48/hand_detected → std_msgs/Bool
+# /robotb4/hand_detected → std_msgs/Bool
 
 
