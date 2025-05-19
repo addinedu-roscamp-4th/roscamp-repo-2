@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1024</width>
+    <height>768</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>로봇 디버깅 도구</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1024</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>파일</string>
+    </property>
+    <addaction name="actionLoad_Configuration"/>
+    <addaction name="actionSave_Configuration"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuTool">
+    <property name="title">
+     <string>도구</string>
+    </property>
+    <addaction name="actionReset_Layout"/>
+    <addaction name="actionReset_Connection"/>
+    <addaction name="separator"/>
+    <addaction name="actionEmergency_Stop"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>보기</string>
+    </property>
+    <addaction name="actionDashboard"/>
+    <addaction name="actionJetcobot_Panel"/>
+    <addaction name="actionPinky_Panel"/>
+    <addaction name="separator"/>
+    <addaction name="actionLog_Viewer"/>
+    <addaction name="actionEvent_Timeline"/>
+   </widget>
+   <widget class="QMenu" name="menuPlugin">
+    <property name="title">
+     <string>플러그인</string>
+    </property>
+    <addaction name="actionLoad_Plugin"/>
+    <addaction name="actionManage_Plugins"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuView"/>
+   <addaction name="menuTool"/>
+   <addaction name="menuPlugin"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionReconnect"/>
+   <addaction name="actionEmergency_Stop"/>
+   <addaction name="separator"/>
+   <addaction name="actionLog_Level"/>
+  </widget>
+  <action name="actionLoad_Configuration">
+   <property name="text">
+    <string>설정 불러오기</string>
+   </property>
+  </action>
+  <action name="actionSave_Configuration">
+   <property name="text">
+    <string>설정 저장</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>종료</string>
+   </property>
+  </action>
+  <action name="actionReset_Layout">
+   <property name="text">
+    <string>레이아웃 초기화</string>
+   </property>
+  </action>
+  <action name="actionReset_Connection">
+   <property name="text">
+    <string>연결 초기화</string>
+   </property>
+  </action>
+  <action name="actionEmergency_Stop">
+   <property name="text">
+    <string>긴급 정지</string>
+   </property>
+   <property name="shortcut">
+    <string>F1</string>
+   </property>
+  </action>
+  <action name="actionDashboard">
+   <property name="text">
+    <string>대시보드</string>
+   </property>
+  </action>
+  <action name="actionJetcobot_Panel">
+   <property name="text">
+    <string>Jetcobot 패널</string>
+   </property>
+  </action>
+  <action name="actionPinky_Panel">
+   <property name="text">
+    <string>Pinky 패널</string>
+   </property>
+  </action>
+  <action name="actionLog_Viewer">
+   <property name="text">
+    <string>로그 뷰어</string>
+   </property>
+  </action>
+  <action name="actionEvent_Timeline">
+   <property name="text">
+    <string>이벤트 타임라인</string>
+   </property>
+  </action>
+  <action name="actionLoad_Plugin">
+   <property name="text">
+    <string>플러그인 로드</string>
+   </property>
+  </action>
+  <action name="actionManage_Plugins">
+   <property name="text">
+    <string>플러그인 관리</string>
+   </property>
+  </action>
+  <action name="actionReconnect">
+   <property name="text">
+    <string>재연결</string>
+   </property>
+  </action>
+  <action name="actionLog_Level">
+   <property name="text">
+    <string>로그 레벨</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui> 
