@@ -19,3 +19,4 @@ class Chat(SQLModel, table=True):
     robot_id: Optional[int] = Field(default=None, foreign_key="robot.id", index=True)
     robot_task: Optional[str] = Field(default=None)
     status: Optional[ChatStatus] = Field(default=ChatStatus.PENDING)
+    table_id: Optional[int] = Field(default=None)

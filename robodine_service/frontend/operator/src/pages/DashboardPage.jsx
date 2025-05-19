@@ -79,6 +79,16 @@ export default function DashboardPage() {
           y: pose['Pose6D.y'],
           z: pose['Pose6D.z']
         };
+
+        if (pose['Pose6D.entity_type'] == 'COOKBOT' && [pose['Pose6D.entity_id']] == 4) {
+          robot.position.x = 58;
+          robot.position.y = 57;
+          robot.position.z = 0;
+        } else if (pose['Pose6D.entity_type'] == 'COOKBOT' && [pose['Pose6D.entity_id']] == 5) {
+          robot.position.x = 58;
+          robot.position.y = 67;
+          robot.position.z = 0;
+        }
         // optional: latency 계산
         const ts = new Date(pose['Pose6D.timestamp']).getTime();
         setPoseLatencies(lat => ({ ...lat, [robot.id]: Date.now() - ts }));

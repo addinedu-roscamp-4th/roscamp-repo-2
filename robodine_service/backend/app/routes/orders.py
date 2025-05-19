@@ -89,11 +89,12 @@ class TodoOrderResponse(BaseModel):
 def get_todo_order(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)):
-    # 1) 대기 중인 주문중에 가장 먼저 생성된 주문을 조회합니다.
-    order = db.query(Order).order_by(Order.id).filter(Order.status == OrderStatus.PLACED).first()
+    # 1) 대기 중인 주문중에 가장 먼저 생성된 주문 중에 COMPLETED,SERVED,CANCELLED가 아닌 주문을 조회합니다.
+    order = db.query(Order).order_by(Order.id).filter(Order.status != OrderStatus.CANCELLED).filter(
+        Order.status != OrderStatus.SERVED).filter(Order.status != OrderStatus.COMPLETED).first()
     if not order:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            detail="대기 중인 주문이 없습니다.")
+                            detail="대기중인 주문이 없습니다.")
     # 2) 주문 항목을 조회합니다.
     items = db.query(OrderItem).filter(OrderItem.order_id == order.id).filter(OrderItem.status == OrderStatus.PLACED).all()
     if not items:

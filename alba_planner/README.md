@@ -4,19 +4,13 @@
 
 ## 📌 개요
 
-Alba Planner는 RoboDine 자동화 레스토랑의 서빙 로봇(Pinky)을 제어하는 핵심 시스템입니다. 고객 인식, 테이블 안내, 음식 서빙, 이동 경로 계획, 장애물 회피 등 서빙 로봇의 모든 기능을 담당하며 중앙 서버(RoboDine Service)와 TCP 통신을 통해 연동됩니다.
+Alba Planner는 RoboDine 자동화 레스토랑의 서빙 로봇(Pinky)을 제어하는 핵심 시스템입니다. 음식 서빙, 이동 경로 계획, 장애물 회피 등 서빙 로봇의 모든 기능을 담당하며 중앙 서버(RoboDine Service)와 TCP 통신을 통해 연동됩니다.
 
 <div align="center">
   <img src="../docs/images/pinky_robot.jpg" alt="Pinky 서빙 로봇" width="400"/>
 </div>
 
 ## ✨ 주요 기능
-
-### 🧭 고객 응대 및 안내
-- **고객 인식 및 인사**: 출입구에서 고객을 감지하고 인사말 재생
-- **테이블 안내**: 예약 정보 또는 빈 테이블로 고객 안내
-- **QR코드 안내**: 테이블별 QR코드 안내 및 메뉴 접근 지원
-- **대기 안내**: 만석 시 대기 시스템 안내
 
 ### 🍽️ 음식 서빙
 - **주문 수령**: 주방에서 조리 완료된 음식 수령
@@ -82,7 +76,6 @@ alba_planner/
 │   ├── path_planner.py      # 경로 계획 알고리즘
 │   ├── robot_state.py       # 로봇 상태 관리
 │   ├── speech_manager.py    # 음성 안내 관리
-│   ├── customer_detector.py # 고객 감지 모듈
 │   └── battery_monitor.py   # 배터리 모니터링
 ├── launch/
 │   └── alba_planner.launch.py  # ROS2 실행 파일

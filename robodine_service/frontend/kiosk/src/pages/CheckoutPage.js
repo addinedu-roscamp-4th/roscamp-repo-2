@@ -94,6 +94,7 @@ const CheckoutPage = () => {
       if (currentCustomer) {
         // 이미 테이블에 고객이 배정되어 있으면 해당 고객 ID 사용
         customerId = currentCustomer;
+        console.log('기존 고객 ID:', customerId);
       } else {
         // 새 고객 생성
         try {

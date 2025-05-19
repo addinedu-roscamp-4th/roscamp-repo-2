@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BASE_URL
-const KIOSK_ID = 1; // 예시로 KIOSK_ID를 1로 설정, 실제 값으로 변경 필요
+const KIOSK_ID = 1; // 키오스크 ID (예시로 1로 설정)
 
 // 새 주문 생성
 export const createOrder = async (orderData) => {
@@ -126,6 +126,19 @@ export const getAvailableTables = async () => {
     return response.data.filter(table => table.status === 'AVAILABLE');
   } catch (error) {
     console.error('사용 가능한 테이블 조회 중 오류 발생:', error);
+    throw error;
+  }
+};
+
+// 테이블 상태 업데이트
+export const updateTableStatus = async (tableId, status) => {
+  try {
+    const response = await axios.put(`${API_URL}/tables/${tableId}/status`, {
+      status: status
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`테이블 ${tableId} 상태 업데이트 중 오류 발생:`, error);
     throw error;
   }
 }; 
