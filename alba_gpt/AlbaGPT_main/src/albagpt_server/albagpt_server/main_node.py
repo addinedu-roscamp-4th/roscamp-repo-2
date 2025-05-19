@@ -33,7 +33,7 @@ class AlbaGPTNode(Node):
         self.latest_result_frame = {name: deque(maxlen=5) for name in self.alba_ports}
         self.frame_locks = {name: threading.Lock() for name in self.alba_ports} # 해당 쓰레드만 
         self.obstacle_info = {
-            name: {'type': "", 'name': ""} for name in self.alba_ports
+            name: {'type': "none", 'name': "none"} for name in self.alba_ports
         }
         self.fps_info = {
             name: {'cnt': 0, 'start_time': time.time(), 'fps': 0}
@@ -45,7 +45,6 @@ class AlbaGPTNode(Node):
             robot_id, port = id_port
             udp_server = threading.Thread(target=self.udp_server, args=(robot_id, port), daemon=True)
             udp_server.start()
-            self.get_logger().info(f"📡 {robot_id}:{port}의 카메라 수신 스레드 시작됨")
         
         tcp_thread = threading.Thread(target=self.tcp_server, daemon=True)
         tcp_thread.start()
@@ -87,7 +86,7 @@ class AlbaGPTNode(Node):
 
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_socket.bind((UDP_IP, UDP_PORT))
-        self.get_logger().info(f"🌐 {robot_id} || UDP Listening on {UDP_IP}:{UDP_PORT}")
+        self.get_logger().info(f"📡 {robot_id}:{port}의 카메라 수신 스레드 시작됨")
 
         while True:
             try:
@@ -97,38 +96,34 @@ class AlbaGPTNode(Node):
 
                 if decoded_frame is None:
                     continue
+                else :
+                    decoded_frame = cv2.resize(decoded_frame, (640, 480))
+                    
+                    info = self.fps_info[robot_id]
+                    info['cnt'] += 1
+                    elapsed = time.time() - info['start_time']
+                    if elapsed >= 1:
+                        info['fps'] = info['cnt']
+                        info['cnt'] = 0
+                        info['start_time'] = time.time()
 
-                decoded_frame = cv2.resize(decoded_frame, (640, 480))
-                
-                info = self.fps_info[robot_id]
-                info['cnt'] += 1
-                elapsed = time.time() - info['start_time']
-                if elapsed >= 1:
-                    info['fps'] = info['cnt']
-                    info['cnt'] = 0
-                    info['start_time'] = time.time()
+                    # np.array -> Mediapipe Image
+                    mediapipe_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=decoded_frame)
 
-                # np.array -> Mediapipe Image
-                mediapipe_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=decoded_frame)
+                    # 디텍션 수행
+                    results = detector.detect(mediapipe_image)
 
-                # 디텍션 수행
-                results = detector.detect(mediapipe_image)
+                    # 검출된 장애물의 종류를 구별해주기
+                    self.discriminate_obstacles(results, robot_id)
 
-                # 검출된 장애물의 종류를 구별해주기
-                self.discriminate_obstacles(results, robot_id)
+                    # 검출됭 동적 장애물에 대해 바운딩 박스, fps 그리기
+                    self.alba_draw_bbox(decoded_frame, results, info['fps'])
 
-                # 검출됭 동적 장애물에 대해 바운딩 박스, fps 그리기
-                self.alba_draw_bbox(decoded_frame, results, info['fps'])
+                    # 결과 이미지를 JPEG 형식으로 인코딩
+                    retval, encoded_bbox_image = cv2.imencode('.jpg', decoded_frame)
 
-                # 결과 출력
-                cv2.imshow(f"{robot_id} || {UDP_IP}:{UDP_PORT} Streaming...", decoded_frame)
-                cv2.waitKey(1)
-
-                # 결과 이미지를 JPEG 형식으로 인코딩
-                retval, encoded_bbox_image = cv2.imencode('.jpg', decoded_frame)
-
-                with self.frame_locks[robot_id]:
-                    self.latest_result_frame[robot_id].append(encoded_bbox_image)
+                    with self.frame_locks[robot_id]:
+                        self.latest_result_frame[robot_id].append(encoded_bbox_image)
 
             except socket.timeout:
                 continue
