@@ -3,6 +3,7 @@
 import logging
 import threading
 import socketserver
+import socket
 import json
 import asyncio
 from datetime import datetime
@@ -920,46 +921,74 @@ def recv_all(sock, count: int) -> bytes:
 
 # TCP 핸들러에서 웹소켓 브로드캐스트 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
+    def send_json(self, sock, obj: dict) -> None:
+        """4바이트 빅엔디안 헤더 + JSON 바디 프레이밍하여 전송"""
+        data = json.dumps(obj).encode('utf-8')
+        header = len(data).to_bytes(4, 'big')
+        sock.sendall(header + data)
+
     def handle(self):
+        # 1) 타임아웃 설정 (5초)
+        self.request.settimeout(5)
+
         try:
-            # 1) 헤더(4바이트) 읽어서 전체 길이 계산
+            # 2) 헤더(4바이트) 읽어서 전체 길이 계산
             raw_len = recv_all(self.request, 4)
             total_len = int.from_bytes(raw_len, byteorder='big')
-            logger.info(f"[TCP] Incoming payload length: {total_len} bytes")
-
-            # 2) 실제 페이로드(바디)만 읽기
+            
+            # 3) 실제 페이로드(바디)만 읽기
             body = recv_all(self.request, total_len)
-
-            # 3) JSON 파싱
             data = json.loads(body.decode('utf-8'))
-            logger.info(f"[TCP] Received JSON: {data}")
-
-            # 4) dispatch & DB 저장
+            
+            # 4) 내부 처리 및 DB 저장
             with Session(engine) as session:
                 result = dispatch_payload(session, data)
                 session.commit()
-                # 필요시 브로드캐스트
+                # 필요 시 이벤트 브로드캐스트
                 if isinstance(result, dict) and 'affected_entity' in result:
                     et = result['affected_entity']['type']
                     eid = result['affected_entity']['id']
-                    # main_loop는 run.py 에서 전역으로 설정된 asyncio loop
+                    # 메인 루프에 업데이트 호출 (전역 main_loop 사용)
                     main_loop.call_soon_threadsafe(
                         lambda: asyncio.create_task(broadcast_entity_update(et, eid))
                     )
-
-            response = "OK_JSON"
+            
+            # 5) 성공 응답
+            response_obj = {
+                "status": "success",
+                "message": "정보가 성공적으로 등록되었습니다."
+            }
+            self.send_json(self.request, response_obj)
 
         except json.JSONDecodeError as e:
-            logger.error(f"[TCP] JSON 디코딩 실패: {e}")
-            response = "ERROR_JSON"
+            # JSON 파싱 실패
+            error_obj = {
+                "status": "error",
+                "message": "JSON 디코딩 실패",
+                "error_code": "INVALID_PAYLOAD",
+                "details": str(e)
+            }
+            self.send_json(self.request, error_obj)
+
+        except socket.timeout as e:
+            # 타임아웃 발생
+            error_obj = {
+                "status": "error",
+                "message": "요청 처리 타임아웃",
+                "error_code": "TIMEOUT",
+                "details": "5초 동안 응답이 없어 타임아웃되었습니다."
+            }
+            self.send_json(self.request, error_obj)
 
         except Exception as e:
-            logger.error(f"[TCP] 처리 오류: {e}")
-            response = "ERROR"
-
-        # 5) 클라이언트에 응답
-        self.request.sendall(response.encode('utf-8'))
-        logger.info(f"[TCP] Sent response: {response}")
+            # 기타 서버 오류
+            error_obj = {
+                "status": "error",
+                "message": "서버 처리 중 오류 발생",
+                "error_code": "SERVER_ERROR",
+                "details": str(e)
+            }
+            self.send_json(self.request, error_obj)
 
 # Include routers - API path prefix for all endpoints
 API_PREFIX = "/api"

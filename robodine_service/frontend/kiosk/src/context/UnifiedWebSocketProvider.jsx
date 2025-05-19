@@ -167,7 +167,7 @@ const processOrderItemUpdates = useCallback(() => {
     const status = item['OrderItem.status'] || item.status;
     const menuId = item['OrderItem.menu_item_id'] || item.menu_item_id;
     const itemId = `${orderId}-${menuId}`; // itemId 생성 (orderId와 menuId의 조합)
-    console.log(`Processing item ${itemId} with status ${status}`);
+    // console.log(`Processing item ${itemId} with status ${status}`);
 
     // 메뉴 준비 시간 가져오기
     const menuItem = menu.find(m => m['MenuItem.id'] === menuId);
@@ -177,7 +177,7 @@ const processOrderItemUpdates = useCallback(() => {
 
     const prepareTime = menuItem ? menuItem['MenuItem.prepare_time'] : 0; // 준비 시간 (분 단위)
 
-    console.log(`Processing item ${itemId} with status ${status} and prepare time ${prepareTime}`);
+    // console.log(`Processing item ${itemId} with status ${status} and prepare time ${prepareTime}`);
 
     // 요리 중 상태일 때만 타이머가 없다면 새로 생성
     if ((status === 'PREPARING' || status === 'COOKING') && !timersRef.current[itemId]) {

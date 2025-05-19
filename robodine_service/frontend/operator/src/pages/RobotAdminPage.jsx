@@ -498,7 +498,7 @@ const RobotAdminPage = () => {
         parameters: parsedParams
       });
       
-      await apiCall(`/api/robots/commands/${currentRobot.id}/command`, 'POST', {
+      await apiCall(`/api/robots/command`, 'POST', {
         robot_id: currentRobot.id,
         command: currentCommand.command,
         parameters: parsedParams

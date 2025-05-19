@@ -49,6 +49,7 @@ class RobotStatus(str, Enum):
     ERROR = "ERROR"
     MAINTENANCE = "MAINTENANCE"
     CALLING = "CALLING"
+    BIRTHDAY = "BIRTHDAY"
 
 class CommandStatus(str, Enum):
     PENDING = "PENDING"

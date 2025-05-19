@@ -47,9 +47,9 @@ class RobotResponse(BaseModel):
     timestamp: datetime
 
 class CommandRequest(BaseModel):
-    robot_id: int
+    robot_id: Optional[int] = None
     command: str
-    parameters: dict
+    parameters: Optional[Dict[str, Any]] = {}
     status: Optional[CommandStatus] = CommandStatus.PENDING
 
 class CommandResponse(BaseModel):
@@ -215,26 +215,32 @@ def delete_robot(robot_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/commands/{robot_id}/command", response_model=CommandResponse)
-def send_command(robot_id: int, command_data: CommandRequest, db: Session = Depends(get_db)):
+@router.post("/command", response_model=CommandResponse)
+def send_command(command_data: CommandRequest, db: Session = Depends(get_db)):
     """로봇에 명령 전송"""
+
+    parameters = command_data.parameters or {}
+
     # 로봇 존재 여부 확인
-    robot = db.query(Robot).filter(Robot.robot_id == int(robot_id)).first()
-    if not robot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Robot with ID {robot_id} not found"
-        )
+    if not command_data.robot_id:
+        db_robot_id = None
+    else:
+        robot = db.query(Robot).filter(Robot.robot_id == int(command_data.robot_id)).first()
+        if not robot:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Robot with ID {command_data.robot_id} not found"
+            )
+        db_robot_id = robot.id
     
-    # 명령 파라미터 처리
-    parameters = command_data.parameters
-    
+        # 명령 파라미터 처리
+        
     # 새 명령 생성
     new_command = RobotCommand(
-        robot_id=robot.id,
+        robot_id=db_robot_id,
         command=command_data.command,
         parameters=parameters,
-        status=command_data.status,
+        status=CommandStatus.PENDING,
         timestamp=datetime.utcnow()
     )
     

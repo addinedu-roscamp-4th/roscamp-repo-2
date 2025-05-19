@@ -45,7 +45,7 @@ const HomePage = () => {
   // 카테고리 변경시 스크롤 처리
   const scrollToCategory = (category) => {
     if (categoryRefs.current[category] && contentRef.current) {
-      console.log(`카테고리 ${category}로 스크롤 시작`);
+      // console.log(`카테고리 ${category}로 스크롤 시작`);
       
       // 스크롤 중임을 표시
       setIsScrolling(true);
@@ -87,7 +87,7 @@ const HomePage = () => {
         
         scrollTimerRef.current = setTimeout(() => {
           cleanup();
-          console.log(`카테고리 ${category}로 스크롤 완료`);
+          // console.log(`카테고리 ${category}로 스크롤 완료`);
         }, 150);
       };
       
@@ -103,7 +103,7 @@ const HomePage = () => {
       // 안전장치: 최대 800ms 후에는 무조건 스크롤 플래그 해제
       setTimeout(() => {
         cleanup();
-        console.log(`카테고리 ${category}로 스크롤 타임아웃 완료`);
+        // console.log(`카테고리 ${category}로 스크롤 타임아웃 완료`);
       }, 800);
     }
   };
@@ -133,7 +133,7 @@ const HomePage = () => {
     if (scrollPosition <= 2) {
       const topCategory = categories[0];
       if (visibleCategory !== topCategory) {
-        console.log("맨 위로 스크롤: 첫 번째 카테고리로 설정", scrollPosition);
+        // console.log("맨 위로 스크롤: 첫 번째 카테고리로 설정", scrollPosition);
         setVisibleCategory(topCategory);
         setSelectedCategory(topCategory);
       }
@@ -147,7 +147,7 @@ const HomePage = () => {
       // 스크롤이 거의 끝에 도달했으면 마지막 카테고리로 설정
       const bottomCategory = categories[categories.length - 1];
       if (visibleCategory !== bottomCategory) {
-        console.log("맨 아래로 스크롤: 마지막 카테고리로 설정");
+        // console.log("맨 아래로 스크롤: 마지막 카테고리로 설정");
         setVisibleCategory(bottomCategory);
         setSelectedCategory(bottomCategory);
       }
@@ -200,7 +200,7 @@ const HomePage = () => {
     }
     
     if (visibleCategory !== currentCategory) {
-      console.log(`카테고리 변경: ${visibleCategory} -> ${currentCategory} (스크롤 위치: ${scrollPosition})`);
+      // console.log(`카테고리 변경: ${visibleCategory} -> ${currentCategory} (스크롤 위치: ${scrollPosition})`);
       setVisibleCategory(currentCategory);
       // 스크롤 중이 아닐 때만 사이드바 카테고리 업데이트
       setSelectedCategory(currentCategory);
@@ -284,7 +284,7 @@ const HomePage = () => {
         }
 
         if (menuItemsData.length === 0) {
-          console.log('메뉴 데이터를 찾을 수 없음');
+          // console.log('메뉴 데이터를 찾을 수 없음');
           return;
         }
 
@@ -392,7 +392,7 @@ const HomePage = () => {
     // 이미 같은 카테고리가 선택된 경우 재선택 방지
     if (category === selectedCategory) return;
     
-    console.log(`카테고리 선택: ${category}`);
+    // console.log(`카테고리 선택: ${category}`);
     
     // 스크롤 중일 때는 카테고리 변경을 지연시킴
     if (isScrolling) {

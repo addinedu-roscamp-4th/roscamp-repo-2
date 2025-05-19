@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
+
+const Base_API_URL = process.env.REACT_APP_BASE_URL
+
 
 // 직원 호출 모달 컴포넌트
 const StaffCallModal = ({ isOpen, onClose, onSelect }) => {
   if (!isOpen) return null;
 
   const callOptions = [
-    { id: 'help', label: '일반 도움요청', icon: '🙋‍♂️' },
-    { id: 'menu', label: '메뉴 문의', icon: '🍽️' },
-    { id: 'payment', label: '결제 도움', icon: '💳' },
-    { id: 'birthday', label: '생일 축하', icon: '🎂' },
-    { id: 'other', label: '기타 요청', icon: '❓' }
+    { id: 'HELP', label: '일반 도움요청', icon: '🙋‍♂️' },
+    { id: 'MENU', label: '메뉴 문의', icon: '🍽️' },
+    { id: 'PAYMENT', label: '결제 도움', icon: '💳' },
+    { id: 'BIRTHDAY', label: '생일 축하', icon: '🎂' },
+    { id: 'OTHER', label: '기타 요청', icon: '❓' }
   ];
 
   return (
@@ -135,11 +139,34 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
   };
   
   // 직원 호출 유형 선택 처리
-  const handleCallTypeSelect = (option) => {
+  const handleCallTypeSelect = async (option) => {
+    // 직원 호출 요청 처리
+    const robot_id = null;
+    try {
+      await axios.post(`${Base_API_URL}/robots/command`, {
+        command: option.id,
+        parameters: {
+          "table_id": 1
+        }
+      });
+    }
+    catch (error) {
+      console.error('직원 호출 요청 중 오류 발생:', error);
+      alert('직원 호출 요청에 실패했습니다. 다시 시도해주세요.');
+      return;
+    }
+
     setStaffCalled(true);
     closeStaffCallModal();
     alert(`${option.label} 요청이 전달되었습니다. 잠시만 기다려주세요.`);
     
+  // try {
+  //   const response = await axios.post(`${API_URL}/orders`, orderData);
+  //   return response.data;
+  // } catch (error) {
+  //   console.error('주문 생성 중 오류 발생:', error);
+  //   throw error;
+  // }
     // 실제 구현에서는 웹소켓이나 API를 통해 직원 호출 기능 구현
     // 호출 유형(option.id)과 함께 서버로 전송
     
