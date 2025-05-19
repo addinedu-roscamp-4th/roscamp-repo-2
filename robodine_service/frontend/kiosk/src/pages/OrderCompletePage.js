@@ -50,6 +50,23 @@ const OrderCompletePage = () => {
     minute: '2-digit',
     hour12: false
   }) : '-';
+
+  // 닫히는 시간 카운팅
+  const [countdown, setCountdown] = useState(10);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
+
+  // 카운트다운이 0이 되면 홈으로 이동
+  useEffect(() => {
+    if (countdown <= 0) {
+      navigate('/');
+    }
+  }, [countdown, navigate]);
   
   // 10초 후 홈으로 자동 이동
   useEffect(() => {
@@ -113,7 +130,7 @@ const OrderCompletePage = () => {
             </div>
           </div>
           
-          <p className="text-gray-500 mb-6">이 화면은 10초 후에 자동으로 닫힙니다.</p>
+          <p className="text-gray-500 mb-6">이 화면은 {countdown}초 후에 자동으로 닫힙니다.</p>
           
           <button 
             className="bg-[#C49E69] text-white px-6 py-3 rounded-md hover:bg-[#C49E00] transition-colors duration-200"
