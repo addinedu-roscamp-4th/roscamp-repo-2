@@ -7,6 +7,7 @@ import base64, uuid, os
 import json
 
 from app.models.robot import Robot
+from app.models.robot_command import RobotCommand
 from app.models.pose6d import Pose6D
 from app.models.jointangle import JointAngle
 from app.models.albabot import Albabot
@@ -15,7 +16,7 @@ from app.models.face_recognition import FaceRecognition
 from app.core.db_config import get_db
 from app.models.table import Table
 from app.models.chat import Chat
-from app.models.enums import TableStatus, ChatStatus
+from app.models.enums import TableStatus, TaskType, ChatStatus, RobotStatus, CommandStatus
 from app.core.config import IMAGES_DIR
 
 
@@ -47,7 +48,10 @@ def _handle_albabot(session: Session, data: Dict[str, Any]):
     # # 1) 기존 status를 그대로 가져오기
     # last_status = _get_last_status(session, robot_id, Albabot)
     # # 2) Robot 테이블에 status만 이전 값 그대로 추가해서 행 추가
-    # 
+    
+    # status와 battery_level이 있다면 상태 업데이트
+    
+
     session.add(Albabot(
         robot_id=robot_id,
         # status=last_status,
@@ -164,16 +168,29 @@ def _chatbot(session: Session, data: Dict[str, Any]):
         # -- 이미지 저장 --
         img_bytes = base64.b64decode(data["response_image"])
         fname     = f"{uuid.uuid4().hex}.png"
-        out_path  = os.path.join(IMAGES_DIR, fname)
+        out_path  = os.path.join(IMAGES_DIR, "chatbot", fname)
         with open(out_path, "wb") as wf:
             wf.write(img_bytes)
 
         # -- 텍스트 + 이미지 URL을 JSON 문자열로 answer에 저장 --
         answer_payload = {
             "text": data["response_text"],
-            "image": f"/images/{fname}"
+            "image": f"/images/chatbot/{fname}"
         }
         chat.answer = json.dumps(answer_payload, ensure_ascii=False)
+    elif data["robot_task"] == "MAINTENANCE":
+        # 로봇 명령 테이블에 명령어 추가
+        robot_command = RobotCommand(
+            robot_id=data["robot_id"],
+            command=RobotStatus.MAINTENANCE,
+            parameters={"duration": 30},
+            status=CommandStatus.PENDING,
+            timestamp=datetime.now()
+        )
+        session.add(robot_command)
+        session.commit()
+        session.refresh(robot_command)
+        chat.answer = data["response_text"]
     else:
         # 일반 텍스트 응답인 경우
         chat.answer = data["response_text"]

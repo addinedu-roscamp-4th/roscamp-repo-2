@@ -37,6 +37,7 @@ class OrderItem(SQLModel, table=True):
     order_id:     Optional[int] = Field(default=None, foreign_key="order.id", primary_key=True)
     menu_item_id: Optional[int] = Field(default=None, foreign_key="menuitem.id", primary_key=True)
     quantity:     Optional[int]
+    status:       Optional[OrderStatus] = Field(sa_column=Column(SQLEnum(OrderStatus)))
 
     # MenuItem.order_items 과 짝을 이루도록 back_populates="order_items"
     menu_item: Optional["MenuItem"] = Relationship(back_populates="order_items")

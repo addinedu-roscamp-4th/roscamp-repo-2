@@ -65,6 +65,7 @@ const OrdersPage = () => {
         // });
   
         // 데이터가 비어있는지 확인
+        // console.log('수신된 데이터:', data.orders);
         const isEmpty = 
           (!data.orders.orders || data.orders.orders.length === 0) &&
           (!data.orders.orderitems || data.orders.orderitems.length === 0) &&
@@ -86,7 +87,7 @@ const OrdersPage = () => {
         // console.log('수신된 주문 데이터:', newOrdersData);
   
         // 첫 로드 시 데이터 저장
-        if (!initialLoadDone) {
+        if (!initialLoadDone ) {
           // console.log('첫 로드: 데이터 전체 저장');
           ordersDataRef.current = newOrdersData;
           setInitialLoadDone(true);
@@ -542,7 +543,7 @@ const OrdersPage = () => {
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
-                  <tr>
+                  <tr key="order-list-header">
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       주문번호
                     </th>
@@ -660,7 +661,7 @@ const OrdersPage = () => {
                     <div className="bg-gray-50 rounded-lg p-4">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead>
-                          <tr>
+                          <tr key="order-detail-header">
                             <th className="pb-2 text-left text-sm font-semibold text-gray-500">메뉴 이름</th>
                             <th className="pb-2 text-center text-sm font-semibold text-gray-500">수량</th>
                             <th className="pb-2 text-right text-sm font-semibold text-gray-500">가격</th>
@@ -668,7 +669,7 @@ const OrdersPage = () => {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                           {selectedOrder.items.map((item, idx) => (
-                            <tr key={idx}>
+                            <tr key={`item-${item.id || idx}`}>
                               <td className="py-2 text-sm">{item.name}</td>
                               <td className="py-2 text-sm text-center">{item.quantity}개</td>
                               <td className="py-2 text-sm text-right">{formatPrice(item.price * item.quantity)}</td>
@@ -676,7 +677,7 @@ const OrdersPage = () => {
                           ))}
                           
                           {/* 총계 행 */}
-                          <tr className="border-t border-gray-300">
+                          <tr key="total-row" className="border-t border-gray-300">
                             <td className="py-2 text-sm font-bold">총계</td>
                             <td className="py-2 text-sm font-bold text-center">
                               {selectedOrder.totalQuantity}개

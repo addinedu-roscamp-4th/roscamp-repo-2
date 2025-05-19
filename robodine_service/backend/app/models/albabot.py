@@ -14,7 +14,7 @@ class Albabot(SQLModel, table=True):
     __tablename__ = "albabot"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    robot_id: Optional[str] = Field(default=None, index=True)
+    robot_id: Optional[int] = Field(default=None, index=True)
     status: Optional[RobotStatus] = Field(
         sa_column=Column(SQLEnum(RobotStatus, name="robot_status"))
     )

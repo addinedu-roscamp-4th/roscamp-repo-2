@@ -14,11 +14,30 @@ from app.routes.auth import get_current_user
 from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
+# 로거 설정 및 저장
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('inventory.log')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+# Create a directory for logs if it doesn't exist
+import os
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w') as f:
+        f.write("Inventory log file created.\n")
+    f.write("Log entries will be appended here.\n")
+    f.close()
 
 # --- Pydantic Schemas ---
 class OrderItemRequest(BaseModel):
     menu_item_id: int
     quantity: int
+    status: Optional[OrderStatus] = OrderStatus.PLACED
 
 class OrderCreateRequest(BaseModel):
     customer_id: int
@@ -29,6 +48,7 @@ class OrderCreateRequest(BaseModel):
 class OrderItemResponse(BaseModel):
     menu_item_id: int
     quantity: int
+    status: Optional[OrderStatus] = OrderStatus.PLACED
 
 class OrderResponse(BaseModel):
     id: int
@@ -75,7 +95,7 @@ def get_todo_order(
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="대기 중인 주문이 없습니다.")
     # 2) 주문 항목을 조회합니다.
-    items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+    items = db.query(OrderItem).filter(OrderItem.order_id == order.id).filter(OrderItem.status == OrderStatus.PLACED).all()
     if not items:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="주문 항목이 없습니다, 대기중인 주문 : %s" % order.id)
@@ -88,23 +108,10 @@ def get_todo_order(
     item_res = [
         TodoOrderResponse(
             order_id=order.id,
-            item_name=menu_item.name
+            item_name=menu_item.name,
         ) for item in items for menu_item in menu_items if item.menu_item_id == menu_item.id
     ]
-    # 5) 주문 상태를 업데이트합니다.
-    order.status = OrderStatus.PREPARING
-    db.add(order)
-    db.commit()
-    db.refresh(order)
-    # 6) 시스템 로그를 생성합니다.
-    log = SystemLog(
-        level=LogLevel.INFO,
-        message=f"주문이 준비 중으로 변경되었습니다. 주문 ID: {order.id}, 테이블: {order.table_id or '없음'}",
-        timestamp=datetime.utcnow()
-    )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
+
     # 7) 웹소켓 브로드캐스트 예약
     from run import broadcast_entity_update
     background_tasks.add_task(
@@ -123,18 +130,6 @@ def get_todo_order(
         order_id=order.id,
         item_name=item_res[0].item_name
     )
-
-@router.get("/todo_order_test", response_model=TodoOrderResponse)
-def get_todo_order_test(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)):
-
-    # 예시 데이터로
-    return TodoOrderResponse(
-        order_id=1,
-        item_name="salad"
-    )
-
 
 # 주문 목록 조회
 @router.get("", response_model=List[OrderListResponse])
@@ -235,7 +230,8 @@ def create_order(
         order_item = OrderItem(
             order_id=order.id,
             menu_item_id=menu_item_id,
-            quantity=quantity
+            quantity=quantity,
+            status=OrderStatus.PLACED
         )
         
         db.add(order_item)
@@ -277,7 +273,7 @@ def update_order_status(
         raise HTTPException(status_code=400, detail="Status is required")
         
     new_status = status_data["status"].upper()
-    valid_statuses = ["PLACED", "PREPARING", "SERVED", "CANCELLED"]
+    valid_statuses = OrderStatus.__members__.keys()
     
     if new_status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
@@ -303,6 +299,19 @@ def update_order_status(
         f"주문 {order_id} 상태 변경: {old_status} → {new_status}",
         background_tasks
     )
+
+    # 취소일시 주문 항목도 취소
+    if new_status == "CANCELLED":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.CANCELLED
+            db.add(item)
+            db.commit()
+        # Log order item cancellation
+        log_info(db,
+            f"주문 항목 {order_id} 취소됨",
+            background_tasks
+        )
 
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
@@ -392,4 +401,148 @@ def assign_robot_to_order(
     return {
         "status": "success",
         "message": f"Robot {robot_id} assigned to order {order_id}"
+    }
+
+#OrderItem의 상태 업데이트
+@router.put("/{order_id}/items/{item_id}/status", response_model=dict)
+def update_order_item_status(
+    order_id: int,
+    item_id: int,
+    status_data: OrderStatusUpdateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    # Validate input
+    if status_data is None:
+        raise HTTPException(status_code=400, detail="Status is required")
+        
+    new_status = status_data.status.upper()
+    valid_statuses = OrderStatus.__members__.keys()
+    
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
+    
+    # Find order item
+    order_item = db.query(OrderItem).filter(
+        OrderItem.order_id == order_id,
+        OrderItem.menu_item_id == item_id
+    ).first()
+    
+    if not order_item:
+        raise HTTPException(status_code=404, detail=f"Order item with ID {item_id} not found in order {order_id}")
+    
+    # Update status
+    old_status = order_item.status
+    order_item.status = OrderStatus(new_status)
+    
+    db.add(order_item)
+    db.commit()
+
+    # 준비중으로 변경시, 주문 상태도 변경
+    if new_status == "PREPARING":
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order:
+            order.status = OrderStatus.PREPARING
+            db.add(order)
+            db.commit()
+            # Log order status change
+            log_info(db,
+                f"주문 {order_id} 상태 변경: {old_status} → {new_status}",
+                background_tasks
+            )
+    
+    # 모든 주문 항목이 완료 상태일시 주문 상태 변경
+    order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    all_prepared = all(item.status == OrderStatus.SERVED for item in order_items)
+    if all_prepared:
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order:
+            order.status = OrderStatus.SERVED
+            db.add(order)
+            db.commit()
+            # Log order status change
+            log_info(db,
+                f"주문 {order_id} 상태 변경: {old_status} → {new_status}",
+                background_tasks
+            )
+
+    #모든 주문 항목이 취소 상태일시 주문 상태 변경
+    all_cancelled = all(item.status == OrderStatus.CANCELLED for item in order_items)
+    if all_cancelled:
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order:
+            order.status = OrderStatus.CANCELLED
+            db.add(order)
+            db.commit()
+            # Log order status change
+            log_info(db,
+                f"주문 {order_id} 상태 변경: {old_status} → {new_status}",
+                background_tasks
+            )
+
+    
+    # Log status change
+    log_info(db, 
+        f"주문 항목 {item_id} 상태 변경: {old_status} → {new_status}",
+        background_tasks
+    )
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "order",
+        None
+    )
+    
+    return {
+        "status": "success",
+        "message": f"Order item status updated to {new_status}"
+    }
+
+# 주문 전체 취소
+@router.put("/cancel_order/{customer_id}", response_model=dict)
+def cancel_order(
+    customer_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    # Find order
+    order = db.query(Order).filter(Order.customer_id == customer_id).all()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Order with customer ID {customer_id} not found")
+
+    # 주문 항목 취소
+    for o in order:
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == o.id).all()
+        for item in order_items:
+            item.status = OrderStatus.CANCELLED
+            db.add(item)
+            db.commit()
+
+        # 주문 취소
+        o.status = OrderStatus.CANCELLED
+        db.add(o)
+        db.commit()
+        # Log order cancellation
+        log_info(db, 
+            f"주문 {o.id} 취소됨",
+            background_tasks
+        )
+    # Log cancellation
+    log_info(db, 
+        f"주문 {customer_id} 취소됨",
+        background_tasks
+    )
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    from run import broadcast_entity_update
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "order",
+        None
+    )
+    return {
+        "status": "success",
+        "message": f"Order with customer ID {customer_id} cancelled"
     }

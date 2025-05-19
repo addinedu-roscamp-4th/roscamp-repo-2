@@ -11,15 +11,16 @@ const THEMES = {
 };
 
 // 기본 설정값
+const savedSettings = localStorage.getItem('chatSettings');
 const DEFAULT_SETTINGS = {
   theme: THEMES.SYSTEM,
   fontSize: 14,
-  chatWidth: localStorage.getItem('chatWidth') ? parseInt(localStorage.getItem('chatWidth')) : 350,
-  chatHeight: localStorage.getItem('chatHeight') ? parseInt(localStorage.getItem('chatHeight')) : 500,
+  chatWidth: 350,
+  chatHeight: 500,
   primaryColor: '#007bff',
   backgroundColor: '#ffffff',
   messageColor: '#f0f0f0',
-  fontFamily: 'system-ui, -apple-system, sans-serif'
+  fontFamily: 'system-ui, -apple-system, sans-serif',
 };
 
 const FloatingChat = () => {
@@ -80,10 +81,6 @@ const FloatingChat = () => {
     localStorage.setItem('chatPosition', JSON.stringify(position));
   }, [position]);
 
-  useEffect(() => {
-    localStorage.setItem('chatSettings', JSON.stringify(settings));
-  }, [settings]);
-
   // 테마 적용
   useEffect(() => {
     const root = document.documentElement;
@@ -94,6 +91,13 @@ const FloatingChat = () => {
       root.setAttribute('data-theme', settings.theme);
     }
   }, [settings.theme]);
+
+  // 설정 상태가 변경될 때마다 localStorage에 저장
+  useEffect(() => {
+    if (settings) {
+      localStorage.setItem('chatSettings', JSON.stringify(settings));
+    }
+  }, [settings]);
 
   // 메시지 로드
   const loadMessages = async (pageNum = 1, search = '') => {
@@ -136,7 +140,7 @@ const FloatingChat = () => {
 
   // 드래그 시작 핸들러
   const handleMouseDown = (e) => {
-    if (e.target.className.includes('drag-handle') || 
+    if (e.target.className.includes('drag-handle')   || 
         e.target.className.includes('chat-button') ||
         e.target.className.includes('chat-icon')) {
       setIsDragging(true);
@@ -145,7 +149,9 @@ const FloatingChat = () => {
         y: e.clientY - position.y
       };
       e.preventDefault();
-    } else if (e.target.className.includes('resize-handle')) {
+    } else if (e.target.className.includes('resize-handle') || 
+              (e.target === resizeRef.current)) {
+      // console.log('▶ 리사이즈 시작');    // <-- 여기를 반드시 찍도록
       setIsResizing(true);
       resizeStartPos.current = {
         width: settings.chatWidth,
@@ -170,10 +176,6 @@ const FloatingChat = () => {
         chatWidth: newWidth,
         chatHeight: newHeight
       }));
-
-      // 크기 변경 시 localStorage에 저장
-      localStorage.setItem('chatWidth', newWidth.toString());
-      localStorage.setItem('chatHeight', newHeight.toString());
     }
   };
 
@@ -214,46 +216,59 @@ const FloatingChat = () => {
     setMessages(mergedMessages);
   }, [data.chat, optimisticMessages]);
 
-  // 드래그 중 핸들러
-  const handleMouseMove = (e) => {
-    if (isDragging) {
-      const newX = e.clientX - dragStartPos.current.x;
-      const newY = e.clientY - dragStartPos.current.y;
-      const maxX = window.innerWidth - 80;
-      const maxY = window.innerHeight - 80;
-      setPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
-    }
-  };
-
-  // 드래그 종료 핸들러
-  const handleMouseUp = (e) => {
-    if (isDragging) {
-      setIsDragging(false);
-      const deltaX = Math.abs(e.clientX - (position.x + dragStartPos.current.x));
-      const deltaY = Math.abs(e.clientY - (position.y + dragStartPos.current.y));
-      if (deltaX < 5 && deltaY < 5 && !isOpen && 
-         (e.target.className.includes('chat-button') || e.target.className.includes('chat-icon'))) {
-        handleChatOpen();
+  useEffect(() => {
+    const handleMouseMoveGlobal = (e) => {
+      if (isDragging) {
+        // 기존 drag 로직
+        const newX = e.clientX - dragStartPos.current.x;
+        const newY = e.clientY - dragStartPos.current.y;
+        setPosition({
+          x: Math.max(0, Math.min(newX, window.innerWidth - 80)),
+          y: Math.max(0, Math.min(newY, window.innerHeight - 80))
+        });
       }
-    }
-  };
+      if (isResizing) {
+        // handleResize 호출
+        const deltaX = e.clientX - resizeStartPos.current.x;
+        const deltaY = e.clientY - resizeStartPos.current.y;
+        const newWidth = Math.max(300,
+          Math.min(resizeStartPos.current.width + deltaX, window.innerWidth - position.x)
+        );
+        const newHeight = Math.max(400,
+          Math.min(resizeStartPos.current.height + deltaY, window.innerHeight - position.y)
+        );
+        setSettings(prev => ({
+          ...prev,
+          chatWidth: newWidth,
+          chatHeight: newHeight
+        }));
+      }
+    };
+  
+    const handleMouseUpGlobal = () => {
+      if (isDragging) {
+        setIsDragging(false);
+      }
+      if (isResizing) {
+        setIsResizing(false);
+        // ✏️ 리사이즈가 끝난 직후 최신 settings 를 저장
+        console.log('저장 할 세팅 : ', settings);
+      }
+    };
+  
+    document.addEventListener('mousemove', handleMouseMoveGlobal);
+    document.addEventListener('mouseup', handleMouseUpGlobal);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMoveGlobal);
+      document.removeEventListener('mouseup', handleMouseUpGlobal);
+    };
+  }, [isDragging, isResizing, settings, position.x, position.y]);
+  
 
   // 채팅창 열기 핸들러
   const handleChatOpen = () => {
     setIsOpen(true);
   };
-
-  useEffect(() => {
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging]);
 
   // 채팅창 토글
   const toggleChat = (e) => {
@@ -275,6 +290,7 @@ const FloatingChat = () => {
         id: `pending-${now.getTime()}`,
         status: 'pending' // 상태 추가
       };
+      
       setOptimisticMessages(prev => [...prev, optimisticMsg]);
       setInputMessage('');
       await apiCall('/api/chat/send', 'POST', { message: inputMessage });
@@ -385,6 +401,15 @@ const FloatingChat = () => {
  
     return null;
   };
+
+  // 채팅창 열릴 때 스크롤 내리기
+  useEffect(() => {
+    if (isOpen && chatContainerRef.current) {
+      setTimeout(() => {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }, 0); // 또는 requestAnimationFrame 사용 가능
+    }
+  }, [isOpen]);
  
 
   // 새 메시지가 추가될 때만 스크롤 내리기
@@ -760,12 +785,27 @@ const FloatingChat = () => {
               </button>
             </div>
 
-            <div className="resize-handle" ref={resizeRef}></div>
+            <div 
+              className="resize-handle" 
+              ref={resizeRef} 
+              onMouseDown={(e) => {
+                // console.log('▶ 리사이즈 핸들 직접 클릭');
+                setIsResizing(true);
+                resizeStartPos.current = {
+                  width: settings.chatWidth,
+                  height: settings.chatHeight,
+                  x: e.clientX,
+                  y: e.clientY
+                };
+                e.preventDefault();
+              }}
+              title="크기 조절"
+            ></div>
           </>
         ) : (
-          <button className="chat-button">
-            <span className="chat-icon">💬</span>
-          </button>
+          <button className="chat-button" onClick={toggleChat}>
+          <span className="chat-icon">💬</span>
+        </button>
         )}
       </div>
 
@@ -869,4 +909,4 @@ const FloatingChat = () => {
   );
 };
 
-export default FloatingChat; 
+export default FloatingChat;

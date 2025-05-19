@@ -126,46 +126,27 @@ export const AuthProvider = ({ children }) => {
   // API 호출 함수
   const apiCall = async (url, method = 'GET', data = null) => {
     const token = localStorage.getItem('token');
-    
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    
+    const headers = {};
+    if (!(data instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    
-    const config = {
-      method,
-      headers
-    };
-    
-    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-      config.body = JSON.stringify(data);
+
+    const config = { method, headers };
+    if (data && ['POST', 'PUT', 'PATCH'].includes(method)) {
+      config.body = data instanceof FormData ? data : JSON.stringify(data);
     }
-    
+
+    const fullUrl = `${API_BASE_URL}${url}`;
     try {
-      const fullUrl = `${API_BASE_URL}${url}`;
-      console.log(`API call ${method}:`, fullUrl);
-      
       const response = await fetch(fullUrl, config);
-      
-      if (response.status === 401) {
-        // Token expired or invalid
-        logout();
-        throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-      }
-      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || '요청 처리 중 오류가 발생했습니다.');
+        if (response.status === 401) logout();
+        throw response;
       }
-      
-      // For 204 No Content responses
-      if (response.status === 204) {
-        return null;
-      }
-      
+      if (response.status === 204) return null;
       return await response.json();
     } catch (error) {
       console.error(`API call error (${url}):`, error);
@@ -173,21 +154,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const value = {
-    currentUser,
-    isAuthenticated,
-    isLoading,
-    login,
-    logout,
-    apiCall
-  };
-  
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = { currentUser, isAuthenticated, isLoading, login, logout, apiCall };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export default AuthContext; 
+export default AuthContext;

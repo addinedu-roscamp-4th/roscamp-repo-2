@@ -13,6 +13,25 @@ from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
 
+# 로거 설정 및 저장
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('inventory.log')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+# Create a directory for logs if it doesn't exist
+import os
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w') as f:
+        f.write("Inventory log file created.\n")
+    f.write("Log entries will be appended here.\n")
+    f.close()
+
 # --- Robot Models ---
 class RobotRegisterRequest(BaseModel):
     robot_id: int
@@ -28,9 +47,9 @@ class RobotResponse(BaseModel):
     timestamp: datetime
 
 class CommandRequest(BaseModel):
-    robot_id: int
+    robot_id: Optional[int] = None
     command: str
-    parameters: dict
+    parameters: Optional[Dict[str, Any]] = {}
     status: Optional[CommandStatus] = CommandStatus.PENDING
 
 class CommandResponse(BaseModel):
@@ -90,7 +109,7 @@ def get_all_commands(db: Session = Depends(get_db)):
 @router.post("/register", response_model=dict)
 def register_robot(robot_data: RobotRegisterRequest, db: Session = Depends(get_db)):
     # Check if robot already exists
-    existing_robot = db.query(Robot).filter(Robot.robot_id == str(robot_data.robot_id)).first()
+    existing_robot = db.query(Robot).filter(Robot.robot_id == int(robot_data.robot_id)).first()
     
     if existing_robot:
         # Update existing robot
@@ -102,7 +121,8 @@ def register_robot(robot_data: RobotRegisterRequest, db: Session = Depends(get_d
     else:
         # Create new robot
         new_robot = Robot(
-            robot_id=str(robot_data.robot_id),
+            id = robot_data.robot_id,
+            robot_id=robot_data.robot_id,
             type=robot_data.robot_type,
             mac_address=robot_data.mac_address,
             ip_address=robot_data.ip_address,
@@ -133,7 +153,7 @@ def get_robots(db: Session = Depends(get_db)):
 
 @router.get("/{robot_id}", response_model=RobotResponse)
 def get_robot(robot_id: int, db: Session = Depends(get_db)):
-    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
+    robot = db.query(Robot).filter(Robot.robot_id == int(robot_id)).first()
     
     if not robot:
         raise HTTPException(
@@ -151,7 +171,7 @@ def get_robot(robot_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{robot_id}", response_model=RobotResponse)
 def update_robot(robot_id: int, robot_data: RobotRegisterRequest, db: Session = Depends(get_db)):
-    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
+    robot = db.query(Robot).filter(Robot.robot_id == int(robot_id)).first()
     
     if not robot:
         raise HTTPException(
@@ -178,7 +198,7 @@ def update_robot(robot_id: int, robot_data: RobotRegisterRequest, db: Session = 
 
 @router.delete("/{robot_id}", response_model=dict)
 def delete_robot(robot_id: int, db: Session = Depends(get_db)):
-    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
+    robot = db.query(Robot).filter(Robot.robot_id == int(robot_id)).first()
     
     if not robot:
         raise HTTPException(
@@ -195,26 +215,32 @@ def delete_robot(robot_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/commands/{robot_id}/command", response_model=CommandResponse)
-def send_command(robot_id: int, command_data: CommandRequest, db: Session = Depends(get_db)):
+@router.post("/command", response_model=CommandResponse)
+def send_command(command_data: CommandRequest, db: Session = Depends(get_db)):
     """로봇에 명령 전송"""
+
+    parameters = command_data.parameters or {}
+
     # 로봇 존재 여부 확인
-    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
-    if not robot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Robot with ID {robot_id} not found"
-        )
+    if not command_data.robot_id:
+        db_robot_id = None
+    else:
+        robot = db.query(Robot).filter(Robot.robot_id == int(command_data.robot_id)).first()
+        if not robot:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Robot with ID {command_data.robot_id} not found"
+            )
+        db_robot_id = robot.id
     
-    # 명령 파라미터 처리
-    parameters = command_data.parameters
-    
+        # 명령 파라미터 처리
+        
     # 새 명령 생성
     new_command = RobotCommand(
-        robot_id=robot.id,
+        robot_id=db_robot_id,
         command=command_data.command,
         parameters=parameters,
-        status=command_data.status,
+        status=CommandStatus.PENDING,
         timestamp=datetime.utcnow()
     )
     
@@ -253,7 +279,7 @@ def update_command_status(command_id: int, status_data: CommandStatusRequest, db
 @router.get("/commands/{robot_id}", response_model=List[CommandListResponse])
 def get_commands(robot_id: int, db: Session = Depends(get_db)):
     # Check if robot exists
-    robot = db.query(Robot).filter(Robot.robot_id == str(robot_id)).first()
+    robot = db.query(Robot).filter(Robot.robot_id == int(robot_id)).first()
     if not robot:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -287,7 +313,7 @@ def update_command(command_id: int, command_data: CommandRequest, db: Session = 
             )
         
         # 로봇 존재 여부 확인
-        robot = db.query(Robot).filter(Robot.robot_id == str(command_data.robot_id)).first()
+        robot = db.query(Robot).filter(Robot.robot_id == int(command_data.robot_id)).first()
         if not robot:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

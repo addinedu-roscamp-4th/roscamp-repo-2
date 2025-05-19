@@ -12,7 +12,30 @@ from app.models import User
 from app.routes.auth import get_current_user
 from app.routes.events import log_info, log_warning, log_error
 
+
 router = APIRouter()
+
+# 로거 설정 및 저장
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('inventory.log')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+# Create a directory for logs if it doesn't exist
+import os
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w') as f:
+        f.write("Inventory log file created.\n")
+    f.write("Log entries will be appended here.\n")
+    f.close()
+
+# Define the InventoryResponse and InventoryCreateRequest models
+
 
 class InventoryResponse(BaseModel):
     ingredient_id: int
@@ -78,7 +101,7 @@ def create_inventory(
         )
     
     # Create new inventory item
-    max_count = inventory_data.get("max_count", 100)
+    max_count = inventory_data.get("max_count", 10)
     count = inventory_data.get("count", 0)
     
     # Determine status based on count and max_count
@@ -152,12 +175,13 @@ def update_inventory(
     
     if "max_count" in inventory_data:
         inventory.max_count = inventory_data["max_count"]
-    
+    threshold = db.query(AdminSettings).first().inventory_threshold
+
     # Recalculate status based on new values
     if inventory.count <= 0:
         inventory.status = InventoryStatus.OUT_OF_STOCK
         log_warning(db, f"재고 소진: {inventory.name} (ID: {inventory_id})", background_tasks)
-    elif inventory.count < inventory.max_count * 0.2:  # Less than 20% of max
+    elif inventory.count / inventory.max_count * 100 < threshold:
         inventory.status = InventoryStatus.LOW_STOCK
         log_warning(db, f"재고 부족: {inventory.name} (남은 수량: {inventory.count})", background_tasks)
     else:
@@ -215,6 +239,12 @@ def delete_inventory(inventory_id: int,
     )
     db.add(log)
     db.commit()
+
+    ingredient = db.query(MenuIngredient).filter(MenuIngredient.id == inventory.ingredient_id).first()
+    if ingredient:
+        # Delete the ingredient if it exists
+        db.delete(ingredient)
+        db.commit()
         
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
@@ -268,65 +298,65 @@ def update_inventory_endpoint(
         "inventory": inv,
     }
 
-# 재료 항목 업데이트
-@router.post("/update_menu_ingredient")
-def update_menu_ingredient(
-    ingredient_data: MenuIgredientData,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)):
+# # 재료 항목 업데이트
+# @router.post("/update_menu_ingredient")
+# def update_menu_ingredient(
+#     ingredient_data: MenuIgredientData,
+#     background_tasks: BackgroundTasks,
+#     db: Session = Depends(get_db)):
 
-    # Check if ingredient already exists in the database
-    ingredient = db.query(MenuIngredient).filter(MenuIngredient.id == ingredient_data.id).first()
+#     # Check if ingredient already exists in the database
+#     ingredient = db.query(MenuIngredient).filter(MenuIngredient.id == ingredient_data.id).first()
     
-    if ingredient:
-        # Update only the fields that are provided
-        for key, value in ingredient_data.dict(exclude_unset=True).items():
-            if value is not None:
-                setattr(ingredient, key, value)
-    else:
-        # Create a new ingredient with the provided fields
-        ingredient = MenuIngredient(**ingredient_data.dict(exclude_unset=True))
+#     if ingredient:
+#         # Update only the fields that are provided
+#         for key, value in ingredient_data.dict(exclude_unset=True).items():
+#             if value is not None:
+#                 setattr(ingredient, key, value)
+#     else:
+#         # Create a new ingredient with the provided fields
+#         ingredient = MenuIngredient(**ingredient_data.dict(exclude_unset=True))
     
-    db.add(ingredient)
-    db.commit()
+#     db.add(ingredient)
+#     db.commit()
 
-    from run import broadcast_entity_update
-    # REST API 호출 시 웹소켓 브로드캐스트 트리거
-    background_tasks.add_task(
-        broadcast_entity_update,
-        "inventory",
-        None
-    )
+#     from run import broadcast_entity_update
+#     # REST API 호출 시 웹소켓 브로드캐스트 트리거
+#     background_tasks.add_task(
+#         broadcast_entity_update,
+#         "inventory",
+#         None
+#     )
     
-    return {"message": "Ingredient data processed successfully!"}
+#     return {"message": "Ingredient data processed successfully!"}
 
-# 메뉴 항목 업데이트
-@router.post("/update_menu_item")
-def update_menu_item(
-    menu_item_data: MenuItemData,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)):
-    # Check if menu item already exists in the database
-    menu_item = db.query(MenuItem).filter(MenuItem.id == menu_item_data.id).first()
+# # 메뉴 항목 업데이트
+# @router.post("/update_menu_item")
+# def update_menu_item(
+#     menu_item_data: MenuItemData,
+#     background_tasks: BackgroundTasks,
+#     db: Session = Depends(get_db)):
+#     # Check if menu item already exists in the database
+#     menu_item = db.query(MenuItem).filter(MenuItem.id == menu_item_data.id).first()
     
-    if menu_item:
-        # Update only the fields that are provided
-        for key, value in menu_item_data.dict(exclude_unset=True).items():
-            if value is not None:
-                setattr(menu_item, key, value)
-    else:
-        # Create a new menu item with the provided fields
-        menu_item = MenuItem(**menu_item_data.dict(exclude_unset=True))
+#     if menu_item:
+#         # Update only the fields that are provided
+#         for key, value in menu_item_data.dict(exclude_unset=True).items():
+#             if value is not None:
+#                 setattr(menu_item, key, value)
+#     else:
+#         # Create a new menu item with the provided fields
+#         menu_item = MenuItem(**menu_item_data.dict(exclude_unset=True))
     
-    db.add(menu_item)
-    db.commit()
+#     db.add(menu_item)
+#     db.commit()
 
-    from run import broadcast_entity_update
-    # REST API 호출 시 웹소켓 브로드캐스트 트리거
-    background_tasks.add_task(
-        broadcast_entity_update,
-        "inventory",
-        None
-    )
+#     from run import broadcast_entity_update
+#     # REST API 호출 시 웹소켓 브로드캐스트 트리거
+#     background_tasks.add_task(
+#         broadcast_entity_update,
+#         "inventory",
+#         None
+#     )
     
-    return {"message": "Menu data processed successfully!"}
+#     return {"message": "Menu data processed successfully!"}

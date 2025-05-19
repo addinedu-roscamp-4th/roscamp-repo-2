@@ -5,6 +5,7 @@ import { Server, Battery, Clock, AlertTriangle, PlusCircle, CheckCircle } from '
 
 const RobotStatusPanel = ({ robots = [], error, isLoading, className = ''}) => {
   const [expandedRobot, setExpandedRobot] = useState(null);
+  
 
   const getStatusText = (status) => {
     switch (status?.toUpperCase()) {
