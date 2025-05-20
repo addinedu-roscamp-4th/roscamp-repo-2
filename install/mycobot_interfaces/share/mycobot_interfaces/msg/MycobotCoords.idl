@@ -1,0 +1,22 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from mycobot_interfaces/msg/MycobotCoords.msg
+// generated code does not contain a copyright notice
+
+
+module mycobot_interfaces {
+  module msg {
+    struct MycobotCoords {
+      float x;
+
+      float y;
+
+      float z;
+
+      float rx;
+
+      float ry;
+
+      float rz;
+    };
+  };
+};

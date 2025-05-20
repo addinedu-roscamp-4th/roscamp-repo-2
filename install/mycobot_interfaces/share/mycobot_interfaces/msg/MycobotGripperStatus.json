@@ -1,0 +1,26 @@
+{
+  "type_description_msg": {
+    "type_description": {
+      "type_name": "mycobot_interfaces/msg/MycobotGripperStatus",
+      "fields": [
+        {
+          "name": "status",
+          "type": {
+            "type_id": 15,
+            "capacity": 0,
+            "string_capacity": 0,
+            "nested_type_name": ""
+          },
+          "default_value": ""
+        }
+      ]
+    },
+    "referenced_type_descriptions": []
+  },
+  "type_hashes": [
+    {
+      "type_name": "mycobot_interfaces/msg/MycobotGripperStatus",
+      "hash_string": "RIHS01_94b1431b9f6b1b26298bb34caca7094ec2afd6c5834845db9ae7ba8083c89fbb"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from robodine_msgs/msg/RobotStatus.msg
+// generated code does not contain a copyright notice
+
+#include "builtin_interfaces/msg/Time.idl"
+#include "geometry_msgs/msg/Pose.idl"
+
+module robodine_msgs {
+  module msg {
+    @verbatim (language="comment", text=
+      "RobotStatus.msg")
+    struct RobotStatus {
+      int32 id;
+
+      string type;
+
+      string status;
+
+      geometry_msgs::msg::Pose position;
+
+      float battery_level;
+
+      builtin_interfaces::msg::Time timestamp;
+    };
+  };
+};
