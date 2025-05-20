@@ -1,4 +1,4 @@
-# 📁 cookM/planning/avoidance.py
+# 📁 cookmanager/planning/avoidance.py
 from mycobot_interfaces.msg import MycobotCoords
 from copy import deepcopy
 import numpy as np

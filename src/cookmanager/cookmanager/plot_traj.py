@@ -197,7 +197,7 @@ def interpolate_quintic_with_timing(coords_list, sampling_time=0.05, segment_dur
 
 
 # === Main Script ===
-package_name = 'cookM'
+package_name = 'cookmanager'
 trajectory_names = ['grip_dish_L', 'grip_dish_R']
 
 pkg_path = get_package_share_directory(package_name)

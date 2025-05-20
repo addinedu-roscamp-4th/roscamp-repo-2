@@ -3,7 +3,7 @@ from setuptools import setup, find_packages, __version__ as setuptools_version
 from packaging.version import Version
 from glob import glob
 
-package_name = 'cookM'
+package_name = 'cookmanager'
 
 # 检查 setuptools 版本
 use_dash_separated_options = Version(setuptools_version) < Version("58.0.0")
@@ -29,16 +29,16 @@ with open("setup.cfg", "w") as f:
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=[]),  # 🔹 cookM 하위 모듈 자동 포함
+    packages=find_packages(exclude=[]),  # 🔹 cookmanager 하위 모듈 자동 포함
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         # 🔹 리소스 파일 등록
         (os.path.join('share', package_name), [
-            'cookM/trajectories.yaml',
-            'cookM/calibration_refined4.npz',
-            'cookM/calibration_aa48.npz',
-            'cookM/best.pt'
+            'cookmanager/trajectories.yaml',
+            'cookmanager/calibration_refined4.npz',
+            'cookmanager/calibration_aa48.npz',
+            'cookmanager/best.pt'
         ]),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*')),
@@ -53,12 +53,12 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'pose_broadcaster = cookM.nodes.pose_broadcaster:main',
-            'tcp_interface = cookM.tcp_interface:main',
-            'cookgpt = cookM.cookgpt:main',
-            'cook_comp_test = cookM.cook_comp_test:main',
-            'unit_test = cookM.unit_test:main',
-            'gripper_distance_node = cookM.gripper_distance_node:main',
+            'pose_broadcaster = cookmanager.nodes.pose_broadcaster:main',
+            'tcp_interface = cookmanager.tcp_interface:main',
+            'cookgpt = cookmanager.cookgpt:main',
+            'cook_comp_test = cookmanager.cook_comp_test:main',
+            'unit_test = cookmanager.unit_test:main',
+            'gripper_distance_node = cookmanager.gripper_distance_node:main',
         ],
     },
 )

@@ -3,9 +3,9 @@ from rclpy.node import Node
 from std_msgs.msg import String, Float32
 from mycobot_interfaces.srv import CookGPTsrv
 from mycobot_interfaces.msg import MycobotCoords, RobodineCoords
-from cookM.utils.transform_utils import pose6d_to_homogeneous, homogeneous_to_pose6d
-from cookM.planning.interpolator import interpolate_linear, interpolate_catmull_rom, interpolate_quintic_with_timing
-from cookM.planning.avoidance import is_too_close, compute_avoidance_pose
+from cookmanager.utils.transform_utils import pose6d_to_homogeneous, homogeneous_to_pose6d
+from cookmanager.planning.interpolator import interpolate_linear, interpolate_catmull_rom, interpolate_quintic_with_timing
+from cookmanager.planning.avoidance import is_too_close, compute_avoidance_pose
 import yaml, time, threading, os, sys
 from ament_index_python.packages import get_package_share_directory
 from rclpy.executors import MultiThreadedExecutor
@@ -40,7 +40,7 @@ class PoseBroadcaster(Node):
 
 
     def load_trajectory(self):
-        pkg_path = get_package_share_directory('cookM')
+        pkg_path = get_package_share_directory('cookmanager')
         yaml_path = os.path.join(pkg_path, 'trajectories.yaml')
         with open(yaml_path, 'r') as f:
             return yaml.safe_load(f)

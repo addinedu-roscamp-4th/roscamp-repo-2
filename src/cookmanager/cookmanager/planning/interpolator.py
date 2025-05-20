@@ -1,4 +1,4 @@
-# 📁 cookM/planning/interpolator.py
+# 📁 cookmanager/planning/interpolator.py
 from mycobot_interfaces.msg import MycobotCoords
 from scipy.interpolate import CubicSpline
 import numpy as np
