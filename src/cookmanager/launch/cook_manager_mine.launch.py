@@ -11,13 +11,13 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True
         ),
-        # Node(
-        #     package='cookmanager',
-        #     executable='tcp_interface',
-        #     name='tcp_interface',
-        #     output='screen',
-        #     emulate_tty=True
-        # ),
+        Node(
+            package='cookmanager',
+            executable='tcp_interface',
+            name='tcp_interface',
+            output='screen',
+            emulate_tty=True
+        ),
         Node(
             package='cookmanager',
             executable='cookgpt',

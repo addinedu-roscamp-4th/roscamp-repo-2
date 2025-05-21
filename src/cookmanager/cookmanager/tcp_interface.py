@@ -33,7 +33,7 @@ class TCPInterface(Node):
         # self.create_timer(0.1, self.publish_next_menu_item)  # 0.1초마다 처리
         # 주기적으로 TCP 전송 (1초 간격)
         self.timer = self.create_timer(1.0, lambda: self.send_data_to_server(self.cookbot_state))
-        self.create_timer(1.0, self.get_menu)
+        self.create_timer(5.0, self.get_menu)
 
         # TCP 수신 스레드 시작
         # threading.Thread(target=self.tcp_listener, daemon=True).start()

@@ -23,10 +23,9 @@ class PoseBroadcaster(Node):
         self.cook_sign = False
         self.emergency_flag = False
 
-        # self.timer = self.create_timer(3.0, self.timer_callback)  
+        self.timer = self.create_timer(3.0, self.timer_callback)  
         self.cook_state_check = self.create_publisher(String, '/cook_state', 10)
         self.distance_pub = self.create_publisher(Float32, '/distance', 10)
-        self.create_subscription(String,'/menu_item', self.menu_callback, 10)
 
         for ns in self.robot_list:
             self.create_subscription(Bool, f'{ns}/hand_detected', self.emergency_stop(ns), 10)
@@ -53,30 +52,6 @@ class PoseBroadcaster(Node):
             self.latest_coords[ns] = msg
         return callback
     
-    def menu_callback(self, msg):
-        command = msg.data
-        if command == 'pasta':
-            self.menu = 0
-            self.cook_sign = True
-        elif command == 'steak':
-            self.menu = 1
-            self.cook_sign = True
-        elif command == '샐러드':
-            self.menu = 2
-            self.cook_sign = True
-        elif command == 'salad':
-            self.menu = 2
-            self.cook_sign = True
-        elif command == 'dongas':
-            self.menu = 3
-            self.cook_sign = True
-        else:
-            self.cook_sign = False
-            return 
-        
-        if self.cook_sign:
-            self.cook_motion_planning(self.menu)    
-
     def emergency_stop(self, ns):   
         def callback(msg):
             self.emergency_flag[ns] = msg
@@ -87,7 +62,7 @@ class PoseBroadcaster(Node):
 
         self.timer.cancel()  # ✅ 한 번만 실행하고 멈추게 함
 
-        self.cook_motion_planning(2)
+        self.cook_motion_planning()
 
     def synchronized_execute(self, sampling_time, grip_timing, release_timing):
         robot_ids = list(self.trajectories.keys())
@@ -156,7 +131,7 @@ class PoseBroadcaster(Node):
                 other_pose = MycobotCoords(x=mx, y=my, z=mz, rx=mrx, ry=mry, rz=mrz)
                 # self.get_logger().warn(f"b4의 좌표: {other_pose} // 48의 좌표: {pose}")
 
-                if is_too_close(pose, other_pose, robot_id, 300, distance_publisher=self.distance_pub):
+                if is_too_close(pose, other_pose, robot_id, 10, distance_publisher=self.distance_pub):
                     self.get_logger().warn(f"[{robot_id}] 충돌 위험 감지! 회피 기동 중")
                     avoid_pose = compute_avoidance_pose(pose, other_pose,robot_id, avoid_dist=30)
 
@@ -214,14 +189,12 @@ class PoseBroadcaster(Node):
 
         self.get_logger().info(f"✅ {robot_id}의 {trajectory_name} 완료")
 
-    def cook_motion_planning(self, menu):
-        menu = self.menu
+    def cook_motion_planning(self):
+
         self.cook_sign = False
         
-        if menu == 2:
-        
-            self.get_logger().info("setting 드갑니다") # sync
-            self.cook_state_check.publish(String(data='SETTING'))
+        # self.get_logger().info("setting 드갑니다") # sync
+        # self.cook_state_check.publish(String(data='SETTING'))
 
         # for robot_id, traj_name in [('robot48', 'grip_dish_L'), ('robotb4', 'grip_dish_R')]:
         #     raw_list = self.traj_dict[traj_name]
@@ -236,30 +209,18 @@ class PoseBroadcaster(Node):
         
         
         # time.sleep(1.0)
-        # self.get_logger().info("salad 드갑니다") # thread
-        # self.cook_state_check.publish(String(data='COOKING'))
+        self.get_logger().info("salad 드갑니다") # thread
+        self.cook_state_check.publish(String(data='COOKING'))
 
-        # for robot_id in self.robot_list:
-        #             req = CookGPTsrv.Request()
-        #             req.command = 2
-        #             req.robot_id = robot_id
+        threads = []
+        threads = [
+            threading.Thread(target=self.execute_trajectory, args=('robot48', 'grip_ingredient_L', 200, 3, 4.8, 0.3, True)),
+            threading.Thread(target=self.execute_trajectory, args=('robotb4', 'grip_ingredient_R', 200, 3, 4.8, 0.3, True))
+        ]
+        for t in threads: t.start()
+        for t in threads: t.join()
 
-        #             self.get_logger().info(f"📡 {robot_id} pose 요청")
-        #             future = self.cli.call_async(req)
-
-        #             # ✅ 비동기 콜백 등록
-        #             future.add_done_callback(lambda fut, rid=robot_id: self.on_pose_response(fut, rid))
-
-        # time.sleep(2.0)
-        # threads = []
-        # threads = [
-        #     threading.Thread(target=self.execute_trajectory, args=('robot48', 'grip_ingredient_L', 200, 3, 4.8, 0.3, True)),
-        #     threading.Thread(target=self.execute_trajectory, args=('robotb4', 'grip_ingredient_R', 200, 3, 4.8, 0.3, True))
-        # ]
-        # for t in threads: t.start()
-        # for t in threads: t.join()
-
-        # time.sleep(1.0)
+        time.sleep(1.0)
         # self.get_logger().info("sauce 드갑니다") # thread
         
         # threads = []
