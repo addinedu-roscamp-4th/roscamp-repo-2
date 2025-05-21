@@ -255,36 +255,29 @@ const HomePage = () => {
     // });
 
     // 로딩 상태 업데이트
-    if ((connected.menu && data.menu) || (connected.orders && data.orders?.menuitems)) {
+    if (connected.menu && data.menu) {
       setIsLoading(false);
     }
 
     // 메뉴 데이터 추출 및 처리
     const processMenuData = () => {
       try {
-        // 메뉴 데이터 소스 결정
+        // 메뉴 데이터 소스 결정 - 오직 menu 토픽만 사용
         let menuItemsData = [];
         let categoryItems = [];
 
         // menu 토픽에서 데이터 확인
-        if (data.menu && data.menu.items && Array.isArray(data.menu.items)) {
+        if (connected.menu && 
+            data.menu && 
+            Array.isArray(data.menu.items) && 
+            data.menu.items.length > 0) {
           menuItemsData = data.menu.items;
           
           if (data.menu.categories && Array.isArray(data.menu.categories)) {
             categoryItems = data.menu.categories;
           }
-        } 
-        // orders 토픽에서 데이터 확인
-        else if (data.orders && data.orders.menuitems && Array.isArray(data.orders.menuitems)) {
-          menuItemsData = data.orders.menuitems;
-          
-          if (data.orders.categories && Array.isArray(data.orders.categories)) {
-            categoryItems = data.orders.categories;
-          }
-        }
-
-        if (menuItemsData.length === 0) {
-          // console.log('메뉴 데이터를 찾을 수 없음');
+        } else {
+          // menu 토픽 데이터가 없거나 비어있으면 더 이상 처리하지 않음
           return;
         }
 
@@ -348,13 +341,10 @@ const HomePage = () => {
     };
 
     // 메뉴 데이터가 있는 경우 처리
-    if (
-      (data.menu && (data.menu.items || data.menu.menuitems)) || 
-      (data.orders && data.orders.menuitems)
-    ) {
+    if (connected.menu && data.menu) {
       processMenuData();
     }
-  }, [data.menu, data.orders, connected.menu, connected.orders, refreshTopic]);
+  }, [data.menu, connected.menu, refreshTopic]);
 
   // 초기 마운트 시 카테고리 초기화
   useEffect(() => {
@@ -381,10 +371,30 @@ const HomePage = () => {
   };
 
   // 장바구니에 아이템 추가
-  const handleAddToCart = (item) => {
-    addToCart(item);
+  const handleAddToCart = (item, quantity = 1) => {
+    if (!item || !item.id) {
+      console.error('장바구니에 추가할 아이템이 유효하지 않습니다:', item);
+      return;
+    }
+    
+    // 유효한 수량 확인
+    const validQuantity = Math.max(1, parseInt(quantity) || 1);
+    
+    // 필요한 정보만 포함한 객체 생성
+    const itemToAdd = {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      image_url: item.image_url || item.image,
+      description: item.description || '',
+      prepare_time: item.prepare_time || 0
+    };
+    
+    // 장바구니에 추가
+    addToCart(itemToAdd, validQuantity);
+    
     // 성공 알림 추가
-    addNotification(`${item.name}이(가) 장바구니에 추가되었습니다.`);
+    addNotification(`${itemToAdd.name}이(가) 장바구니에 추가되었습니다.`);
   };
 
   // 카테고리 선택 처리

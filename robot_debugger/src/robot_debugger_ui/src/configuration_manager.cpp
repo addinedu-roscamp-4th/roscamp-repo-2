@@ -1,147 +1,223 @@
 #include "robot_debugger_ui/configuration_manager.hpp"
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QStandardPaths>
+#include <QDebug>
 
 namespace robot_debugger_ui {
 
-ConfigurationManager::ConfigurationManager(const std::string& config_path, QObject* parent)
-    : QObject(parent)
-    , config_path_(config_path)
+ConfigurationManager::ConfigurationManager()
+    : QObject(nullptr)
+    , settings_(nullptr)
+    , log_level_(1) // 기본값: INFO
 {
-    // 기본 설정 파일 경로 설정
-    if (config_path_.empty()) {
-        QString config_dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-        QDir().mkpath(config_dir); // 디렉토리가 없으면 생성
-        config_path_ = (config_dir + "/config.ini").toStdString();
+    // 애플리케이션 설정 파일 위치 설정
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(configPath);
+    
+    // 디렉토리가 없으면 생성
+    if (!dir.exists()) {
+        dir.mkpath(".");
     }
     
-    // 설정 객체 초기화
-    settings_ = std::make_unique<QSettings>(QString::fromStdString(config_path_), QSettings::IniFormat);
+    settings_ = new QSettings(configPath + "/robot_debugger_ui.conf", QSettings::IniFormat);
     
-    // 설정 로드
-    loadConfiguration();
+    // 기본 설정 초기화
+    initDefaults();
+    
+    // 기존 설정 로드
+    loadFromFile("");
 }
 
-ConfigurationManager::~ConfigurationManager() = default;
-
-bool ConfigurationManager::loadConfiguration()
+ConfigurationManager::~ConfigurationManager()
 {
+    // 설정 저장
+    saveToFile("");
+    
+    if (settings_) {
+        delete settings_;
+        settings_ = nullptr;
+    }
+}
+
+void ConfigurationManager::initDefaults()
+{
+    // 기본 도메인 패턴: 기본 ROS 2 도메인 ID(0)
+    domain_patterns_ = {0};
+    
+    // 기본 네임스페이스 패턴: Jetcobot 및 Pinky 관련 네임스페이스
+    namespace_patterns_ = {"jetcobot_1", "jetcobot_2", "pinky_1", "pinky_2", "pinky_3"};
+    
+    // 기본 로그 레벨: INFO
+    log_level_ = 1;
+}
+
+bool ConfigurationManager::loadFromFile(const std::string& filename)
+{
+    if (!settings_) {
+        return false;
+    }
+    
+    // 파일 이름이 지정되면 해당 파일 사용, 그렇지 않으면 기본 설정 파일 사용
+    QSettings* settingsToUse = settings_;
+    QSettings* tempSettings = nullptr;
+    
+    if (!filename.empty()) {
+        tempSettings = new QSettings(QString::fromStdString(filename), QSettings::IniFormat);
+        settingsToUse = tempSettings;
+    }
+    
     // 도메인 패턴 로드
-    QVariant domains_variant = settings_->value("Domains/Patterns");
-    if (domains_variant.isValid()) {
-        QStringList domains_str_list = domains_variant.toStringList();
-        domain_patterns_.clear();
-        for (const QString& domain_str : domains_str_list) {
-            bool ok = false;
-            int domain_id = domain_str.toInt(&ok);
-            if (ok) {
-                domain_patterns_.push_back(domain_id);
-            }
-        }
-    } else {
-        // 기본 도메인 패턴
-        domain_patterns_ = {10, 20};
+    int domainCount = settingsToUse->beginReadArray("DomainPatterns");
+    domain_patterns_.clear();
+    for (int i = 0; i < domainCount; ++i) {
+        settingsToUse->setArrayIndex(i);
+        domain_patterns_.push_back(settingsToUse->value("domain").toInt());
+    }
+    settingsToUse->endArray();
+    
+    // 도메인이 비어있다면 기본값 설정
+    if (domain_patterns_.empty()) {
+        domain_patterns_ = {0};
     }
     
     // 네임스페이스 패턴 로드
-    QVariant namespaces_variant = settings_->value("Namespaces/Patterns");
-    if (namespaces_variant.isValid()) {
-        QStringList namespaces_str_list = namespaces_variant.toStringList();
-        namespace_patterns_.clear();
-        for (const QString& ns_str : namespaces_str_list) {
-            namespace_patterns_.push_back(ns_str.toStdString());
-        }
-    } else {
-        // 기본 네임스페이스 패턴
+    int nsCount = settingsToUse->beginReadArray("NamespacePatterns");
+    namespace_patterns_.clear();
+    for (int i = 0; i < nsCount; ++i) {
+        settingsToUse->setArrayIndex(i);
+        namespace_patterns_.push_back(
+            settingsToUse->value("namespace").toString().toStdString());
+    }
+    settingsToUse->endArray();
+    
+    // 네임스페이스가 비어있다면 기본값 설정
+    if (namespace_patterns_.empty()) {
         namespace_patterns_ = {"jetcobot_1", "jetcobot_2", "pinky_1", "pinky_2", "pinky_3"};
     }
     
-    // QoS 설정 로드
-    settings_->beginGroup("QoS");
-    QStringList topics = settings_->childGroups();
-    for (const QString& topic : topics) {
-        settings_->beginGroup(topic);
+    // 토픽 설정 로드
+    int topicCount = settingsToUse->beginReadArray("TopicConfigurations");
+    topic_configs_.clear();
+    for (int i = 0; i < topicCount; ++i) {
+        settingsToUse->setArrayIndex(i);
         
-        QosConfiguration qos;
-        qos.reliability = static_cast<QosConfiguration::Reliability>(
-            settings_->value("Reliability", static_cast<int>(QosConfiguration::Reliability::RELIABLE)).toInt());
-        qos.durability = static_cast<QosConfiguration::Durability>(
-            settings_->value("Durability", static_cast<int>(QosConfiguration::Durability::VOLATILE)).toInt());
-        qos.history_depth = settings_->value("HistoryDepth", 10).toInt();
-        qos.timeout_ms = settings_->value("TimeoutMs", 1000).toInt();
+        std::string topic_name = settingsToUse->value("topic").toString().toStdString();
+        bool enabled = settingsToUse->value("enabled").toBool();
         
-        topic_qos_settings_[topic.toStdString()] = qos;
+        QVariantMap qos;
+        qos["reliability"] = settingsToUse->value("reliability").toString();
+        qos["durability"] = settingsToUse->value("durability").toString();
+        qos["history_depth"] = settingsToUse->value("history_depth").toInt();
+        qos["timeout_ms"] = settingsToUse->value("timeout_ms").toInt();
         
-        settings_->endGroup();
+        QVariantMap topicConfig;
+        topicConfig["enabled"] = enabled;
+        topicConfig["qos"] = qos;
+        
+        topic_configs_[topic_name] = topicConfig;
     }
-    settings_->endGroup();
+    settingsToUse->endArray();
     
-    // 로그 설정 로드
-    settings_->beginGroup("Log");
-    log_config_.default_level = static_cast<LogConfiguration::LogLevel>(
-        settings_->value("DefaultLevel", static_cast<int>(LogConfiguration::LogLevel::INFO)).toInt());
-    log_config_.max_entries = settings_->value("MaxEntries", 1000).toInt();
-    log_config_.save_to_file = settings_->value("SaveToFile", false).toBool();
-    log_config_.log_file_path = settings_->value("LogFilePath", "").toString().toStdString();
-    settings_->endGroup();
+    // 레이아웃 설정 로드
+    int layoutCount = settingsToUse->beginReadArray("Layouts");
+    layouts_.clear();
+    for (int i = 0; i < layoutCount; ++i) {
+        settingsToUse->setArrayIndex(i);
+        
+        std::string window_name = settingsToUse->value("window").toString().toStdString();
+        QByteArray layout = settingsToUse->value("layout").toByteArray();
+        
+        layouts_[window_name] = layout;
+    }
+    settingsToUse->endArray();
     
-    // 설정 변경 알림
+    // 로그 레벨 로드
+    log_level_ = settingsToUse->value("LogLevel", 1).toInt();
+    
+    // 임시 설정 객체 정리
+    if (tempSettings) {
+        delete tempSettings;
+    }
+    
+    // 설정 변경 시그널 발생
     emit configurationChanged();
     
     return true;
 }
 
-bool ConfigurationManager::saveConfiguration()
+bool ConfigurationManager::saveToFile(const std::string& filename)
 {
-    // 도메인 패턴 저장
-    QStringList domains_str_list;
-    for (int domain_id : domain_patterns_) {
-        domains_str_list.append(QString::number(domain_id));
+    if (!settings_) {
+        return false;
     }
-    settings_->setValue("Domains/Patterns", domains_str_list);
+    
+    // 파일 이름이 지정되면 해당 파일 사용, 그렇지 않으면 기본 설정 파일 사용
+    QSettings* settingsToUse = settings_;
+    QSettings* tempSettings = nullptr;
+    
+    if (!filename.empty()) {
+        tempSettings = new QSettings(QString::fromStdString(filename), QSettings::IniFormat);
+        settingsToUse = tempSettings;
+    }
+    
+    // 도메인 패턴 저장
+    settingsToUse->beginWriteArray("DomainPatterns", static_cast<int>(domain_patterns_.size()));
+    for (size_t i = 0; i < domain_patterns_.size(); ++i) {
+        settingsToUse->setArrayIndex(static_cast<int>(i));
+        settingsToUse->setValue("domain", domain_patterns_[i]);
+    }
+    settingsToUse->endArray();
     
     // 네임스페이스 패턴 저장
-    QStringList namespaces_str_list;
-    for (const std::string& ns : namespace_patterns_) {
-        namespaces_str_list.append(QString::fromStdString(ns));
+    settingsToUse->beginWriteArray("NamespacePatterns", static_cast<int>(namespace_patterns_.size()));
+    for (size_t i = 0; i < namespace_patterns_.size(); ++i) {
+        settingsToUse->setArrayIndex(static_cast<int>(i));
+        settingsToUse->setValue("namespace", QString::fromStdString(namespace_patterns_[i]));
     }
-    settings_->setValue("Namespaces/Patterns", namespaces_str_list);
+    settingsToUse->endArray();
     
-    // QoS 설정 저장
-    settings_->beginGroup("QoS");
-    for (const auto& entry : topic_qos_settings_) {
-        const std::string& topic = entry.first;
-        const QosConfiguration& qos = entry.second;
+    // 토픽 설정 저장
+    settingsToUse->beginWriteArray("TopicConfigurations", static_cast<int>(topic_configs_.size()));
+    int i = 0;
+    for (const auto& [topic_name, config] : topic_configs_) {
+        settingsToUse->setArrayIndex(i++);
         
-        settings_->beginGroup(QString::fromStdString(topic));
-        settings_->setValue("Reliability", static_cast<int>(qos.reliability));
-        settings_->setValue("Durability", static_cast<int>(qos.durability));
-        settings_->setValue("HistoryDepth", qos.history_depth);
-        settings_->setValue("TimeoutMs", qos.timeout_ms);
-        settings_->endGroup();
+        settingsToUse->setValue("topic", QString::fromStdString(topic_name));
+        settingsToUse->setValue("enabled", config["enabled"].toBool());
+        
+        QVariantMap qos = config["qos"].toMap();
+        settingsToUse->setValue("reliability", qos["reliability"].toString());
+        settingsToUse->setValue("durability", qos["durability"].toString());
+        settingsToUse->setValue("history_depth", qos["history_depth"].toInt());
+        settingsToUse->setValue("timeout_ms", qos["timeout_ms"].toInt());
     }
-    settings_->endGroup();
+    settingsToUse->endArray();
     
-    // 로그 설정 저장
-    settings_->beginGroup("Log");
-    settings_->setValue("DefaultLevel", static_cast<int>(log_config_.default_level));
-    settings_->setValue("MaxEntries", log_config_.max_entries);
-    settings_->setValue("SaveToFile", log_config_.save_to_file);
-    settings_->setValue("LogFilePath", QString::fromStdString(log_config_.log_file_path));
-    settings_->endGroup();
+    // 레이아웃 설정 저장
+    settingsToUse->beginWriteArray("Layouts", static_cast<int>(layouts_.size()));
+    i = 0;
+    for (const auto& [window_name, layout] : layouts_) {
+        settingsToUse->setArrayIndex(i++);
+        
+        settingsToUse->setValue("window", QString::fromStdString(window_name));
+        settingsToUse->setValue("layout", layout);
+    }
+    settingsToUse->endArray();
     
-    // 설정 동기화
-    settings_->sync();
+    // 로그 레벨 저장
+    settingsToUse->setValue("LogLevel", log_level_);
     
-    return (settings_->status() == QSettings::NoError);
-}
-
-std::vector<int> ConfigurationManager::getDomainPatterns() const
-{
-    return domain_patterns_;
+    // 설정 파일에 즉시 기록
+    settingsToUse->sync();
+    
+    // 임시 설정 객체 정리
+    if (tempSettings) {
+        delete tempSettings;
+    }
+    
+    return true;
 }
 
 void ConfigurationManager::setDomainPatterns(const std::vector<int>& domains)
@@ -150,9 +226,9 @@ void ConfigurationManager::setDomainPatterns(const std::vector<int>& domains)
     emit configurationChanged();
 }
 
-std::vector<std::string> ConfigurationManager::getNamespacePatterns() const
+std::vector<int> ConfigurationManager::getDomainPatterns() const
 {
-    return namespace_patterns_;
+    return domain_patterns_;
 }
 
 void ConfigurationManager::setNamespacePatterns(const std::vector<std::string>& namespaces)
@@ -161,38 +237,75 @@ void ConfigurationManager::setNamespacePatterns(const std::vector<std::string>& 
     emit configurationChanged();
 }
 
-ConfigurationManager::QosConfiguration ConfigurationManager::getQosConfiguration(const std::string& topic_name) const
+std::vector<std::string> ConfigurationManager::getNamespacePatterns() const
 {
-    auto it = topic_qos_settings_.find(topic_name);
-    if (it != topic_qos_settings_.end()) {
+    return namespace_patterns_;
+}
+
+void ConfigurationManager::setTopicConfig(const std::string& topic_name, bool enabled, const QVariantMap& qos)
+{
+    QVariantMap config;
+    config["enabled"] = enabled;
+    config["qos"] = qos;
+    
+    topic_configs_[topic_name] = config;
+    emit configurationChanged();
+}
+
+QVariantMap ConfigurationManager::getTopicConfig(const std::string& topic_name) const
+{
+    auto it = topic_configs_.find(topic_name);
+    if (it != topic_configs_.end()) {
         return it->second;
     }
     
-    // 기본 QoS 설정 반환
-    QosConfiguration default_qos;
-    default_qos.reliability = QosConfiguration::Reliability::RELIABLE;
-    default_qos.durability = QosConfiguration::Durability::VOLATILE;
-    default_qos.history_depth = 10;
-    default_qos.timeout_ms = 1000;
+    // 기본 설정 반환
+    QVariantMap config;
+    config["enabled"] = true;
     
-    return default_qos;
+    QVariantMap qos;
+    qos["reliability"] = "RELIABLE";
+    qos["durability"] = "VOLATILE";
+    qos["history_depth"] = 10;
+    qos["timeout_ms"] = 500;
+    
+    config["qos"] = qos;
+    
+    return config;
 }
 
-void ConfigurationManager::setQosConfiguration(const std::string& topic_name, const QosConfiguration& config)
+std::map<std::string, QVariantMap> ConfigurationManager::getAllTopicConfigs() const
 {
-    topic_qos_settings_[topic_name] = config;
+    return topic_configs_;
+}
+
+void ConfigurationManager::saveLayout(const std::string& window_name, const QByteArray& layout)
+{
+    layouts_[window_name] = layout;
     emit configurationChanged();
 }
 
-ConfigurationManager::LogConfiguration ConfigurationManager::getLogConfiguration() const
+QByteArray ConfigurationManager::loadLayout(const std::string& window_name) const
 {
-    return log_config_;
+    auto it = layouts_.find(window_name);
+    if (it != layouts_.end()) {
+        return it->second;
+    }
+    
+    return QByteArray();
 }
 
-void ConfigurationManager::setLogConfiguration(const LogConfiguration& config)
+void ConfigurationManager::setLogLevel(int level)
 {
-    log_config_ = config;
-    emit configurationChanged();
+    if (level >= 0 && level <= 4) {
+        log_level_ = level;
+        emit configurationChanged();
+    }
+}
+
+int ConfigurationManager::getLogLevel() const
+{
+    return log_level_;
 }
 
 } // namespace robot_debugger_ui 

@@ -17,22 +17,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "menu.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 # 메뉴 데이터 브로드캐스팅을 위한 유틸리티 함수
 async def broadcast_menu_data(db: Session):
@@ -209,7 +210,7 @@ async def create_menu_item(
             f.write(content)
 
         # 3) 정적 경로로 쓸 URL 생성 (백엔드가 /static 을 serve 한다고 가정)
-        image_url = f"/images/menu/{filename}"
+        image_url = f"http://192.168.0.156:8000/images/menu/{filename}"
 
     # DB에 저장
     new_item = MenuItem(
@@ -271,7 +272,7 @@ async def update_menu_item(
             f.write(content)
 
         # 3) 정적 경로로 쓸 URL 생성 (백엔드가 /static 을 serve 한다고 가정)
-        image_url = f"/images/menu/{filename}"
+        image_url = f"http://192.168.0.156:8000/images/menu/{filename}"
     
     # Update fields
     if name is not None:

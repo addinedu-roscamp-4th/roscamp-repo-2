@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const Notification = ({ message, id, onClose, timeout = 2000 }) => {
+const Notification = ({ message, id, onClose, timeout = 500 }) => {
   const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {

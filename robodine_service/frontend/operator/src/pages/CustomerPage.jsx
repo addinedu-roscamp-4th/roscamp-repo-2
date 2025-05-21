@@ -456,10 +456,10 @@ const CustomerPage = () => {
                 <RefreshCw size={16} className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} />
                 새로고침
               </button>
-              <button className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+              {/* <button className="flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
                 주문하기
                 <ArrowRight size={16} className="ml-1" />
-              </button>
+              </button> */}
             </div>
           </div>
   

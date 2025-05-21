@@ -19,26 +19,15 @@
      <item>
       <widget class="QLabel" name="label">
        <property name="text">
-        <string>네임스페이스 패턴:</string>
+        <string>Jetcobot 제어 패널</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 16px; font-weight: bold;</string>
        </property>
       </widget>
-     </item>
-     <item>
-      <widget class="QLineEdit" name="lineEditNamespace">
-       <property name="text">
-        <string>jetcobot_*</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButtonApply">
-       <property name="text">
-        <string>적용</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QComboBox" name="comboBoxRobots"/>
      </item>
      <item>
       <spacer name="horizontalSpacer">
@@ -54,9 +43,22 @@
       </spacer>
      </item>
      <item>
+      <widget class="QLabel" name="activeRobotsLabel">
+       <property name="text">
+        <string>활성화된 로봇: 사이드바에서 선택</string>
+       </property>
+       <property name="styleSheet">
+        <string>color: #555;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="pushButtonEmergency">
        <property name="text">
         <string>긴급 정지</string>
+       </property>
+       <property name="styleSheet">
+        <string>background-color: #f44336; color: white;</string>
        </property>
       </widget>
      </item>

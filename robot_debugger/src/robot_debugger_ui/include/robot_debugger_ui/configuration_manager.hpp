@@ -1,151 +1,152 @@
 #ifndef CONFIGURATION_MANAGER_HPP
 #define CONFIGURATION_MANAGER_HPP
 
+#include <string>
+#include <vector>
+#include <map>
+#include <memory>
 #include <QObject>
 #include <QSettings>
-#include <vector>
-#include <string>
-#include <unordered_map>
-#include <memory>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QVariant>
 
 namespace robot_debugger_ui {
 
 /**
  * @brief 설정 관리자 클래스
  * 
- * 도메인, 네임스페이스, QoS, 로그 설정 등을 관리하는 클래스입니다.
+ * 애플리케이션의 설정을 관리합니다:
+ * - 도메인 패턴
+ * - 네임스페이스 패턴
+ * - 토픽 설정
+ * - QoS 설정
+ * - 로그 설정
+ * - UI 레이아웃 저장/복원
  */
 class ConfigurationManager : public QObject {
   Q_OBJECT
 
 public:
-  /**
-   * @brief QoS 설정 구조체
-   */
-  struct QosConfiguration {
-    enum class Reliability {
-      BEST_EFFORT,
-      RELIABLE
-    };
-    
-    enum class Durability {
-      VOLATILE,
-      TRANSIENT_LOCAL
-    };
-    
-    Reliability reliability; ///< 신뢰성 설정
-    Durability durability; ///< 지속성 설정
-    int history_depth; ///< 히스토리 깊이
-    int timeout_ms; ///< 타임아웃 (밀리초)
-  };
-  
-  /**
-   * @brief 로그 설정 구조체
-   */
-  struct LogConfiguration {
-    enum class LogLevel {
-      DEBUG,
-      INFO,
-      WARN,
-      ERROR,
-      CRITICAL
-    };
-    
-    LogLevel default_level; ///< 기본 로그 레벨
-    int max_entries; ///< 최대 로그 항목 수
-    bool save_to_file; ///< 파일에 저장할지 여부
-    std::string log_file_path; ///< 로그 파일 경로
-  };
-
-public:
-  /**
-   * @brief 생성자
-   * @param config_path 설정 파일 경로
-   * @param parent 부모 QObject
-   */
-  explicit ConfigurationManager(const std::string& config_path = "", QObject* parent = nullptr);
-  
-  /**
-   * @brief 소멸자
-   */
-  ~ConfigurationManager() override;
+  ConfigurationManager();
+  virtual ~ConfigurationManager();
 
   /**
-   * @brief 설정 로드
+   * @brief 설정 객체 반환
+   * @return 설정 객체에 대한 참조
+   */
+  QSettings& getSettings() { return *settings_; }
+
+  /**
+   * @brief 설정을 파일에서 로드
+   * @param filename 설정 파일 경로
    * @return 성공 여부
    */
-  bool loadConfiguration();
-  
-  /**
-   * @brief 설정 저장
-   * @return 성공 여부
-   */
-  bool saveConfiguration();
+  bool loadFromFile(const std::string& filename);
 
   /**
-   * @brief 도메인 패턴 가져오기
-   * @return 도메인 패턴 목록
+   * @brief 설정을 파일에 저장
+   * @param filename 설정 파일 경로
+   * @return 성공 여부
    */
-  std::vector<int> getDomainPatterns() const;
-  
+  bool saveToFile(const std::string& filename);
+
   /**
    * @brief 도메인 패턴 설정
-   * @param domains 도메인 패턴 목록
+   * @param domains 도메인 ID 목록
    */
   void setDomainPatterns(const std::vector<int>& domains);
 
   /**
-   * @brief 네임스페이스 패턴 가져오기
-   * @return 네임스페이스 패턴 목록
+   * @brief 도메인 패턴 가져오기
+   * @return 도메인 ID 목록
    */
-  std::vector<std::string> getNamespacePatterns() const;
-  
+  std::vector<int> getDomainPatterns() const;
+
   /**
    * @brief 네임스페이스 패턴 설정
-   * @param namespaces 네임스페이스 패턴 목록
+   * @param namespaces 네임스페이스 목록
    */
   void setNamespacePatterns(const std::vector<std::string>& namespaces);
 
   /**
-   * @brief 토픽 QoS 설정 가져오기
-   * @param topic_name 토픽 이름
-   * @return QoS 설정
+   * @brief 네임스페이스 패턴 가져오기
+   * @return 네임스페이스 목록
    */
-  QosConfiguration getQosConfiguration(const std::string& topic_name) const;
-  
-  /**
-   * @brief 토픽 QoS 설정
-   * @param topic_name 토픽 이름
-   * @param config QoS 설정
-   */
-  void setQosConfiguration(const std::string& topic_name, const QosConfiguration& config);
+  std::vector<std::string> getNamespacePatterns() const;
 
   /**
-   * @brief 로그 설정 가져오기
-   * @return 로그 설정
+   * @brief 토픽 설정 저장
+   * @param topic_name 토픽 이름
+   * @param enabled 활성화 여부
+   * @param qos QoS 설정 객체
    */
-  LogConfiguration getLogConfiguration() const;
-  
+  void setTopicConfig(const std::string& topic_name, bool enabled, const QVariantMap& qos);
+
   /**
-   * @brief 로그 설정
-   * @param config 로그 설정
+   * @brief 토픽 설정 가져오기
+   * @param topic_name 토픽 이름
+   * @return 토픽 설정 객체
    */
-  void setLogConfiguration(const LogConfiguration& config);
+  QVariantMap getTopicConfig(const std::string& topic_name) const;
+
+  /**
+   * @brief 모든 토픽 설정 가져오기
+   * @return 토픽 이름을 키로 하는 설정 맵
+   */
+  std::map<std::string, QVariantMap> getAllTopicConfigs() const;
+
+  /**
+   * @brief 레이아웃 저장
+   * @param window_name 윈도우 이름
+   * @param layout 레이아웃 데이터
+   */
+  void saveLayout(const std::string& window_name, const QByteArray& layout);
+
+  /**
+   * @brief 레이아웃 불러오기
+   * @param window_name 윈도우 이름
+   * @return 레이아웃 데이터
+   */
+  QByteArray loadLayout(const std::string& window_name) const;
+
+  /**
+   * @brief 로그 레벨 설정
+   * @param level 로그 레벨 (0: DEBUG, 1: INFO, 2: WARN, 3: ERROR, 4: CRITICAL)
+   */
+  void setLogLevel(int level);
+
+  /**
+   * @brief 로그 레벨 가져오기
+   * @return 로그 레벨
+   */
+  int getLogLevel() const;
 
 signals:
   /**
-   * @brief 설정 변경 시 발생하는 시그널
+   * @brief 설정 변경 시그널
    */
   void configurationChanged();
 
 private:
-  std::unique_ptr<QSettings> settings_; ///< Qt 설정 객체
-  std::string config_path_; ///< 설정 파일 경로
-  
-  std::vector<int> domain_patterns_; ///< 도메인 패턴 목록
-  std::vector<std::string> namespace_patterns_; ///< 네임스페이스 패턴 목록
-  std::unordered_map<std::string, QosConfiguration> topic_qos_settings_; ///< 토픽별 QoS 설정
-  LogConfiguration log_config_; ///< 로그 설정
+  // 기본 설정 초기화
+  void initDefaults();
+
+  // 도메인 및 네임스페이스 패턴
+  std::vector<int> domain_patterns_;
+  std::vector<std::string> namespace_patterns_;
+
+  // 토픽 설정
+  std::map<std::string, QVariantMap> topic_configs_;
+
+  // 레이아웃 설정
+  std::map<std::string, QByteArray> layouts_;
+
+  // 로그 설정
+  int log_level_;
+
+  // 설정 저장 객체
+  QSettings* settings_;
 };
 
 } // namespace robot_debugger_ui

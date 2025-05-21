@@ -18,7 +18,17 @@ export const CartProvider = ({ children }) => {
   }, [cartItems]);
 
   // 장바구니에 항목 추가
-  const addToCart = (item) => {
+  const addToCart = (item, quantity = 1) => {
+    if (!item || !item.id) {
+      console.error('장바구니에 추가할 아이템이 유효하지 않습니다:', item);
+      return;
+    }
+    
+    // 수량이 1 이상인지 확인
+    const validQuantity = Math.max(1, quantity);
+    
+    // console.log(`장바구니에 항목 추가 - ${item.name}, 수량: ${validQuantity}`);
+    
     setCartItems(prevItems => {
       // 이미 장바구니에 있는지 확인
       const existingItemIndex = prevItems.findIndex(
@@ -28,11 +38,18 @@ export const CartProvider = ({ children }) => {
       if (existingItemIndex !== -1) {
         // 있으면 수량 증가
         const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex].quantity += 1;
+        const newQuantity = updatedItems[existingItemIndex].quantity + validQuantity;
+        updatedItems[existingItemIndex] = {
+          ...updatedItems[existingItemIndex],
+          quantity: newQuantity
+        };
+        // console.log(`기존 항목 수량 업데이트: ${updatedItems[existingItemIndex].name}, 이전: ${updatedItems[existingItemIndex].quantity - validQuantity}, 현재: ${updatedItems[existingItemIndex].quantity}`);
         return updatedItems;
       } else {
-        // 없으면 새로 추가 (수량 1로 시작)
-        return [...prevItems, { ...item, quantity: 1 }];
+        // 없으면 새로 추가 (지정된 수량으로 시작)
+        const newItem = { ...item, quantity: validQuantity };
+        // console.log(`새 항목 추가: ${newItem.name}, 수량: ${newItem.quantity}`);
+        return [...prevItems, newItem];
       }
     });
   };

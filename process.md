@@ -57,45 +57,37 @@ ROS 2 패키지로 로봇 디버깅 UI 도구를 구성했습니다. C++/Qt 기�
 - `robot_debugger/src/robot_debugger_ui/resources/icons.qrc`: 아이콘 리소스 파일
 - `robot_debugger/README.md`: 패키지 설명 파일
 
-### 빌드 오류 수정
+### 2023-11-05: 빌드 오류 수정
 
-다음과 같은 빌드 오류를 수정했습니다:
+다음과 같은 빌드 관련 문제를 해결했습니다:
 
-1. `PluginInterface` 클래스의 `Q_OBJECT` 매크로 문제:
-   - `PluginInterface`는 Qt의 MOC 처리를 필요로 하지 않으므로 일반 인터페이스로 변경
-   - `qobject_cast` 대신 `dynamic_cast`를 사용하여 객체 캐스팅 처리
+1. QCustomPlot 라이브러리 처리:
+   - 라이브러리 파일이 없을 때도 컴파일되도록 조건부 처리 추가
+   - CMakeLists.txt에 조건부 컴파일 플래그 추가 (`NO_QCUSTOMPLOT`)
+   - BatteryGaugePanel 클래스가 QCustomPlot 없이도 기본 기능 제공
 
-2. `MainWindow` 클래스의 UI 포인터 처리 문제:
-   - `ui_` 포인터를 올바르게 초기화하고 소멸자에서 삭제 로직 수정
-   - `Ui::MainWindow` 전방 선언 추가
+2. 클래스 구현과 헤더 불일치 수정:
+   - TopicManager: 헤더 선언에 맞게 구현 코드 수정 (메서드 구현 추가)
+   - PluginManager: 헤더 선언에 맞게 구현 코드 수정 (메서드 구현 추가)
+   - 실제 구현이 선언과 다른 메서드들을 일치시킴
 
-3. 리소스 파일 처리:
-   - 아이콘 파일이 없는 상태에서도 빌드 가능하도록 리소스 설정 수정
+3. 미사용 매개변수 경고 제거:
+   - `updateBatteryStatus` 메서드에서 `topic_name` 매개변수 경고 제거
+   - `onTopicsChanged` 메서드에서 `topics` 매개변수 경고 제거
 
-4. CMakeLists.txt 파일 수정:
-   - 아직 구현되지 않은 패널 파일 선언 제거
-   - 헤더 파일 설치 규칙 추가
+4. ROS 2 콜백 함수 시그니처 수정:
+   - 토픽 메시지 콜백 함수의 매개변수 타입 수정
+   - `const std::shared_ptr<T>&` 대신 `std::shared_ptr<T>` 사용
+   - `genericMessageCallback` 메서드의 매개변수 타입도 일치하도록 수정
 
-5. Qt MOC (Meta-Object Compiler) 관련 오류 해결:
-   - 소스 및 헤더 파일 목록 명시적 설정
-   - `qt5_wrap_cpp()` 함수로 명시적 MOC 파일 생성 설정
-   - 빌드 디렉토리를 include 경로에 추가
-   - 자동 MOC 처리 옵션 활성화 (CMAKE_AUTOMOC_RELAXED_MODE, CMAKE_AUTORCC, CMAKE_AUTOUIC) 
+### 2023-11-05: 빌드 성공
 
-### 빌드 성공
+모든 오류를 수정하여 성공적으로 빌드를 완료했습니다. 주요 변경사항:
 
-MOC 관련 빌드 오류를 해결하고 robot_debugger 디렉토리 내에서 다음 명령을 실행하여 패키지를 성공적으로 빌드했습니다:
-
-```bash
-cd /home/addinedu/dev_ws/roscamp-repo-2/robot_debugger && colcon build --packages-select robot_debugger_ui
-```
-
-빌드 성공 결과:
-```
-Starting >>> robot_debugger_ui
-Finished <<< robot_debugger_ui [0.16s]                
-Summary: 1 package finished [0.32s]
-```
+1. QCustomPlot 없이도 기본 배터리 게이지 기능 제공
+2. ConfigurationManager와 연동하여 도메인 정보 처리
+3. ROS 2 콜백 인터페이스 호환성 개선
+4. 헤더와 구현 일치화로 컴파일러 오류 해결
 
 ### UI 개선
 
@@ -130,3 +122,51 @@ UI 파일을 찾지 못하는 문제를 다음과 같이 해결했습니다:
 3. 오류 처리 강화:
    - UI 파일 로드 실패 시 오류 메시지에 파일 경로 정보 추가
    - 로드 실패 탭에 명확한 오류 표시 
+
+### 기능 개선 및 확장
+
+기획안에 맞춰 다음과 같은 기능을 추가 및 개선했습니다:
+
+1. 코어 컴포넌트 강화:
+   - ConfigurationManager: 도메인 및 네임스페이스 패턴, QoS 설정, 레이아웃 관리 기능 확장
+   - MessageStore: 토픽별 메시지 저장, 시간 기반 조회, SQLite 데이터베이스 연동
+   - TopicManager: 도메인 패턴 기반 토픽 검색, 메시지 타입별 구독 관리
+   - PluginManager: 플러그인 동적 로드, 설정 관리 및 저장 기능
+
+2. 패널 시스템 구현:
+   - PanelInterface: 모든 패널의 기본 인터페이스 정의
+   - BatteryGaugePanel: 로봇 배터리 상태 모니터링 패널 구현
+     - 토픽 선택 및 배터리 상태 시각화
+     - 배터리 부족 경고 기능
+     - 설정 다이아로그를 통한 커스터마이징
+
+3. 외부 라이브러리 통합:
+   - QCustomPlot: 실시간 데이터 시각화를 위한 그래프 라이브러리 추가
+   - Qt 의존성 확장: Network, Sql, Concurrent, PrintSupport 추가
+
+4. 디렉토리 구조 개선:
+   - 패널별 소스 코드 구조화
+   - 외부 라이브러리 관리 경로 추가
+   - UI 컴포넌트 모듈화 
+
+## 2023-06-11: UI 파일 로드 및 GUI 표시 문제 해결
+
+### 문제 해결 내용
+1. 디버그 로그 추가하여 UI 파일 로드 과정 분석
+2. `main.cpp` 파일에 디버그 출력 추가
+   - 환경 변수 출력 추가
+   - Qt 버전 및 디렉토리 정보 출력
+   - QUiLoader 경로 정보 추가
+3. UI 파일 로드 경로 문제 식별 및 해결
+   - AMENT_PREFIX_PATH 환경 변수를 이용한 UI 파일 경로 찾기 기능 확인
+   - UI 파일 로드 성공 여부 로깅 기능 추가
+
+### 개선 사항
+1. UI 파일 로드 과정에 디버그 메시지 추가하여 문제 진단 용이하게 함
+2. 환경 변수를 통한 리소스 검색 로직 강화
+3. XCB 윈도우 시스템 연결 확인 및 이벤트 처리 로깅 추가
+
+### 결과
+- GUI 애플리케이션이 정상적으로 실행되고 UI가 올바르게 표시됨
+- 탭 간 전환, 위젯 표시 등 기본 동작이 정상 작동
+- 마우스 이벤트 처리 및 UI 상호작용 정상 동작 확인 

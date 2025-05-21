@@ -20,8 +20,11 @@ import {
   RotateCw,
   Search,
   CalendarDays,
-  ChevronDown
+  ChevronDown,
+  Radio
 } from 'lucide-react';
+import JSMpeg from 'jsmpeg-player';
+import LiveStreamComponent from '../components/LiveStreamComponent';
 
 const VideoStreamPage = () => {
   const [activeTab, setActiveTab] = useState('ALL');
@@ -35,6 +38,8 @@ const VideoStreamPage = () => {
   const refreshAttempts = useRef(0);
   const maxRefreshAttempts = 3;
   const refreshTimeoutRef = useRef(null);
+  const [streamError, setStreamError] = useState(false);
+
   
   // 검색 및 필터링을 위한 상태 추가
   const [searchTerm, setSearchTerm] = useState('');
@@ -220,7 +225,7 @@ const VideoStreamPage = () => {
   // 고유한 source_type 목록 추출
   const sourceTypes = useMemo(() => {
     const types = new Set(videoStreams.map(stream => stream.source_type));
-    return ['ALL', ...Array.from(types)];
+    return ['ALL', 'LIVE', ...Array.from(types)];
   }, [videoStreams]);
 
   // 고유한 연도, 월, 일, 시간 목록 추출
@@ -262,6 +267,11 @@ const VideoStreamPage = () => {
 
   // 활성 탭 및 필터에 따라 필터링된 스트림
   const filteredStreams = useMemo(() => {
+    // LIVE 탭이 선택된 경우 빈 배열 반환 (Live 탭은 별도로 처리됨)
+    if (activeTab === 'LIVE') {
+      return [];
+    }
+    
     if (!videoStreams.length) return [];
     
     // 타입 필터링
@@ -432,161 +442,164 @@ const VideoStreamPage = () => {
           </div>
         )}
 
-        {/* 검색 및 필터링 컨트롤 */}
-        <div className="mb-6 bg-white rounded-lg shadow p-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-            {/* Source ID 검색 */}
-            <div className="flex-1">
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
+        {/* 검색 및 필터링 컨트롤 - LIVE 탭이 아닐 때만 표시 */}
+        {activeTab !== 'LIVE' && (
+          <div className="mb-6 bg-white rounded-lg shadow p-4">
+            {/* 기존 검색/필터링 UI 유지 */}
+            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+              {/* Source ID 검색 */}
+              <div className="flex-1">
+                <div className="relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 pr-12 sm:text-sm border-gray-300 rounded-md py-2"
+                    placeholder="Source ID로 검색"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
-                <input
-                  type="text"
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 pr-12 sm:text-sm border-gray-300 rounded-md py-2"
-                  placeholder="Source ID로 검색"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
               </div>
+              
+              {/* 필터 토글 버튼 */}
+              <div>
+                <button
+                  onClick={toggleFilters}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  녹화 기간 필터
+                  <ChevronDown className={`ml-2 h-4 w-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+              
+              {/* 필터 초기화 버튼 */}
+              {(searchTerm || dateFilter.type !== 'none') && (
+                <button
+                  onClick={resetFilters}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-red-600 bg-white hover:bg-red-50"
+                >
+                  필터 초기화
+                </button>
+              )}
             </div>
             
-            {/* 필터 토글 버튼 */}
-            <div>
-              <button
-                onClick={toggleFilters}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                녹화 기간 필터
-                <ChevronDown className={`ml-2 h-4 w-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
+            {/* 날짜 필터링 컨트롤 */}
+            {showFilters && (
+              <div className="bg-gray-50 p-4 rounded-md border border-gray-200 mt-2">
+                <div className="flex items-center mb-3">
+                  <CalendarDays className="h-5 w-5 text-gray-500 mr-2" />
+                  <span className="text-gray-700 font-medium">녹화 기간 필터링</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {/* 연도 필터 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">연도</label>
+                    <select
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                      value={dateFilter.type === 'year' ? dateFilter.value : ''}
+                      onChange={(e) => handleDateFilterChange('year', e.target.value || null)}
+                    >
+                      <option value="">선택 안함</option>
+                      {dateOptions.years.map(year => (
+                        <option key={year} value={year}>{year}년</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* 월 필터 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">월</label>
+                    <select
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                      value={dateFilter.type === 'month' ? dateFilter.value : ''}
+                      onChange={(e) => handleDateFilterChange('month', e.target.value || null)}
+                    >
+                      <option value="">선택 안함</option>
+                      {dateOptions.months.map(month => (
+                        <option key={month} value={month}>{month}월</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* 일 필터 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">일</label>
+                    <select
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                      value={dateFilter.type === 'day' ? dateFilter.value : ''}
+                      onChange={(e) => handleDateFilterChange('day', e.target.value || null)}
+                    >
+                      <option value="">선택 안함</option>
+                      {dateOptions.days.map(day => (
+                        <option key={day} value={day}>{day}일</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* 시간 필터 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">시간</label>
+                    <select
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                      value={dateFilter.type === 'hour' ? dateFilter.value : ''}
+                      onChange={(e) => handleDateFilterChange('hour', e.target.value || null)}
+                    >
+                      <option value="">선택 안함</option>
+                      {dateOptions.hours.map(hour => (
+                        <option key={hour} value={hour}>{hour}시</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="mt-3 text-sm text-gray-500">
+                  <p>* 녹화 시작 시간을 기준으로 필터링됩니다.</p>
+                </div>
+              </div>
+            )}
             
-            {/* 필터 초기화 버튼 */}
+            {/* 현재 적용된 필터 표시 */}
             {(searchTerm || dateFilter.type !== 'none') && (
-              <button
-                onClick={resetFilters}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-red-600 bg-white hover:bg-red-50"
-              >
-                필터 초기화
-              </button>
+              <div className="mt-3 flex items-center flex-wrap gap-2">
+                <span className="text-sm text-gray-500">적용된 필터:</span>
+                
+                {searchTerm && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Source ID: {searchTerm}
+                  </span>
+                )}
+                
+                {dateFilter.type === 'year' && dateFilter.value && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {dateFilter.value}년
+                  </span>
+                )}
+                
+                {dateFilter.type === 'month' && dateFilter.value && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {dateFilter.value}월
+                  </span>
+                )}
+                
+                {dateFilter.type === 'day' && dateFilter.value && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {dateFilter.value}일
+                  </span>
+                )}
+                
+                {dateFilter.type === 'hour' && dateFilter.value && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    {dateFilter.value}시
+                  </span>
+                )}
+              </div>
             )}
           </div>
-          
-          {/* 날짜 필터링 컨트롤 */}
-          {showFilters && (
-            <div className="bg-gray-50 p-4 rounded-md border border-gray-200 mt-2">
-              <div className="flex items-center mb-3">
-                <CalendarDays className="h-5 w-5 text-gray-500 mr-2" />
-                <span className="text-gray-700 font-medium">녹화 기간 필터링</span>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {/* 연도 필터 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">연도</label>
-                  <select
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                    value={dateFilter.type === 'year' ? dateFilter.value : ''}
-                    onChange={(e) => handleDateFilterChange('year', e.target.value || null)}
-                  >
-                    <option value="">선택 안함</option>
-                    {dateOptions.years.map(year => (
-                      <option key={year} value={year}>{year}년</option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* 월 필터 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">월</label>
-                  <select
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                    value={dateFilter.type === 'month' ? dateFilter.value : ''}
-                    onChange={(e) => handleDateFilterChange('month', e.target.value || null)}
-                  >
-                    <option value="">선택 안함</option>
-                    {dateOptions.months.map(month => (
-                      <option key={month} value={month}>{month}월</option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* 일 필터 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">일</label>
-                  <select
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                    value={dateFilter.type === 'day' ? dateFilter.value : ''}
-                    onChange={(e) => handleDateFilterChange('day', e.target.value || null)}
-                  >
-                    <option value="">선택 안함</option>
-                    {dateOptions.days.map(day => (
-                      <option key={day} value={day}>{day}일</option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* 시간 필터 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">시간</label>
-                  <select
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                    value={dateFilter.type === 'hour' ? dateFilter.value : ''}
-                    onChange={(e) => handleDateFilterChange('hour', e.target.value || null)}
-                  >
-                    <option value="">선택 안함</option>
-                    {dateOptions.hours.map(hour => (
-                      <option key={hour} value={hour}>{hour}시</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              
-              <div className="mt-3 text-sm text-gray-500">
-                <p>* 녹화 시작 시간을 기준으로 필터링됩니다.</p>
-              </div>
-            </div>
-          )}
-          
-          {/* 현재 적용된 필터 표시 */}
-          {(searchTerm || dateFilter.type !== 'none') && (
-            <div className="mt-3 flex items-center flex-wrap gap-2">
-              <span className="text-sm text-gray-500">적용된 필터:</span>
-              
-              {searchTerm && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  Source ID: {searchTerm}
-                </span>
-              )}
-              
-              {dateFilter.type === 'year' && dateFilter.value && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {dateFilter.value}년
-                </span>
-              )}
-              
-              {dateFilter.type === 'month' && dateFilter.value && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {dateFilter.value}월
-                </span>
-              )}
-              
-              {dateFilter.type === 'day' && dateFilter.value && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {dateFilter.value}일
-                </span>
-              )}
-              
-              {dateFilter.type === 'hour' && dateFilter.value && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {dateFilter.value}시
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* 탭 네비게이션 */}
         <div className="mb-6 overflow-x-auto">
@@ -601,128 +614,163 @@ const VideoStreamPage = () => {
                 }`}
                 onClick={() => setActiveTab(type)}
               >
-                {type}
+                {type === 'LIVE' ? (
+                  <div className="flex items-center">
+                    <Radio size={14} className="mr-1 text-red-500 animate-pulse" />
+                    {type}
+                  </div>
+                ) : (
+                  type
+                )}
               </button>
             ))}
           </div>
         </div>
-
-        {/* 비디오 스트림 그리드 */}
-        {isLoading && videoStreams.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-4 text-gray-600">영상 스트림 정보를 불러오는 중...</p>
-          </div>
-        ) : errors.video_streams && videoStreams.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <XCircle className="mx-auto h-12 w-12 text-red-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">오류가 발생했습니다</h3>
-            <p className="mt-2 text-gray-500">{errors.video_streams}</p>
-            <button 
-              onClick={handlePageRefresh}
-              className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded flex items-center gap-2 mx-auto"
-            >
-              <RotateCw size={16} />
-              페이지 새로고침
-            </button>
-          </div>
-        ) : filteredStreams.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-6 text-center">
-            <Video className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">검색 결과가 없습니다</h3>
-            <p className="mt-2 text-gray-500">
-              {searchTerm || dateFilter.type !== 'none' 
-                ? '검색 조건에 맞는 영상 스트림이 없습니다.' 
-                : activeTab !== 'ALL' 
-                  ? `${activeTab} 타입의 스트림이 없습니다.` 
-                  : '등록된 영상 스트림이 없습니다.'}
-            </p>
-            {(searchTerm || dateFilter.type !== 'none') && (
-              <button
-                onClick={resetFilters}
-                className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded flex items-center gap-2 mx-auto"
-              >
-                <Filter size={16} />
-                필터 초기화
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredStreams.map((stream) => (
-              <div key={stream.id} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="p-4 border-b border-gray-200">
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-medium text-gray-900 truncate flex items-center">
-                      <Video size={18} className="mr-2 text-gray-500" />
-                      {stream.source_type} #{stream.source_id}
-                    </h3>
-                    {getStatusBadge(stream.status)}
-                  </div>
-                </div>
-                
-                <div className="px-4 py-3 bg-gray-50">
-                  <div className="grid grid-cols-1 gap-2">
-                    <div className="flex items-start">
-                      <AlignLeft size={16} className="mr-2 mt-0.5 text-gray-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">스트림 ID</p>
-                        <p className="text-sm font-medium">{stream.id}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-start">
-                      <Clock size={16} className="mr-2 mt-0.5 text-gray-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">마지막 확인</p>
-                        <p className="text-sm">{formatDate(stream.last_checked)}</p>
-                      </div>
-                    </div>
-                    
-                    {stream.recording_path && (
-                      <div className="flex items-start">
-                        <Calendar size={16} className="mr-2 mt-0.5 text-gray-500" />
-                        <div>
-                          <p className="text-xs text-gray-500">녹화 기간</p>
-                          <p className="text-sm">
-                            {formatDate(stream.recording_started_at)} ~ 
-                            <br />
-                            {formatDate(stream.recording_ended_at)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="p-4 bg-white flex justify-between items-center">
-                  {stream.recording_path ? (
-                    <button
-                      onClick={() => handleVideoSelect(stream)}
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
-                    >
-                      <Eye size={16} className="mr-1" />
-                      녹화 영상 보기
-                    </button>
-                  ) : (
-                    <span className="text-gray-400 text-sm">녹화 영상 없음</span>
-                  )}
-                  
-                  {stream.url && (
-                    <a
-                      href={stream.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-gray-600 hover:text-gray-800 text-sm flex items-center"
-                    >
-                      <ExternalLink size={16} className="mr-1" />
-                      원본 스트림
-                    </a>
-                  )}
-                </div>
+        {/* LIVE 스트림 컨텐츠 */}
+        {activeTab === 'LIVE' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center">
+                <Radio className="h-5 w-5 text-red-500 mr-2 animate-pulse" />
+                <h3 className="text-lg font-medium text-gray-900">실시간 웹캠 영상</h3>
               </div>
-            ))}
+             {streamError && (
+               <div className="mb-4 p-3 bg-yellow-50 rounded border border-yellow-200 flex items-center">
+                 <AlertTriangle className="mr-2 text-yellow-600" size={16} />
+                 <span className="text-sm text-yellow-800">
+                   실시간 스트림에 문제가 발생했습니다. 서버를 확인하세요.
+                 </span>
+               </div>
+             )}
+            </div>
+            <div className="aspect-video overflow-hidden rounded-lg border border-gray-200">
+              <LiveStreamComponent onError={() => setStreamError(true)} />
+            </div>
           </div>
+        )}
+        
+        
+        {/* 비디오 스트림 그리드 (LIVE 탭이 아닌 경우) */}
+        {activeTab !== 'LIVE' && (
+          <>
+            {isLoading && videoStreams.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-6 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                <p className="mt-4 text-gray-600">영상 스트림 정보를 불러오는 중...</p>
+              </div>
+            ) : errors.video_streams && videoStreams.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-6 text-center">
+                <XCircle className="mx-auto h-12 w-12 text-red-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">오류가 발생했습니다</h3>
+                <p className="mt-2 text-gray-500">{errors.video_streams}</p>
+                <button 
+                  onClick={handlePageRefresh}
+                  className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded flex items-center gap-2 mx-auto"
+                >
+                  <RotateCw size={16} />
+                  페이지 새로고침
+                </button>
+              </div>
+            ) : filteredStreams.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-6 text-center">
+                <Video className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">검색 결과가 없습니다</h3>
+                <p className="mt-2 text-gray-500">
+                  {searchTerm || dateFilter.type !== 'none' 
+                    ? '검색 조건에 맞는 영상 스트림이 없습니다.' 
+                    : activeTab !== 'ALL' 
+                      ? `${activeTab} 타입의 스트림이 없습니다.` 
+                      : '등록된 영상 스트림이 없습니다.'}
+                </p>
+                {(searchTerm || dateFilter.type !== 'none') && (
+                  <button
+                    onClick={resetFilters}
+                    className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded flex items-center gap-2 mx-auto"
+                  >
+                    <Filter size={16} />
+                    필터 초기화
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredStreams.map((stream) => (
+                  <div key={stream.id} className="bg-white rounded-lg shadow overflow-hidden">
+                    {/* 기존 비디오 스트림 카드 내용 */}
+                    <div className="p-4 border-b border-gray-200">
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-medium text-gray-900 truncate flex items-center">
+                          <Video size={18} className="mr-2 text-gray-500" />
+                          {stream.source_type} #{stream.source_id}
+                        </h3>
+                        {getStatusBadge(stream.status)}
+                      </div>
+                    </div>
+                    
+                    <div className="px-4 py-3 bg-gray-50">
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="flex items-start">
+                          <AlignLeft size={16} className="mr-2 mt-0.5 text-gray-500" />
+                          <div>
+                            <p className="text-xs text-gray-500">스트림 ID</p>
+                            <p className="text-sm font-medium">{stream.id}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start">
+                          <Clock size={16} className="mr-2 mt-0.5 text-gray-500" />
+                          <div>
+                            <p className="text-xs text-gray-500">마지막 확인</p>
+                            <p className="text-sm">{formatDate(stream.last_checked)}</p>
+                          </div>
+                        </div>
+                        
+                        {stream.recording_path && (
+                          <div className="flex items-start">
+                            <Calendar size={16} className="mr-2 mt-0.5 text-gray-500" />
+                            <div>
+                              <p className="text-xs text-gray-500">녹화 기간</p>
+                              <p className="text-sm">
+                                {formatDate(stream.recording_started_at)} ~ 
+                                <br />
+                                {formatDate(stream.recording_ended_at)}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 bg-white flex justify-between items-center">
+                      {stream.recording_path ? (
+                        <button
+                          onClick={() => handleVideoSelect(stream)}
+                          className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                        >
+                          <Eye size={16} className="mr-1" />
+                          녹화 영상 보기
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-sm">녹화 영상 없음</span>
+                      )}
+                      
+                      {stream.url && (
+                        <a
+                          href={stream.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gray-600 hover:text-gray-800 text-sm flex items-center"
+                        >
+                          <ExternalLink size={16} className="mr-1" />
+                          원본 스트림
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
         
         {/* 비디오 플레이어 모달 */}

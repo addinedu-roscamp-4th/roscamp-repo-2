@@ -26,6 +26,8 @@ const MenuPage = () => {
   const { apiCall } = useAuth();
   const { data, connected } = useWebSockets();
 
+  const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
   // 초기 데이터 로딩
   const fetchInitialData = useCallback(async () => {
     setIsLoading(true);
@@ -296,8 +298,13 @@ const MenuPage = () => {
       if (currentMenuItem.file) {
         form.append('image', currentMenuItem.file);
       }
-      form.append('image_url', currentMenuItem.image_url);
-
+      const rawUrl = currentMenuItem.image_url || '';
+      const fullUrl = rawUrl
+        ? rawUrl.startsWith('http')
+          ? rawUrl
+          : `${BASE_URL}${rawUrl}`
+        : '';
+      form.append('image_url', fullUrl);
       for (let [key, value] of form.entries()) {
         console.log(key, value);
       }

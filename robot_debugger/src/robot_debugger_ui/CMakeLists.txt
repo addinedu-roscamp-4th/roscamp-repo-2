@@ -20,7 +20,33 @@ find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
 # Qt5 의존성 찾기
-find_package(Qt5 REQUIRED COMPONENTS Widgets Core Gui UiTools)
+find_package(Qt5 REQUIRED COMPONENTS Widgets Core Gui UiTools Network Sql Concurrent PrintSupport)
+
+# 포함 디렉토리 명시적으로 추가
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${Qt5Widgets_INCLUDE_DIRS}
+  ${Qt5Core_INCLUDE_DIRS}
+  ${Qt5Gui_INCLUDE_DIRS}
+  ${Qt5UiTools_INCLUDE_DIRS}
+  ${Qt5Network_INCLUDE_DIRS}
+  ${Qt5Sql_INCLUDE_DIRS}
+  ${Qt5Concurrent_INCLUDE_DIRS}
+  ${Qt5PrintSupport_INCLUDE_DIRS}
+)
+
+# QCustomPlot 라이브러리 확인 및 추가
+set(QCUSTOMPLOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/qcustomplot)
+set(QCUSTOMPLOT_SRC ${QCUSTOMPLOT_DIR}/qcustomplot.cpp)
+if(EXISTS ${QCUSTOMPLOT_SRC})
+  list(APPEND SOURCES ${QCUSTOMPLOT_SRC})
+  include_directories(${QCUSTOMPLOT_DIR})
+  # QCustomPlot에 필요한 정의 추가
+  add_compile_definitions(QCUSTOMPLOT_USE_LIBRARY)
+else()
+  message(STATUS "QCustomPlot 소스 파일을 찾을 수 없습니다. QCustomPlot 기능이 비활성화됩니다.")
+  add_compile_definitions(NO_QCUSTOMPLOT)
+endif()
 
 # 소스 및 헤더 파일 목록
 set(SOURCES
@@ -30,6 +56,7 @@ set(SOURCES
   src/message_store.cpp
   src/configuration_manager.cpp
   src/plugin_manager.cpp
+  src/panels/battery_gauge_panel.cpp
 )
 
 set(HEADERS
@@ -38,6 +65,8 @@ set(HEADERS
   include/robot_debugger_ui/message_store.hpp
   include/robot_debugger_ui/configuration_manager.hpp
   include/robot_debugger_ui/plugin_manager.hpp
+  include/robot_debugger_ui/panel_interface.hpp
+  include/robot_debugger_ui/panels/battery_gauge_panel.hpp
 )
 
 # Qt 자동 생성 코드 설정 (MOC, UIC, RCC)
@@ -89,6 +118,10 @@ target_link_libraries(robot_debugger_ui_node
   Qt5::Core
   Qt5::Gui
   Qt5::UiTools
+  Qt5::Network
+  Qt5::Sql
+  Qt5::Concurrent
+  Qt5::PrintSupport
 )
 
 # Qt 자동 생성 코드 디버깅 옵션
@@ -120,5 +153,10 @@ install(DIRECTORY
   include/
   DESTINATION include
 )
+
+# QCustomPlot에 필요한 정의 추가는 파일이 존재할 때만 적용
+if(NOT DEFINED NO_QCUSTOMPLOT)
+  target_compile_definitions(robot_debugger_ui_node PRIVATE QCUSTOMPLOT_USE_LIBRARY)
+endif()
 
 ament_package() 

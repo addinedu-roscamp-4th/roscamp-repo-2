@@ -4,26 +4,26 @@
 
 namespace robot_debugger_ui {
 
-PluginManager::PluginManager(const std::string& plugin_dir, QObject* parent)
+PluginManager::PluginManager(QObject* parent)
     : QObject(parent)
-    , plugin_dir_(plugin_dir)
 {
-    // 기본 플러그인 디렉토리 설정
-    if (plugin_dir_.empty()) {
-        plugin_dir_ = QApplication::applicationDirPath().toStdString() + "/plugins";
-    }
+    // 플러그인 정보 로드
+    loadPluginInfos();
 }
 
 PluginManager::~PluginManager()
 {
-    unloadPlugins();
+    // 모든 로드된 플러그인 언로드
+    for (auto it = loaded_plugins_.begin(); it != loaded_plugins_.end(); ++it) {
+        unloadPlugin(it->first);
+    }
 }
 
-int PluginManager::loadPlugins()
+std::vector<PluginManager::PluginInfo> PluginManager::scanPluginDirectory(const QString& dir_path)
 {
-    int loaded_count = 0;
+    std::vector<PluginInfo> discovered_plugins;
     
-    QDir plugin_dir(QString::fromStdString(plugin_dir_));
+    QDir plugin_dir(dir_path);
     QStringList entry_list = plugin_dir.entryList(QDir::Files);
     
     for (const QString& file_name : entry_list) {
@@ -31,126 +31,252 @@ int PluginManager::loadPlugins()
         if (QLibrary::isLibrary(file_name)) {
             QString absolute_path = plugin_dir.absoluteFilePath(file_name);
             
-            // 이미 로드된 플러그인인지 확인
-            std::string file_path = absolute_path.toStdString();
-            if (plugin_loaders_.find(file_path) != plugin_loaders_.end()) {
-                continue; // 이미 로드됨
-            }
+            // 플러그인 로더 생성하여 메타데이터 확인
+            QPluginLoader loader(absolute_path);
+            QJsonObject metadata = loader.metaData().value("MetaData").toObject();
             
-            // 플러그인 로더 생성
-            auto loader = std::make_unique<QPluginLoader>(absolute_path);
-            
-            // 플러그인 로드
-            if (loader->load()) {
-                QObject* plugin_instance = loader->instance();
-                if (plugin_instance) {
-                    // 인터페이스로 캐스팅 (동적 캐스팅 사용)
-                    // 참고: 플러그인은 PluginInterface를 구현하고 QObject에서 파생된 클래스여야 함
-                    PluginInterface* plugin = dynamic_cast<PluginInterface*>(plugin_instance);
-                    if (plugin) {
-                        // 플러그인 초기화
-                        if (plugin->initialize()) {
-                            std::string plugin_name = plugin->getName();
-                            
-                            // 플러그인 저장
-                            plugins_[plugin_name] = plugin;
-                            plugin_loaders_[file_path] = std::move(loader);
-                            
-                            // 로드 알림
-                            emit pluginLoaded(plugin_name);
-                            loaded_count++;
-                            
-                            qInfo() << "플러그인 로드 성공:" << QString::fromStdString(plugin_name);
-                        } else {
-                            // 초기화 실패
-                            loader->unload();
-                            qWarning() << "플러그인 초기화 실패:" << absolute_path;
-                        }
-                    } else {
-                        // 캐스팅 실패
-                        loader->unload();
-                        qWarning() << "플러그인 인터페이스 불일치:" << absolute_path;
-                    }
-                } else {
-                    // 인스턴스 생성 실패
-                    qWarning() << "플러그인 인스턴스 생성 실패:" << absolute_path;
-                    qWarning() << "오류:" << loader->errorString();
+            if (!metadata.isEmpty()) {
+                PluginInfo info;
+                info.id = metadata.value("id").toString();
+                info.name = metadata.value("name").toString();
+                info.version = metadata.value("version").toString();
+                info.description = metadata.value("description").toString();
+                info.file_path = absolute_path;
+                info.is_loaded = false;
+                info.is_enabled = false;
+                
+                // 이미 알려진 플러그인인지 확인하고 정보 업데이트
+                auto it = plugin_infos_.find(info.id);
+                if (it != plugin_infos_.end()) {
+                    // 기존 설정 유지
+                    info.settings = it->second.settings;
+                    info.is_enabled = it->second.is_enabled;
                 }
-            } else {
-                // 로드 실패
-                qWarning() << "플러그인 로드 실패:" << absolute_path;
-                qWarning() << "오류:" << loader->errorString();
+                
+                discovered_plugins.push_back(info);
+                plugin_infos_[info.id] = info;
             }
         }
     }
     
-    return loaded_count;
+    // 플러그인 정보 저장
+    savePluginInfos();
+    
+    return discovered_plugins;
 }
 
-void PluginManager::unloadPlugins()
+PluginInterface* PluginManager::loadPlugin(const QString& plugin_id, QWidget* parent_widget)
 {
-    // 모든 플러그인 종료
-    for (auto& entry : plugins_) {
-        PluginInterface* plugin = entry.second;
-        if (plugin) {
-            try {
-                plugin->shutdown();
-                emit pluginUnloaded(entry.first);
-            } catch (const std::exception& e) {
-                qWarning() << "플러그인 종료 중 오류 발생:" << QString::fromStdString(entry.first) << "-" << e.what();
-            }
-        }
-    }
-    
-    // 맵 정리
-    plugins_.clear();
-    
-    // 모든 플러그인 언로드
-    for (auto& entry : plugin_loaders_) {
-        QPluginLoader* loader = entry.second.get();
-        if (loader) {
-            loader->unload();
-        }
-    }
-    
-    // 로더 맵 정리
-    plugin_loaders_.clear();
-}
-
-std::vector<std::string> PluginManager::getPluginNames() const
-{
-    std::vector<std::string> names;
-    names.reserve(plugins_.size());
-    
-    for (const auto& entry : plugins_) {
-        names.push_back(entry.first);
-    }
-    
-    return names;
-}
-
-PluginInterface* PluginManager::getPlugin(const std::string& name) const
-{
-    auto it = plugins_.find(name);
-    if (it != plugins_.end()) {
+    // 이미 로드되었는지 확인
+    auto it = loaded_plugins_.find(plugin_id);
+    if (it != loaded_plugins_.end()) {
         return it->second;
     }
     
-    return nullptr;
+    // 플러그인 정보 찾기
+    auto info_it = plugin_infos_.find(plugin_id);
+    if (info_it == plugin_infos_.end()) {
+        qWarning() << "플러그인 ID를 찾을 수 없음:" << plugin_id;
+        return nullptr;
+    }
+    
+    PluginInfo& info = info_it->second;
+    
+    // 이미 로더가 있는지 확인
+    QPluginLoader* loader = nullptr;
+    auto loader_it = plugin_loaders_.find(plugin_id);
+    
+    if (loader_it == plugin_loaders_.end()) {
+        // 새 로더 생성
+        loader = new QPluginLoader(info.file_path);
+        plugin_loaders_[plugin_id] = loader;
+    } else {
+        loader = loader_it->second;
+    }
+    
+    // 플러그인 로드
+    if (!loader->isLoaded() && !loader->load()) {
+        qWarning() << "플러그인 로드 실패:" << info.file_path;
+        qWarning() << "오류:" << loader->errorString();
+        return nullptr;
+    }
+    
+    // 인스턴스 가져오기
+    QObject* instance = loader->instance();
+    if (!instance) {
+        qWarning() << "플러그인 인스턴스 생성 실패:" << info.file_path;
+        return nullptr;
+    }
+    
+    // 인터페이스 캐스팅
+    PluginInterface* plugin = dynamic_cast<PluginInterface*>(instance);
+    if (!plugin) {
+        qWarning() << "플러그인 인터페이스 불일치:" << info.file_path;
+        loader->unload();
+        return nullptr;
+    }
+    
+    // 플러그인 초기화
+    if (!plugin->initialize(parent_widget, info.settings)) {
+        qWarning() << "플러그인 초기화 실패:" << info.file_path;
+        loader->unload();
+        return nullptr;
+    }
+    
+    // 플러그인 저장
+    loaded_plugins_[plugin_id] = plugin;
+    info.is_loaded = true;
+    
+    emit pluginLoaded(plugin_id, true);
+    qInfo() << "플러그인 로드 성공:" << plugin_id;
+    
+    return plugin;
 }
 
-QWidget* PluginManager::createPluginWidget(const std::string& name)
+bool PluginManager::unloadPlugin(const QString& plugin_id)
 {
-    PluginInterface* plugin = getPlugin(name);
-    if (plugin) {
-        try {
-            return plugin->createWidget();
-        } catch (const std::exception& e) {
-            qWarning() << "플러그인 위젯 생성 중 오류 발생:" << QString::fromStdString(name) << "-" << e.what();
+    // 플러그인 찾기
+    auto plugin_it = loaded_plugins_.find(plugin_id);
+    if (plugin_it == loaded_plugins_.end()) {
+        return false; // 로드되지 않음
+    }
+    
+    // 로더 찾기
+    auto loader_it = plugin_loaders_.find(plugin_id);
+    if (loader_it == plugin_loaders_.end()) {
+        return false; // 로더 없음
+    }
+    
+    PluginInterface* plugin = plugin_it->second;
+    QPluginLoader* loader = loader_it->second;
+    
+    // 플러그인 설정 저장
+    QVariantMap settings = plugin->settings();
+    savePluginSettings(plugin_id, settings);
+    
+    // 플러그인 종료
+    plugin->shutdown();
+    
+    // 로더 언로드
+    bool success = loader->unload();
+    
+    if (success) {
+        // 맵에서 제거
+        loaded_plugins_.erase(plugin_it);
+        
+        // 플러그인 정보 업데이트
+        auto info_it = plugin_infos_.find(plugin_id);
+        if (info_it != plugin_infos_.end()) {
+            info_it->second.is_loaded = false;
         }
+        
+        emit pluginUnloaded(plugin_id);
+    }
+    
+    return success;
+}
+
+bool PluginManager::enablePlugin(const QString& plugin_id)
+{
+    auto it = plugin_infos_.find(plugin_id);
+    if (it == plugin_infos_.end()) {
+        return false;
+    }
+    
+    it->second.is_enabled = true;
+    savePluginInfos();
+    emit pluginEnabled(plugin_id);
+    
+    return true;
+}
+
+bool PluginManager::disablePlugin(const QString& plugin_id)
+{
+    auto it = plugin_infos_.find(plugin_id);
+    if (it == plugin_infos_.end()) {
+        return false;
+    }
+    
+    // 먼저 언로드
+    if (it->second.is_loaded) {
+        unloadPlugin(plugin_id);
+    }
+    
+    it->second.is_enabled = false;
+    savePluginInfos();
+    emit pluginDisabled(plugin_id);
+    
+    return true;
+}
+
+bool PluginManager::savePluginSettings(const QString& plugin_id, const QVariantMap& settings)
+{
+    auto it = plugin_infos_.find(plugin_id);
+    if (it == plugin_infos_.end()) {
+        return false;
+    }
+    
+    it->second.settings = settings;
+    savePluginInfos();
+    emit pluginSettingsChanged(plugin_id);
+    
+    return true;
+}
+
+PluginManager::PluginInfo PluginManager::getPluginInfo(const QString& plugin_id) const
+{
+    auto it = plugin_infos_.find(plugin_id);
+    if (it != plugin_infos_.end()) {
+        return it->second;
+    }
+    
+    return PluginInfo();
+}
+
+std::vector<PluginManager::PluginInfo> PluginManager::getAllPluginInfo() const
+{
+    std::vector<PluginInfo> infos;
+    infos.reserve(plugin_infos_.size());
+    
+    for (const auto& pair : plugin_infos_) {
+        infos.push_back(pair.second);
+    }
+    
+    return infos;
+}
+
+QWidget* PluginManager::getPluginWidget(const QString& plugin_id) const
+{
+    auto it = loaded_plugins_.find(plugin_id);
+    if (it != loaded_plugins_.end()) {
+        return it->second->widget();
     }
     
     return nullptr;
+}
+
+QVariantMap PluginManager::getPluginSettings(const QString& plugin_id) const
+{
+    auto it = plugin_infos_.find(plugin_id);
+    if (it != plugin_infos_.end()) {
+        return it->second.settings;
+    }
+    
+    return QVariantMap();
+}
+
+bool PluginManager::savePluginInfos()
+{
+    // 파일에 플러그인 정보 저장 구현
+    // TODO: 설정 파일에 저장 구현
+    return true;
+}
+
+bool PluginManager::loadPluginInfos()
+{
+    // 파일에서 플러그인 정보 로드 구현
+    // TODO: 설정 파일에서 로드 구현
+    return true;
 }
 
 } // namespace robot_debugger_ui 

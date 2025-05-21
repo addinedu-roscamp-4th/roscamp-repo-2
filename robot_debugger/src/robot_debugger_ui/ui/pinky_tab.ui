@@ -19,21 +19,13 @@
      <item>
       <widget class="QLabel" name="label">
        <property name="text">
-        <string>도메인 패턴:</string>
+        <string>Pinky 제어 패널</string>
        </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLineEdit" name="lineEditDomain">
-       <property name="text">
-        <string>10, 20</string>
+       <property name="alignment">
+        <set>Qt::AlignLeft|Qt::AlignVCenter</set>
        </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButtonApply">
-       <property name="text">
-        <string>적용</string>
+       <property name="styleSheet">
+        <string>font-size: 16px; font-weight: bold;</string>
        </property>
       </widget>
      </item>
@@ -51,32 +43,12 @@
       </spacer>
      </item>
      <item>
-      <widget class="QCheckBox" name="checkBoxPinky1">
+      <widget class="QLabel" name="activeRobotsLabel">
        <property name="text">
-        <string>Pinky1</string>
+        <string>활성화된 로봇: 사이드바에서 선택</string>
        </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="checkBoxPinky2">
-       <property name="text">
-        <string>Pinky2</string>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="checkBoxPinky3">
-       <property name="text">
-        <string>Pinky3</string>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
+       <property name="styleSheet">
+        <string>color: #555;</string>
        </property>
       </widget>
      </item>
@@ -84,6 +56,9 @@
       <widget class="QPushButton" name="pushButtonEmergency">
        <property name="text">
         <string>긴급 정지</string>
+       </property>
+       <property name="styleSheet">
+        <string>background-color: #f44336; color: white;</string>
        </property>
       </widget>
      </item>

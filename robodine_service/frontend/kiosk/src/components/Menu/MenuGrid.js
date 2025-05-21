@@ -39,10 +39,21 @@ const MenuGrid = ({ items, onAddToCart, category }) => {
   };
 
   const addToCartWithQty = (item, qty) => {
-    // 수량과 함께 장바구니에 추가
-    for (let i = 0; i < qty; i++) {
-      onAddToCart(item);
-    }
+    // 필요한 정보만 추출하여 새 객체 생성
+    const itemToAdd = {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      image_url: item.image_url || item.image,
+      description: item.description,
+      prepare_time: item.prepare_time,
+      category: item.category,
+      categoryId: item.categoryId,
+      available: item.available
+    };
+    
+    // 수량을 한 번에 전달하여 장바구니에 추가
+    onAddToCart(itemToAdd, qty);
     closeModal();
   };
 
@@ -65,7 +76,7 @@ const MenuGrid = ({ items, onAddToCart, category }) => {
             key={item.id}
             item={item}
             onTap={() => openDetail(item)}
-            onAdd={() => onAddToCart(item)}
+            onAdd={onAddToCart}
           />
         ))}
       </div>
