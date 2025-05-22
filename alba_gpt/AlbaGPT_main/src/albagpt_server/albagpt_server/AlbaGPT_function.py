@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from dotenv import load_dotenv
@@ -7,8 +6,9 @@ from albagpt_server.config import alba_task_type_list, dynamic_object_list
 import re
 import logging
 import csv
+import os
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 # 로거 생성
 logger = logging.getLogger('alba_function')
@@ -22,7 +22,7 @@ file_handler.setFormatter(formatter)
 # 로거에 핸들러 추가
 logger.addHandler(file_handler)
 
-def alba_task_discriminator(user_query, memory, alba_task_type_list=alba_task_type_list):
+def alba_task_discriminator(user_query, memory, llm):
     """
     알바봇에게 입력된 프롬프트가 어떤 type의 명령인지 구분해주는 함수입니다.
     
@@ -37,6 +37,8 @@ def alba_task_discriminator(user_query, memory, alba_task_type_list=alba_task_ty
     for idx in range(len(memory))
     if memory['messages'][idx]['answer'] not in ["채팅 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.", "None"]
     )
+
+    logger.info(chat_history)
 
     task_example_csv_path = './contents/example/task_example.csv' # 유저 프롬프트에 따른 분류된 task를 정리한 csv 파일
     task_example_list = []
@@ -55,6 +57,8 @@ def alba_task_discriminator(user_query, memory, alba_task_type_list=alba_task_ty
         f'{{"prompt": "{task["prompt"]}", "result": "{task["result"]}"}}'
         for task in task_example_list
     )
+
+    logger.info(task_example)
 
     discriminator_prompt = """
     당신은 레스토랑에서 업무를 하는 카메라가 장착된 '핑키'라는 이름을 가진 모바일 로봇입니다.
@@ -88,35 +92,31 @@ def alba_task_discriminator(user_query, memory, alba_task_type_list=alba_task_ty
         input_variables=["user_query", "chat_history", "alba_task_type_list", "task_example"],
     )
 
-    # 객체 생성
-    llm = ChatOpenAI(
-        temperature=0.7,  # 창의성 (0.0 ~ 2.0)
-        max_tokens=2048,  # 최대 토큰수
-        model_name="gpt-4o",  # 모델명
-    )
-
     chain = LLMChain(
         llm=llm,
         prompt=discriminator_template
     )
 
-    logger.info(llm)
-    logger.info(chain)
+    try:
+        result = chain.invoke({
+            "user_query": user_query,
+            "chat_history": chat_history,
+            "alba_task_type_list": alba_task_type_list,
+            "task_example": task_example
+        })
 
-    discriminated_task = chain.invoke({
-        "user_query": user_query,
-        "chat_history": chat_history,
-        "alba_task_type_list": alba_task_type_list,
-        "task_example": task_example
-    })['text']
+        discriminated_task = result.get('text', '').replace(".", "").strip()
 
-    discriminated_task = discriminated_task.replace(".", "").strip()
-
-    logger.info(discriminated_task)
+        if discriminated_task == "":
+            logger.warning("⚠️ LLM returned empty text.")
+            return "none"
+    except Exception as e:
+        logger.error(f"❌ Error during LLMChain.invoke(): {e}")
+        return "none"
     
     return discriminated_task
 
-def validate_alba_task_discriminator(user_query, memory, alba_task_type_list=alba_task_type_list):
+def validate_alba_task_discriminator(user_query, memory, llm):
     """
     alba_task_discriminator 함수로 구분한 task가 alba_task_type_list 배열의 원소 중 하나가 맞는 지 한 번 더 판별해주는 함수입니다.
 
@@ -124,7 +124,7 @@ def validate_alba_task_discriminator(user_query, memory, alba_task_type_list=alb
         alba_task_type_list에 있는 경우 : {discriminated_task}
         alba_task_type_list에 없는 경우 : None
     """
-    discriminated_task = alba_task_discriminator(user_query, memory)
+    discriminated_task = alba_task_discriminator(user_query, memory, llm)
     
     if discriminated_task not in alba_task_type_list :
         return None
@@ -164,7 +164,7 @@ def validate_discriminate_robot_id(robot_id_response) :
     else:
         return 0
 
-def generate_alba_greetings_response(user_query, memory):
+def generate_alba_greetings_response(user_query, memory, llm):
     """
     alba_task_discriminator 함수로 구분된 task가 'GREETINGS'인 경우 user_query에 대해 대답을 생성해주는 함수입니다.
     
@@ -199,13 +199,6 @@ def generate_alba_greetings_response(user_query, memory):
         input_variables=["user_query", "chat_history", "greetings_example"]
     )
 
-    # 객체 생성
-    llm = ChatOpenAI(
-        temperature=0.3,  # 창의성 (0.0 ~ 2.0) 
-        max_tokens=2048,  # 최대 토큰수
-        model_name="gpt-4o-mini",  # 모델명
-    )
-
     chain = LLMChain(
         llm=llm,
         prompt=alba_greetings_template,
@@ -230,7 +223,7 @@ def generate_alba_none_response(user_query):
     
     return alba_none_response
 
-def generate_alba_maintenance_response(user_query, memory):
+def generate_alba_maintenance_response(user_query, memory, llm):
     """
     alba_task_discriminator 함수로 구분된 task가 'MAINTENANCE'인 경우 user_query에 대해 대답을 생성해주는 함수입니다.
     
@@ -265,13 +258,6 @@ def generate_alba_maintenance_response(user_query, memory):
         input_variables=["user_query", "chat_history", "maintenance_example"]
     )
 
-    # 객체 생성
-    llm = ChatOpenAI(
-        temperature=0.3,  # 창의성 (0.0 ~ 2.0)
-        max_tokens=2048,  # 최대 토큰수
-        model_name="gpt-4o-mini",  # 모델명
-    )
-
     chain = LLMChain(
         llm=llm,
         prompt=alba_maintenance_template,
@@ -302,7 +288,7 @@ def detect_object_obstacles(detected_objects):
 
     return detected_object_list
 
-def generate_alba_take_picture_response(user_query, memory, object_info):
+def generate_alba_take_picture_response(user_query, memory, llm, object_info):
     """
     alba_task_discriminator 함수로 구분된 task가 'TAKE_PICTURE'인 경우 user_query에 대해 해당하는 알바 봇으로부터 수신되는 영상의 이미지 프레임을 토대로 상황을 해석해 반환해주는 함수입니다.
 
@@ -336,13 +322,6 @@ def generate_alba_take_picture_response(user_query, memory, object_info):
         3. {object_info}가 '사람'인 경우에도 그냥 "{object_info} {obstacle_meetup_example}"와 같은 식으로 대답하기만 하면 됩니다.
         4. 위의 조건 이외에 다른 정수, 단어, 문장은 생성하지 않습니다.
         """
-
-        # 객체 생성
-        llm = ChatOpenAI(
-            temperature=0.4,  # 창의성 (0.0 ~ 2.0)
-            max_tokens=2048,  # 최대 토큰수
-            model_name="gpt-4o",  # 모델명
-        )
 
         chain = LLMChain(
         llm=llm,
