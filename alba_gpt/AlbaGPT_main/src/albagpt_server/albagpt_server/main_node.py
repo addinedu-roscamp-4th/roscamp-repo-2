@@ -12,8 +12,11 @@ import rclpy
 import os
 import uuid
 
-from albagpt_server.config import alba_task_type_list, dynamic_object_list
-from collections import deque
+from langchain_core.callbacks.base import Callbacks
+from langchain_core.caches import BaseCache
+from langchain_openai.chat_models import ChatOpenAI
+from albagpt_server.config import dynamic_object_list, static_object_list
+from collections import deque, Counter
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from rclpy.executors import MultiThreadedExecutor
@@ -25,6 +28,8 @@ from std_msgs.msg import String
 
 memory_url = 'http://192.168.0.156:8000/api/chat/history?page=1&per_page=3' # AlbaBot의 응답을 저장해주는 url
 
+ChatOpenAI.model_rebuild()
+
 class AlbaGPTNode(Node):
     def __init__(self):
         super().__init__('albagpt_node')
@@ -33,12 +38,17 @@ class AlbaGPTNode(Node):
         self.latest_result_frame = {name: deque(maxlen=5) for name in self.alba_ports}
         self.frame_locks = {name: threading.Lock() for name in self.alba_ports} # 해당 쓰레드만 
         self.obstacle_info = {
-            name: {'type': "none", 'name': "none"} for name in self.alba_ports
+            name: deque(maxlen=10) for name in self.alba_ports
         }
         self.fps_info = {
             name: {'cnt': 0, 'start_time': time.time(), 'fps': 0}
             for name in self.alba_ports
-        }       
+        }
+        self.llm = ChatOpenAI(
+            temperature=0.7,  # 창의성 (0.0 ~ 2.0)
+            max_tokens=2048,  # 최대 토큰수
+            model_name="gpt-4o",  # 모델명
+        ) 
 
         # 스레드 시작
         for id_port in self.alba_ports.items():
@@ -122,6 +132,10 @@ class AlbaGPTNode(Node):
                     # 결과 이미지를 JPEG 형식으로 인코딩
                     retval, encoded_bbox_image = cv2.imencode('.jpg', decoded_frame)
 
+                    if port == 5000 : # MultiThreading 환경에서는 한 번에 여러개의 cv2 창을 띄울 수 없음
+                        cv2.imshow("AlbaBot Detection", decoded_frame)
+                        cv2.waitKey(1)
+
                     with self.frame_locks[robot_id]:
                         self.latest_result_frame[robot_id].append(encoded_bbox_image)
 
@@ -167,7 +181,7 @@ class AlbaGPTNode(Node):
                     self.get_logger().info(f"📦 Parsed user_query: {user_query}")
 
                     memory = requests.get(memory_url).json()
-                    robot_task = AlbaGPT_function.validate_alba_task_discriminator(user_query, memory)
+                    robot_task = AlbaGPT_function.validate_alba_task_discriminator(user_query, memory, self.llm)
                     robot_id = AlbaGPT_function.extract_robot_id(user_query)
 
                     self.get_logger().info(f"🧠 Previous memory : {memory}")
@@ -175,7 +189,7 @@ class AlbaGPTNode(Node):
                     self.get_logger().info(f"🪪 Detected Alba ID : {robot_id}")
 
                     if robot_task == "GREETINGS":
-                        response = AlbaGPT_function.generate_alba_greetings_response(user_query, memory)
+                        response = AlbaGPT_function.generate_alba_greetings_response(user_query, memory, self.llm)
                         self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
                     elif robot_task == "TAKE_PICTURE":
                         for id_port in self.alba_ports.items():
@@ -184,10 +198,10 @@ class AlbaGPTNode(Node):
 
                             if id == compare_id :
                                 img_path = self.save_obstacle_picture(compare_id)
-                                response = AlbaGPT_function.generate_alba_take_picture_response(user_query, memory, self.obstacle_info[robot_id]['name'])
+                                response = AlbaGPT_function.generate_alba_take_picture_response(user_query, memory, self.llm, self.obstacle_info[robot_id]['name'])
                                 self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, img_path)
                     elif robot_task == "MAINTENANCE":
-                        response = AlbaGPT_function.generate_alba_maintenance_response(user_query, memory)
+                        response = AlbaGPT_function.generate_alba_maintenance_response(user_query, memory, self.llm)
                         self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
                     else:
                         response = AlbaGPT_function.generate_alba_none_response(user_query)
@@ -265,7 +279,7 @@ class AlbaGPTNode(Node):
         raw = json.dumps(payload).encode("utf-8")
         header = len(raw).to_bytes(4, byteorder="big")
 
-        self.get_logger().info("📤 Payload contents:\n%s", json.dumps(payload, indent=4, ensure_ascii=False))
+        self.get_logger().info(f"📤 Payload contents:\n{json.dumps(payload, indent=4, ensure_ascii=False)}")
         self.get_logger().info(f"🗂 Header prepared: {header.hex()} (length: {len(raw)} bytes)")
 
         # 3) 페이로드 전송
@@ -304,7 +318,11 @@ class AlbaGPTNode(Node):
             if object in dynamic_object_list :
                 cv2.rectangle(decoded_frame, start_point, end_point, (0, 0, 255), 2)
                 cv2.putText(decoded_frame, f"{object}", (x + width - 70, y + 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)    
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            elif object in static_object_list :
+                cv2.rectangle(decoded_frame, start_point, end_point, (0, 255, 0), 2)
+                cv2.putText(decoded_frame, f"{object}", (x + width - 70, y + 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)        
                 
         if fps < 20 : 
             cv2.putText(decoded_frame, f"fps : {fps}", (550, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
@@ -321,34 +339,38 @@ class AlbaGPTNode(Node):
             None
         """
         if not results.detections :
-            self.obstacle_info[robot_id]['type'] = "none"
-            self.obstacle_info[robot_id]['name'] = "none"
+            self.obstacle_info[robot_id].append("none")
             return
         else :
             for detection in results.detections:
                 if detection.categories[0].category_name in dynamic_object_list:
-                    self.obstacle_info[robot_id]['type'] = "dynamic"
-                    self.obstacle_info[robot_id]['name'] = detection.categories[0].category_name
+                    self.obstacle_info[robot_id].append("dynamic")
                     return
-        self.obstacle_info[robot_id]['type'] = "static"
-        self.obstacle_info[robot_id]['name'] = "none"
+        # static인 경우
+        if detection.categories[0].category_name in static_object_list :
+            self.obstacle_info[robot_id].append("static")
+            return
         
     def publish_obstacle_information(self):
         """
-        MediaPipe를 통해 검출된 장애물의 종류를 토픽으로 전송해주는 함수입니다.
-
-        Returns :
-            None
+        최근 몇 프레임에서의 장애물 상태를 바탕으로 다수결 투표 후
+        가장 많이 등장한 상태를 퍼블리시합니다.
         """
-        for robot_id, info in self.obstacle_info.items():
+        for robot_id, info_queue in self.obstacle_info.items():
+            if not info_queue:
+                continue
+
+            # 다수결 판별
+            counter = Counter(info_queue)
+            majority_status = counter.most_common(1)[0][0]
+
             msg = String()
             result_dict = {
                 "robot_id": robot_id,
-                "type": info['type'],
-                "name": info['name'],
+                "type": majority_status,
             }
             msg.data = json.dumps(result_dict, ensure_ascii=False)
-            self.get_logger().info(f"💬 {robot_id} || Published message : {result_dict}")
+            self.get_logger().info(f"💬 {robot_id} || Published (Majority): {result_dict}")
             self.obstacle_information_publisher.publish(msg)
 
 def main(args=None):
