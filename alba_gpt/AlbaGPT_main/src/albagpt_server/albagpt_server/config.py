@@ -1,3 +1,3 @@
-alba_task_type_list = ["GREETINGS", "TAKE_PICTURE", "MAINTENANCE"]
-dynamic_object_list = ["person", "bird", "cat", "dog"]
+alba_task_type_list = ["GREETINGS", "GOODBYE"]
+dynamic_object_list = ["bird", "cat", "dog"]
 static_object_list = ["bottle", "cup", "dining table"]

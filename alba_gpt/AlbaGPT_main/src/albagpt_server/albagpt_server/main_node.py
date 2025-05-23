@@ -5,13 +5,12 @@ import cv2
 import numpy as np
 import time
 import json
-import requests
 from . import AlbaGPT_function
 import base64
 import rclpy
 import os
-import uuid
 
+from itertools import islice
 from langchain_core.callbacks.base import Callbacks
 from langchain_core.caches import BaseCache
 from langchain_openai.chat_models import ChatOpenAI
@@ -26,19 +25,17 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import String
 
-memory_url = 'http://192.168.0.156:8000/api/chat/history?page=1&per_page=3' # AlbaBot의 응답을 저장해주는 url
-
 ChatOpenAI.model_rebuild()
 
 class AlbaGPTNode(Node):
     def __init__(self):
         super().__init__('albagpt_node')
         self.alba_ports = {'AlbaBot_1': 5000, 'AlbaBot_2': 5001, 'AlbaBot_3': 5002}
-        self.declare_parameter('qos_depth', 10)
+        self.declare_parameter('qos_depth', 8)
         self.latest_result_frame = {name: deque(maxlen=5) for name in self.alba_ports}
         self.frame_locks = {name: threading.Lock() for name in self.alba_ports} # 해당 쓰레드만 
-        self.obstacle_info = {
-            name: deque(maxlen=10) for name in self.alba_ports
+        self.obstacle_type = {
+            name: deque(maxlen=40) for name in self.alba_ports
         }
         self.fps_info = {
             name: {'cnt': 0, 'start_time': time.time(), 'fps': 0}
@@ -132,7 +129,7 @@ class AlbaGPTNode(Node):
                     # 결과 이미지를 JPEG 형식으로 인코딩
                     retval, encoded_bbox_image = cv2.imencode('.jpg', decoded_frame)
 
-                    if port == 5000 : # MultiThreading 환경에서는 한 번에 여러개의 cv2 창을 띄울 수 없음
+                    if port == 5002 : # MultiThreading 환경에서는 한 번에 여러개의 cv2 창을 띄울 수 없음
                         cv2.imshow("AlbaBot Detection", decoded_frame)
                         cv2.waitKey(1)
 
@@ -144,7 +141,7 @@ class AlbaGPTNode(Node):
     
     def tcp_server(self):
         """
-        채팅 서버를 위한 TCP 서버를 열어주는 함수입니다.
+        핑키 인터렉션을 위한 FastAPI 명령을 내려주는 함수입니다.
 
         Returns :
             None
@@ -158,6 +155,7 @@ class AlbaGPTNode(Node):
         tcp_socket.bind((TCP_IP, TCP_PORT))
         tcp_socket.listen(5)
         self.get_logger().info(f"🌐 TCP Listening on {TCP_IP}:{TCP_PORT}")
+
         try :
             while True :
                 try:
@@ -180,28 +178,17 @@ class AlbaGPTNode(Node):
                     self.get_logger().info(f"📦 Parsed msg_id: {msg_id}")
                     self.get_logger().info(f"📦 Parsed user_query: {user_query}")
 
-                    memory = requests.get(memory_url).json()
-                    robot_task = AlbaGPT_function.validate_alba_task_discriminator(user_query, memory, self.llm)
+                    robot_task = AlbaGPT_function.validate_alba_task_discriminator(user_query, self.llm)
                     robot_id = AlbaGPT_function.extract_robot_id(user_query)
 
-                    self.get_logger().info(f"🧠 Previous memory : {memory}")
                     self.get_logger().info(f"💼 Detected Alba Task : {robot_task}")
                     self.get_logger().info(f"🪪 Detected Alba ID : {robot_id}")
 
                     if robot_task == "GREETINGS":
-                        response = AlbaGPT_function.generate_alba_greetings_response(user_query, memory, self.llm)
+                        response = AlbaGPT_function.generate_alba_greetings_response(user_query, self.llm)
                         self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
-                    elif robot_task == "TAKE_PICTURE":
-                        for id_port in self.alba_ports.items():
-                            id, port = id_port
-                            compare_id = "AlbaBot_" + str(robot_id)
-
-                            if id == compare_id :
-                                img_path = self.save_obstacle_picture(compare_id)
-                                response = AlbaGPT_function.generate_alba_take_picture_response(user_query, memory, self.llm, self.obstacle_info[robot_id]['name'])
-                                self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, img_path)
-                    elif robot_task == "MAINTENANCE":
-                        response = AlbaGPT_function.generate_alba_maintenance_response(user_query, memory, self.llm)
+                    elif robot_task == "GOODBYE":
+                        response = AlbaGPT_function.generate_alba_maintenance_response(user_query, self.llm)
                         self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
                     else:
                         response = AlbaGPT_function.generate_alba_none_response(user_query)
@@ -213,33 +200,6 @@ class AlbaGPTNode(Node):
                     self.get_logger().warning(f"TCP Error: {e}")
         finally:
             tcp_socket.close()
-
-    def save_obstacle_picture(self, robot_id) :
-        """
-        지정된 알바봇으로부터 MediaPipe 모델을 통과한 결과 사진을 특정 디렉토리에 저장해주는 함수입니다.
-
-        Returns :
-            image_path
-        """
-        image_dir = './contents/image'
-        image_path = os.path.join(image_dir, str(uuid.uuid4().hex) + '_' + time.strftime('%Y-%m-%d %H-%M-%S') + '.jpg')
-
-        if not self.latest_result_frame[robot_id]:
-                    self.get_logger().warning(f"🚫 No frame available for {robot_id}")
-                    return None
-                
-        latest_detected_frame = self.latest_result_frame[robot_id].pop()
-        
-        np_data = np.frombuffer(latest_detected_frame, dtype=np.uint8)
-        decoded_detected_image = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-
-        if decoded_detected_image is None:
-            self.get_logger().info("❌ Failed to decode image from decoded_detected_image")
-            return None
-        else :
-            cv2.imwrite(image_path, decoded_detected_image)
-            self.get_logger().info(f"📷 Image successfully saved to {image_path}")
-            return image_path
 
     def transfer_payloads(self, msg_id: int, question: str, robot_id: int, robot_task: str, response_text: str, img_path: str):
         """
@@ -291,9 +251,6 @@ class AlbaGPTNode(Node):
                 sock.sendall(header + raw)
                 self.get_logger().info(f"🚀 Payload sent to {CHAT_HOST}:{CHAT_PORT}")
 
-                resp = sock.recv(4096)
-                self.get_logger().info(f"⭕️ 서버 응답: {resp.decode()}")
-
         except Exception as e:
             self.get_logger().error(f"❌ Error during payload transfer: {e}")
 
@@ -304,74 +261,97 @@ class AlbaGPTNode(Node):
         Returns :
             None
         """
-        for detection in results.detections:
-            bbox = detection.bounding_box
-            start_point = (int(bbox.origin_x), int(bbox.origin_y))
-            end_point = (int(bbox.origin_x + bbox.width), int(bbox.origin_y + bbox.height))
+        if results.detections : 
+            for detection in results.detections:
+                bbox = detection.bounding_box
+                start_point = (int(bbox.origin_x), int(bbox.origin_y))
+                end_point = (int(bbox.origin_x + bbox.width), int(bbox.origin_y + bbox.height))
 
-            object = detection.categories[0].category_name
-            x = int(detection.bounding_box.origin_x)
-            y = int(detection.bounding_box.origin_y)
-            width = detection.bounding_box.width
-            height = detection.bounding_box.height
+                object = detection.categories[0].category_name
+                x = int(detection.bounding_box.origin_x)
+                y = int(detection.bounding_box.origin_y)
+                width = detection.bounding_box.width
+                height = detection.bounding_box.height
 
-            if object in dynamic_object_list :
-                cv2.rectangle(decoded_frame, start_point, end_point, (0, 0, 255), 2)
-                cv2.putText(decoded_frame, f"{object}", (x + width - 70, y + 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            elif object in static_object_list :
-                cv2.rectangle(decoded_frame, start_point, end_point, (0, 255, 0), 2)
-                cv2.putText(decoded_frame, f"{object}", (x + width - 70, y + 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)        
-                
-        if fps < 20 : 
-            cv2.putText(decoded_frame, f"fps : {fps}", (550, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-        elif fps >= 20 and fps < 60 :
+                if object in dynamic_object_list :
+                    cv2.rectangle(decoded_frame, start_point, end_point, (0, 0, 255), 2)
+                    cv2.putText(decoded_frame, f"{object}", (x + width - 70, y + 20),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                elif object in static_object_list :
+                    cv2.rectangle(decoded_frame, start_point, end_point, (0, 255, 0), 2)
+                    cv2.putText(decoded_frame, f"{object}", (x + width - 70, y + 20),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)        
+                    
+        if fps < 15 : 
+            cv2.putText(decoded_frame, f"fps : {fps}", (550, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        elif fps < 30 :
             cv2.putText(decoded_frame, f"fps : {fps}", (550, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         else :
-            cv2.putText(decoded_frame, f"fps : {fps}", (550, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            cv2.putText(decoded_frame, f"fps : {fps}", (550, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     def discriminate_obstacles(self, results, robot_id):
         """
         MediaPipe를 통해 검출된 장애물이 동적 장애물인지 정적 장애물인지 구별해주는 함수입니다.
-
-        Returns :
-            None
+        만약 감지된 장애물이 없으면 "none"으로 구별해줍니다.
         """
-        if not results.detections :
-            self.obstacle_info[robot_id].append("none")
+        if not results.detections:
+            self.obstacle_type[robot_id].appendleft("none")
             return
-        else :
-            for detection in results.detections:
-                if detection.categories[0].category_name in dynamic_object_list:
-                    self.obstacle_info[robot_id].append("dynamic")
-                    return
-        # static인 경우
-        if detection.categories[0].category_name in static_object_list :
-            self.obstacle_info[robot_id].append("static")
-            return
-        
+
+        for detection in results.detections:
+            obj_name = detection.categories[0].category_name
+            if obj_name in dynamic_object_list:
+                self.obstacle_type[robot_id].appendleft("dynamic")
+                return
+            elif obj_name in static_object_list:
+                self.obstacle_type[robot_id].appendleft("static")
+                return
+            
     def publish_obstacle_information(self):
         """
         최근 몇 프레임에서의 장애물 상태를 바탕으로 다수결 투표 후
-        가장 많이 등장한 상태를 퍼블리시합니다.
+        가장 많이 등장한 타입(type)을 퍼블리시합니다.
         """
-        for robot_id, info_queue in self.obstacle_info.items():
-            if not info_queue:
+        for robot_id, type_queue in self.obstacle_type.items():
+            types = []
+
+            if len(type_queue) >= 30 :
+                types = list(islice(type_queue, 30))
+            else :
                 continue
+            
+             # 장애물의 타입을 비율 기준으로 처리
+            type_counter = Counter(types)
+            total = len(types)
+            type_percent = {
+                key: (value / total) * 100 for key, value in type_counter.items()
+            }
 
-            # 다수결 판별
-            counter = Counter(info_queue)
-            majority_status = counter.most_common(1)[0][0]
+            majority_type = "none"  # 기본값
 
-            msg = String()
+            dynamic_percent = type_percent.get("dynamic", 0)
+            static_percent = type_percent.get("static", 0)
+            none_percent = type_percent.get("none", 0)
+
+            if dynamic_percent >= 30: # 큐에 들어있는 값들 중 30% 이상이 dynamic이면 해당 인자로 분류
+                majority_type = "dynamic"
+            if static_percent >= 50: # 큐에 들어있는 값들 중 50% 이상이 static이면 static으로 분류
+                majority_type = "static"
+            if none_percent == 100 : # 큐에 들어있는 값이 전부 none이면 none으로 분류
+                majority_type = "none"
+
             result_dict = {
                 "robot_id": robot_id,
-                "type": majority_status,
+                "type": majority_type,
             }
+
+            msg = String()
             msg.data = json.dumps(result_dict, ensure_ascii=False)
+            self.get_logger().info(f"Queue Size : {len(type_queue)}")
+            self.get_logger().info(f"Dynamic : {dynamic_percent} || Static : {static_percent} || None : {none_percent}")
             self.get_logger().info(f"💬 {robot_id} || Published (Majority): {result_dict}")
             self.obstacle_information_publisher.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
