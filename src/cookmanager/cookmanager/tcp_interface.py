@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from mycobot_interfaces.msg import MycobotAngles, MycobotCoords
+from mycobot_interfaces.msg import MycobotAngles, MycobotCoords, CookState
 from std_msgs.msg import String
 from queue import Queue
 import socket
@@ -20,6 +20,7 @@ class TCPInterface(Node):
         self.latest_angles = {}
         self.latest_coords = {}
         self.menu_items = []
+        self.menu_status = "PLACED"
         self.menu_queue = Queue()
         self.cookbot_state = "IDLE"
 
@@ -28,12 +29,15 @@ class TCPInterface(Node):
             self.create_subscription(MycobotAngles, f'{ns}/angles_real', self.make_angles_callback(ns), 10)
             self.create_subscription(MycobotCoords, f'{ns}/coords_real', self.make_coords_callback(ns), 10)
             
-        self.create_subscription(String,'/cook_state', self.cook_state_callback, 10)
+        self.create_subscription(CookState, '/cook_state', self.cook_state_callback, 10)
         self.menu_command_pub = self.create_publisher(String, '/menu_item', 10)
         # self.create_timer(0.1, self.publish_next_menu_item)  # 0.1초마다 처리
         # 주기적으로 TCP 전송 (1초 간격)
         self.timer = self.create_timer(1.0, lambda: self.send_data_to_server(self.cookbot_state))
-        self.create_timer(5.0, self.get_menu)
+        self.create_timer(300.0, self.get_menu)
+
+        #일단 한 번 요청
+        self.get_menu()
 
         # TCP 수신 스레드 시작
         # threading.Thread(target=self.tcp_listener, daemon=True).start()
@@ -49,7 +53,11 @@ class TCPInterface(Node):
         return callback
     
     def cook_state_callback(self, msg):
-        self.cookbot_state = msg.data
+        state = msg.state
+        order_id = msg.order_id
+        self.get_logger().info(f"🍳 상태 수신: {state}, 주문 ID: {order_id}")
+        if state == "COOKING":
+            self.put_menu_status(order_id, "PREPARING")
 
     def send_payload(self, host, port, payload: dict):
         raw = json.dumps(payload).encode('utf-8')
@@ -133,21 +141,43 @@ class TCPInterface(Node):
 
     def get_menu(self):
         try:
-            # self.get_logger().info(f"📦 요청요청: ")
             url = "http://192.168.0.156:8000/api/orders/todo_order"
             response = requests.get(url)
             if response.status_code == 200:
                 menu_data = response.json()
-                {'order_id': 1, 'item_name': 'salad'}
-                self.get_logger().info(f"📦 수신된 메뉴: {menu_data}")
-                self.menu_items = menu_data.get('item_name', [])
+
+                # ✅ 단일 딕셔너리일 경우 리스트로 감싸기
+                if isinstance(menu_data, dict):
+                    menu_data = [menu_data]
+
+                self.menu_items = menu_data  # [{'order_id':..., 'item_name':...}, ...]
+
+                self.get_logger().info(f"📦 수신된 메뉴: {self.menu_items}")
+
+                # ✅ 여기서 에러 발생했던 부분
                 msg = String()
-                msg.data = self.menu_items
+                msg.data = ';'.join([f"{item['order_id']},{item['item_name']}" for item in self.menu_items])
                 self.menu_command_pub.publish(msg)
+
             else:
                 self.get_logger().warn(f"❌ 메뉴 요청 실패 - 상태 코드 {response.status_code}")
         except requests.exceptions.RequestException as e:
             self.get_logger().warn(f"⚠️ REST API 통신 실패: {e}")
+
+    def put_menu_status(self, order_id: int, status: str = "PREPARING"):
+        try:
+            url = f"http://192.168.0.156:8000/api/orders/{order_id}/status"
+            payload = {"status": status}
+            headers = {'Content-Type': 'application/json'}
+
+            response = requests.put(url, json=payload, headers=headers)
+
+            if response.status_code == 200:
+                self.get_logger().info(f"✅ 주문 {order_id} 상태를 '{status}'로 업데이트 완료")
+            else:
+                self.get_logger().warn(f"❌ 주문 상태 업데이트 실패 - 코드 {response.status_code}, 응답: {response.text}")
+        except requests.exceptions.RequestException as e:
+            self.get_logger().warn(f"⚠️ 상태 업데이트 중 오류 발생: {e}")
 
     def tcp_listener(self):
         while True:

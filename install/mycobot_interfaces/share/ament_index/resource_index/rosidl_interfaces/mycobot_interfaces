@@ -1,3 +1,5 @@
+msg/CookState.idl
+msg/CookState.msg
 msg/MycobotAngles.idl
 msg/MycobotAngles.msg
 msg/MycobotCoords.idl

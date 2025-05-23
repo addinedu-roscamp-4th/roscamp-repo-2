@@ -29,6 +29,7 @@ set(msg_files
   "msg/MycobotGripperStatus.msg"
   "msg/MycobotPumpStatus.msg"
   "msg/RobodineCoords.msg"
+  "msg/CookState.msg"
 )
 
 set(srv_files

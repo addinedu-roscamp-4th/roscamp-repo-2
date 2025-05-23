@@ -24,11 +24,11 @@ class PoseBroadcaster(Node):
         self.menu = 2
         self.cook_sign = False
         self.grip_flag = {r: False for r in self.robot_list}
-        self.emergency_flag = {r: True for r in self.robot_list}
+        self.emergency_flag = {r: False for r in self.robot_list}
         self.cb_group = ReentrantCallbackGroup()
 
         # self.timer = self.create_timer(10.0, self.timer_callback)  
-        self.create_subscription(String,'/menu_item', self.menu_callback, 10)
+        # self.create_subscription(String,'/menu_item', self.menu_callback, 10)
         self.cook_state_check = self.create_publisher(CookState, '/cook_state', 10)
         self.distance_pub = self.create_publisher(Float32, '/distance', 10)
 
@@ -50,8 +50,8 @@ class PoseBroadcaster(Node):
 
         # ✅ 초기 동작 실행
 
-        # time.sleep(5.0)
-        # self.cook_motion_planning(2)
+        time.sleep(5.0)
+        self.cook_motion_planning(2)
 
 
     def load_trajectory(self):
@@ -113,7 +113,19 @@ class PoseBroadcaster(Node):
         path_len = min(len(p) for p in paths)  # 둘 중 짧은 경로 기준
 
         for idx in range(path_len):
+            
             for i, robot_id in enumerate(robot_ids):
+
+                # 비상정지
+                if self.emergency_flag[robot_id]:
+                    send_msg = RobodineCoords(
+                    x=500.0, y=500.0, z=500.0,
+                    rx=0.0, ry=0.0, rz=0.0,
+                    gripper=gripper_vel,
+                    vel=1
+                    )
+                    self.coords_pubs[robot_id].publish(send_msg)
+
                 pose = paths[i][idx]
                 speed = speeds[i][idx]
 
@@ -158,6 +170,18 @@ class PoseBroadcaster(Node):
         for idx, pose in enumerate(path):
             if idx < skip_until:
                 continue
+
+
+            # 비상정지
+            if self.emergency_flag[robot_id]:
+                send_msg = RobodineCoords(
+                x=500.0, y=500.0, z=500.0,
+                rx=0.0, ry=0.0, rz=0.0,
+                gripper=gripper_vel,
+                vel=1
+                )
+                self.coords_pubs[robot_id].publish(send_msg)
+
 
             # 충돌 판단용 다른 로봇들의 현재 pose 평균
             other_coords = [self.latest_coords[r] for r in self.robot_list if r != robot_id and r in self.latest_coords]
@@ -231,27 +255,27 @@ class PoseBroadcaster(Node):
         self.get_logger().info(f"✅ {robot_id}의 {trajectory_name} 완료")
 
     def cook_motion_planning(self, menu, order_id):
-        menu = self.menu
+        menu = menu
         self.cook_sign = False
 
-        self.get_logger().info("setting 드갑니다")
-        msg = CookState()
-        msg.state = "SETTING"
-        msg.order_id = order_id
-        self.cook_state_check.publish(msg)
+        # self.get_logger().info("setting 드갑니다")
+        # msg = CookState()
+        # msg.state = "SETTING"
+        # msg.order_id = order_id
+        # self.cook_state_check.publish(msg)
 
         
-        for robot_id, traj_name in [('robot48', 'grip_dish_L'), ('robotb4', 'grip_dish_R')]:
-            raw_list = self.traj_dict[traj_name]
-            sampling_time = 0.3
-            segment_duration = 6.0
-            coords_list = [MycobotCoords(x=float(p[0]), y=float(p[1]), z=float(p[2]),
-                                        rx=float(p[3]), ry=float(p[4]), rz=float(p[5])) for p in raw_list]
-            path, speeds = interpolate_quintic_with_timing(coords_list, sampling_time, segment_duration)
-            self.trajectories[robot_id] = (path, speeds)
+        # for robot_id, traj_name in [('robot48', 'grip_dish_L'), ('robotb4', 'grip_dish_R')]:
+        #     raw_list = self.traj_dict[traj_name]
+        #     sampling_time = 0.3
+        #     segment_duration = 6.0
+        #     coords_list = [MycobotCoords(x=float(p[0]), y=float(p[1]), z=float(p[2]),
+        #                                 rx=float(p[3]), ry=float(p[4]), rz=float(p[5])) for p in raw_list]
+        #     path, speeds = interpolate_quintic_with_timing(coords_list, sampling_time, segment_duration)
+        #     self.trajectories[robot_id] = (path, speeds)
         
-        self.synchronized_execute(sampling_time, 20, 97) # 그릇 드는 것은 동시에 움직여야 하니까 싱크
-        time.sleep(1.0)
+        # self.synchronized_execute(sampling_time, 20, 97) # 그릇 드는 것은 동시에 움직여야 하니까 싱크
+        # time.sleep(1.0)
 
         if menu == 2:
             
@@ -261,103 +285,19 @@ class PoseBroadcaster(Node):
             msg.order_id = order_id
             self.cook_state_check.publish(msg)
 
-            # for robot_id in self.robot_list:
-                # req = CookGPTsrv.Request()
-                # req.command = 2
-                # req.robot_id = robot_id
+            for robot_id in self.robot_list:
+                req = CookGPTsrv.Request()
+                req.command = 2
+                req.robot_id = robot_id
 
-                # self.get_logger().info(f"📡 {robot_id} pose 요청")
-                # # future = self.cli.call_async(req)
+                self.get_logger().info(f"📡 {robot_id} pose 요청")
+                future = self.cli.call_async(req)
 
-                # # ✅ 비동기 콜백 등록
-                # # future.add_done_callback(lambda fut, rid=robot_id: self.on_pose_response(fut, rid))
-                # # future.add_done_callback(partial(self.on_pose_response, robot_id=robot_id))
-
-                # future = self.clis[robot_id].call_async(req)
-                # future.add_done_callback(partial(self.on_pose_response, robot_id=robot_id))
-                # self.get_logger().info("📡 응답 대기 중...")
-                # rclpy.spin_until_future_complete(self, future)
-
-                # if future.done():
-                #     try:
-                #         response = future.result()
-                #         self.get_logger().info(f"✅ {robot_id} 응답 수신: {response}")
-                #     except Exception as e:
-                #         self.get_logger().error(f"❌ 응답 파싱 실패: {e}")
-                # else:
-                #     self.get_logger().error(f"❌ {robot_id} 응답 미도달")
+                # ✅ 비동기 콜백 등록
+                future.add_done_callback(partial(self.on_pose_response, robot_id=robot_id))
                 
-                # self.get_logger().info(f"📡 {robot_id} grip_pose 전달")
+                self.get_logger().info(f"📡 {robot_id} grip_pose 전달")
 
-
-               
-                # time.sleep(3.0)
-
-            # threads = []
-            # threads = [
-            #     threading.Thread(target=self.execute_trajectory, args=('robot48', 'grip_ingredient_L', 200, 3, 4.8, 0.3, True)),
-            #     threading.Thread(target=self.execute_trajectory, args=('robotb4', 'grip_ingredient_R', 200, 3, 4.8, 0.3, True))
-            # ]
-            # for t in threads: t.start()
-            # for t in threads: t.join()
-
-            # time.sleep(1.0)
-        
-        
-        # self.get_logger().info("sauce 드갑니다") # thread
-        #
-        
-        # threads = []
-        # threads = [ # 대충 가면서 잡게끔 할라고 25
-        #     threading.Thread(target=self.execute_trajectory, args=('robot48', 'grip_sauce_L1', 3.2, 200, 6.0, 0.3, False)), 
-        #     threading.Thread(target=self.execute_trajectory, args=('robotb4', 'grip_sauce_R2', 3.7, 200, 6.0, 0.3, False))
-        # ]
-        # for t in threads: t.start()
-        # for t in threads: t.join()
-
-        # time.sleep(1.0)
-        # self.get_logger().info("shaking") # thread
-        
-        # threads = []
-        # threads = [ # 대충 가면서 잡게끔 할라고 25
-        #     threading.Thread(target=self.execute_trajectory, args=('robot48', 'grip_sauce_Ls', 200, 200, 0.8, 0.4, True)), 
-        #     threading.Thread(target=self.execute_trajectory, args=('robotb4', 'grip_sauce_Rs', 200, 200, 0.8, 0.4, True))
-        # ]
-        # for t in threads: t.start()
-        # for t in threads: t.join()
-
-        # time.sleep(1.0)
-        # self.get_logger().info("sauce return") # thread
-        
-        
-        # threads = []
-        # threads = [ # 대충 가면서 잡게끔 할라고 25
-        #     threading.Thread(target=self.execute_trajectory, args=('robot48', 'grip_sauce_L2', 200, 4.0, 6.0, 0.3, True)), 
-        #     threading.Thread(target=self.execute_trajectory, args=('robotb4', 'grip_sauce_R2', 200, 4.0, 6.0, 0.3, True))
-        # ]
-        # for t in threads: t.start()
-        # for t in threads: t.join()
-
-        # # time.sleep(1.0)
-        # self.get_logger().info("pickup 드갑니다") # sync  
-        # # albabot이 도착했다는 flag가 하나 있어야 할 것 같은데 
-        # msg = CookState()
-        # msg.state = "PICKUP"
-        # msg.order_id = order_id
-        # self.cook_state_check.publish(msg)
-
-        
-        # for robot_id, traj_name in [('robot48', 'grip_pickup_L'), ('robotb4', 'grip_pickup_R')]:
-        #     sampling_time = 0.3
-        #     segment_duration = 6.0
-        #     raw_list = self.traj_dict[traj_name]
-        #     coords_list = [MycobotCoords(x=float(p[0]), y=float(p[1]), z=float(p[2]),
-        #                                 rx=float(p[3]), ry=float(p[4]), rz=float(p[5])) for p in raw_list]
-        #     path, speeds = interpolate_quintic_with_timing(coords_list, sampling_time, segment_duration)
-        #     self.trajectories[robot_id] = (path, speeds)
-        
-        # self.synchronized_execute(sampling_time, 37, 97) # 그릇 드는 것은 동시에 움직여야 하니까 싱크
-        # self.cook_state_check.publish(String(data='IDLE'))
 
         return
 
@@ -437,5 +377,5 @@ def main(args=None):
 
     rclpy.shutdown()
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
