@@ -83,6 +83,10 @@ class AlbabotPosPublisher(Node):
             data_dict = self.robot_data[robot_id]
             # 데이터가 모두 들어왔는지 체크
             if 'tracked_pos' not in data_dict or 'albabot_pos' not in data_dict or 'battery_level' not in data_dict:
+                #missing_keys = [key for key in ['tracked_pos', 'albabot_pos', 'battery_level'] if key not in data_dict]
+
+                #if missing_keys:
+                    #self.get_logger().error(f"[{robot_id}] Missing keys in data_dict: {', '.join(missing_keys)}")
                 continue  # 데이터가 부족하면 skip
 
             data = {
@@ -114,11 +118,14 @@ class AlbabotPosPublisher(Node):
             }
             # 데이터 전송
             # Send via TCP
-            json_data = json.dumps(data)
-            print(f'📢 Published: {json_data}')
+            """
+            # 임시 테스트 를 위해서 데이터 전송 중지
+            json_data = json.dumps(data).encode('utf-8')
+            self.get_logger().info(f'📢 Published: {json_data}')
+            """
             try:
-                response = self.tcp_client.send_data(data)
-                self.get_logger().info(f'✅ 서버 응답: {response}')
+                response = self.tcp_client.send_payload(data)
+                #self.get_logger().info(f'✅ 서버 응답: {response}')
             except Exception as e:
                 self.get_logger().error(f'❌ TCP 전송 실패: {e}')
 

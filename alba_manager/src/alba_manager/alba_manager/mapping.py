@@ -13,8 +13,13 @@ W           1280
 H           720
 """
 
+width = 99
+height = 100
+origin_x = -1.26
+origin_y = -2.13
+resolution = 0.05
 
-def map_to_webcam(x_map, y_map, origin_x=-1.26, origin_y=-2.13, resolution=0.05):
+def map_to_webcam(x_map, y_map):
     """
     맵 좌표 (x_map, y_map) → 웹캠 좌표 (u, v) 로 변환
     기준점:
@@ -49,7 +54,7 @@ def real_to_webcam(x_real, y_real):
 
     return int(round(u)), int(round(v))
 
-def webcam_to_map(u, v, origin_x=-1.26, origin_y=-2.13, resolution=0.05):
+def webcam_to_map(u, v):
     """
     웹캠 좌표 (u, v) → 맵 좌표 (x_map, y_map) 로 변환
     기준점:
@@ -82,3 +87,20 @@ def webcam_to_real(u, v):
     y_real = scale_y * (v - 109) + 0.295
 
     return x_real, y_real
+
+def map_to_real(x_map, y_map):
+    pixel_x = int(x_map)
+    pixel_y = int(y_map)
+
+    # x_real 및 y_real 계산
+    x_real = origin_x + (pixel_x * resolution)
+    y_real = origin_y + ((height - pixel_y - 1) * resolution)
+
+    return x_real, y_real
+
+def real_to_map(x_real, y_real):
+    # 실제 좌표에서 픽셀 좌표 계산
+    map_x = int((x_real - origin_x) / resolution)
+    map_y = int((height - 1) - (y_real - origin_y) / resolution)
+
+    return map_x, map_y
