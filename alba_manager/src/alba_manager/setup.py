@@ -31,6 +31,8 @@ setup(
         'console_scripts': [
             'aruco_detector = alba_manager.aruco_detector:main',
             'albabot_pos_publisher = alba_manager.albabot_pos_publisher:main',
+            'albabot_task_manager = alba_manager.albabot_task_manager:main',
+            'albabot_controller = alba_manager.albabot_controller:main',
         ],
     },
 )
