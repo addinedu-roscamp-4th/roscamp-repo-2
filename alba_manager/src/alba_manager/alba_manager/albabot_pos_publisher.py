@@ -20,13 +20,13 @@ class AlbabotPosPublisher(Node):
         for robot_id in self.robot_ids:
             self.create_subscription(
                 Float32,
-                f'/albabot_{robot_id}/pinky_battery_present',
+                f'/albabot{robot_id}/pinky_battery_present',
                 lambda msg, robot_id=robot_id: self.battery_callback(robot_id, msg),
                 10
             )
             self.create_subscription(
                 PoseStamped,
-                f'/albabot_{robot_id}/tracked_pose',
+                f'/albabot{robot_id}/tracked_pose',
                 lambda msg, robot_id=robot_id: self.tracked_pos_callback(robot_id, msg),
                 10
             )
