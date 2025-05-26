@@ -87,7 +87,7 @@ def main():
                 text_output = image_name
                 text_output += "," + str(len(clicked_points))
                 for points in clicked_points:
-                    text_output += "," + str(points[0]) + "," + str(points[1])
+                    text_output += "," + str(points[1]) + "," + str(points[0])
                 text_output += '\n'
                 file_write.write(text_output)
                 

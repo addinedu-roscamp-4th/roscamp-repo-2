@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'receiver_node = albagpt_client.albagpt_receiver:main'
+            'topic_reciever = albagpt_client.topic_reciever:main',
+            'llm_reciever = albagpt_client.llm_response_reciever:main'
         ],
     },
 )

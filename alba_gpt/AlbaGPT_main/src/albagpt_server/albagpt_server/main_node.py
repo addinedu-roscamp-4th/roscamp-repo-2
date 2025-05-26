@@ -5,11 +5,14 @@ import cv2
 import numpy as np
 import time
 import json
-from . import AlbaGPT_function
 import base64
 import rclpy
 import os
+import sounddevice as sd
+import whisper
 
+from scipy.io.wavfile import write
+from . import AlbaGPT_function
 from itertools import islice
 from langchain_core.callbacks.base import Callbacks
 from langchain_core.caches import BaseCache
@@ -24,6 +27,7 @@ from rclpy.qos import QoSHistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import String
+from pinky_interfaces.srv import Pinkytask
 
 ChatOpenAI.model_rebuild()
 
@@ -45,7 +49,7 @@ class AlbaGPTNode(Node):
             temperature=0.7,  # 창의성 (0.0 ~ 2.0)
             max_tokens=2048,  # 최대 토큰수
             model_name="gpt-4o",  # 모델명
-        ) 
+        )
 
         # 스레드 시작
         for id_port in self.alba_ports.items():
@@ -53,9 +57,9 @@ class AlbaGPTNode(Node):
             udp_server = threading.Thread(target=self.udp_server, args=(robot_id, port), daemon=True)
             udp_server.start()
         
-        tcp_thread = threading.Thread(target=self.tcp_server, daemon=True)
-        tcp_thread.start()
-        self.get_logger().info("📡 TCP Server thread started.")
+        pinky_interaction_thread = threading.Thread(target=self.pinky_interaction, daemon=True)
+        pinky_interaction_thread.start()
+        self.get_logger().info("🗪 Pinky Interaction thread started.")
 
         qos_depth = self.get_parameter('qos_depth').value
 
@@ -69,7 +73,11 @@ class AlbaGPTNode(Node):
             'discriminated_obstacle',
             QOS_RKL10V)
 
-        self.timer = self.create_timer(1.0, self.publish_obstacle_information)
+        self.publish_timer = self.create_timer(1.0, self.publish_obstacle_information)
+
+        self.client = self.create_client(Pinkytask, 'set_task')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('⏳ Waiting for service server...')
 
     def udp_server(self, robot_id, port):
         """
@@ -139,124 +147,54 @@ class AlbaGPTNode(Node):
             except socket.timeout:
                 continue
     
-    def tcp_server(self):
+    def pinky_interaction(self):
         """
-        핑키 인터렉션을 위한 FastAPI 명령을 내려주는 함수입니다.
+        핑키와의 인터렉션을 위해 Whisper 모델을 활용하여 유저의 입력을 해석하여 명령을 전달해주는 함수입니다.
 
         Returns :
             None
         """
+        # MIC & whisper Setup
+        samplerate = 16000
+        duration = 5
+        tts_path = "./contents/mic/tts.wav"
+        model = whisper.load_model("tiny")
 
-        TCP_IP = '0.0.0.0'
-        TCP_PORT = 8001
-        
-        tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        tcp_socket.bind((TCP_IP, TCP_PORT))
-        tcp_socket.listen(5)
-        self.get_logger().info(f"🌐 TCP Listening on {TCP_IP}:{TCP_PORT}")
+        while True:
+            try:
+                self.get_logger().info("🎙️ 녹음 시작...")
+                recording = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=1, dtype='int16')
+                sd.wait()
+                write(tts_path, samplerate, recording)
+                self.get_logger().info("✅ 녹음 완료")
 
-        try :
-            while True :
-                try:
-                    client_socket, client_address = tcp_socket.accept()
-                    self.get_logger().info(f"🔌 New TCP connection from {client_address}")
-                    hdr = client_socket.recv(4)
-                    length = int.from_bytes(hdr, byteorder='big')
-                    payload_bytes = b''
+                result = model.transcribe(f"{tts_path}", language="ko")
+                
+                user_query = result.get("text", "").strip()
 
-                    while len(payload_bytes) < length:
-                        chunk = client_socket.recv(length - len(payload_bytes))
-                        if not chunk:
-                            raise ConnectionError("Incomplete payload")
-                        payload_bytes += chunk
-
-                    payload = json.loads(payload_bytes.decode('utf-8'))
-                    msg_id = payload.get('msg_id')
-                    user_query = payload.get('question')
-
-                    self.get_logger().info(f"📦 Parsed msg_id: {msg_id}")
-                    self.get_logger().info(f"📦 Parsed user_query: {user_query}")
-
+                if user_query:
+                    self.get_logger().info(f"📝 변환된 텍스트: {user_query}")
                     robot_task = AlbaGPT_function.validate_alba_task_discriminator(user_query, self.llm)
                     robot_id = AlbaGPT_function.extract_robot_id(user_query)
 
                     self.get_logger().info(f"💼 Detected Alba Task : {robot_task}")
                     self.get_logger().info(f"🪪 Detected Alba ID : {robot_id}")
 
-                    if robot_task == "GREETINGS":
-                        response = AlbaGPT_function.generate_alba_greetings_response(user_query, self.llm)
-                        self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
-                    elif robot_task == "GOODBYE":
-                        response = AlbaGPT_function.generate_alba_maintenance_response(user_query, self.llm)
-                        self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
-                    else:
-                        response = AlbaGPT_function.generate_alba_none_response(user_query)
-                        self.transfer_payloads(msg_id, user_query, robot_id, robot_task, response, None)
+                    request = Pinkytask.Request()
+                    request.robot_id = int(robot_id)
+                    request.robot_task = str(robot_task)
 
-                    client_socket.sendall(len(response.encode()).to_bytes(4, 'big') + response.encode())
-                    client_socket.close()
-                except Exception as e:
-                    self.get_logger().warning(f"TCP Error: {e}")
-        finally:
-            tcp_socket.close()
-
-    def transfer_payloads(self, msg_id: int, question: str, robot_id: int, robot_task: str, response_text: str, img_path: str):
-        """
-        채팅 서버로 LLM 응답을 전송해주는 함수입니다.
-
-        Returns :
-            None
-        """
-        CHAT_HOST = "192.168.0.156"    # 채팅 서버 IP
-        CHAT_PORT = 8001               # 채팅 서버 포트
-        
-        base64_img = None
-
-        # 1) 이미지 읽어서 Base64 인코딩
-        if img_path is not None and os.path.exists(img_path):
-            self.get_logger().info(f"📸 Image found at {img_path}, encoding to Base64...")
-            with open(img_path, "rb") as f:
-                img_bytes = f.read()
-            base64_img = base64.b64encode(img_bytes).decode("utf-8")
-            self.get_logger().info(f"✅ Image successfully encoded.")
-
-        # 2) 복합 페이로드 구성
-        payload = {
-            "msg_type": "Chatbot",
-            "msg_id": msg_id,
-            "question": question,
-            "robot_id": robot_id,
-            "robot_task": robot_task,
-            "response_text": response_text,
-        }
-
-        if base64_img is not None:
-            payload["response_image"] = base64_img
-        else :
-            payload["response_image"] = ""
-
-        raw = json.dumps(payload).encode("utf-8")
-        header = len(raw).to_bytes(4, byteorder="big")
-
-        self.get_logger().info(f"📤 Payload contents:\n{json.dumps(payload, indent=4, ensure_ascii=False)}")
-        self.get_logger().info(f"🗂 Header prepared: {header.hex()} (length: {len(raw)} bytes)")
-
-        # 3) 페이로드 전송
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((CHAT_HOST, CHAT_PORT))
-                self.get_logger().info(f"🌐 Connecting to {CHAT_HOST}:{CHAT_PORT}...")
-
-                sock.sendall(header + raw)
-                self.get_logger().info(f"🚀 Payload sent to {CHAT_HOST}:{CHAT_PORT}")
-
-        except Exception as e:
-            self.get_logger().error(f"❌ Error during payload transfer: {e}")
+                    self.future = self.client.call_async(request)  # 비동기 호출
+                    self.get_logger().info("🚀 서비스 요청 전송 완료")
+                else:
+                    self.get_logger().info("⚠️ Whisper가 아무 텍스트도 추출하지 못했습니다.")
+            except Exception as e:
+                self.get_logger().error(f"❌ 예외 발생: {e}")
+                continue
 
     def alba_draw_bbox(self, decoded_frame, results, fps) :
         """
-        MediaPipe를 통해 검출된 동적 장애물에 대해서 바운딩 박스 + FPS를 그려주어 결과를 출력해주는 함수입니다.
+        MediaPipe를 통해 검출된 동적 / 정적 장애물에 대해서 바운딩 박스 + FPS를 그려주어 결과를 출력해주는 함수입니다.
 
         Returns :
             None
@@ -293,6 +231,9 @@ class AlbaGPTNode(Node):
         """
         MediaPipe를 통해 검출된 장애물이 동적 장애물인지 정적 장애물인지 구별해주는 함수입니다.
         만약 감지된 장애물이 없으면 "none"으로 구별해줍니다.
+
+        Returns :
+            None
         """
         if not results.detections:
             self.obstacle_type[robot_id].appendleft("none")
@@ -311,6 +252,9 @@ class AlbaGPTNode(Node):
         """
         최근 몇 프레임에서의 장애물 상태를 바탕으로 다수결 투표 후
         가장 많이 등장한 타입(type)을 퍼블리시합니다.
+
+        Returns :
+            None
         """
         for robot_id, type_queue in self.obstacle_type.items():
             types = []
@@ -351,7 +295,6 @@ class AlbaGPTNode(Node):
             self.get_logger().info(f"Dynamic : {dynamic_percent} || Static : {static_percent} || None : {none_percent}")
             self.get_logger().info(f"💬 {robot_id} || Published (Majority): {result_dict}")
             self.obstacle_information_publisher.publish(msg)
-
 
 def main(args=None):
     rclpy.init(args=args)
