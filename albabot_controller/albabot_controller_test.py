@@ -11,11 +11,11 @@ import inspect
 #from albabot_controller import *
 #from move_controller import *
 from mapping import *
+
 from motion.motion_pickup import *
 from motion.motion_seving import *
 from move.nav2_goal_send import send_goal_and_wait
-import math
-import time
+
 
 
 tables = {
@@ -23,10 +23,29 @@ tables = {
     2: (34.00, 56.50),
     3: (38.00, 67.00),
     4: (38.00, 56.50)
+    }
+emergency_exit = {
+    1: (26.00, 56.00),
+    2: (26.00, 67.00),
+    3: (51.00, 70.00),
+    }
+security_area = {
+    1: (39.00, 56.00),
+    2: (32.00, 67.00),
+    3: (46.00, 67.00),
+    }
+cleaning_area = {
+    1: (27.00, 56.00),
+    2: (37.00, 56.00),
+    3: (47.00, 56.00),
 }
+maintenance = (52.00, 54.50)
 pickup_deg = 180.0
 serving_deg = -90.0
+serving_deg2 = 90.0
 table_deg = 0.0
+temp_deg = 0.0
+
 
 
 # --------- 로봇 제어 노드 (각 도메인 별 프로세스) ---------
@@ -93,6 +112,115 @@ class RobotMoverNode(Node):
             run_serving_motion(serving_deg, table_deg, 1)
             self.log_with_info("Serving motion complete")
         else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
+
+    def handle_birthday_task(self, table):
+        self.get_logger().info(f"BIRTHDAY TO TABLE({table})")
+        self.log_with_info(f"Move to Brithday Table: {table}")
+        #생일 테이블 위치 설정
+        map_x, map_y = tables[table][0], tables[table][1]
+        goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
+        if table in (1, 3):
+            table_yaw = serving_deg
+        else:
+            table_yaw = serving_deg2
+        #goal(테이블 좌표) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, table_yaw)
+        self.log_with_info(f'Moving to Table{table}: ({goal_x:.2f}, {goal_y:.2f}) ...')
+        #이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Table{table}")
+            #생일 축하 모션 시작
+            self.log_with_info("생일 축하중(모션 추가 예정)...") 
+                # 추가예정
+            self.log_with_info("Birthday Completed")
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
+
+    def handle_emergency_task(self):
+        self.get_logger().info("EMERGENCY")
+        self.log_with_info(f"Move to Emergency Exit {self.robot_id}")
+        # 비상시 이동 위치 설정
+        map_x, map_y = emergency_exit[self.robot_id][0], emergency_exit[self.robot_id][1]
+        goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
+        if self.robot_id == 3:
+            rotate_yaw = serving_deg
+        else:
+            rotate_yaw = serving_deg2
+        # goal(비상시 위치) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, rotate_yaw)
+        self.log_with_info(f"Moving to Emergency Exit {self.robot_id}")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Emergency Exit {self.robot_id}")
+            # 비상 동작 시작
+            self.log_with_info("비상구 안내중(모션 추가 예정)...")
+                # 추가예정
+        else: 
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
+
+    def handle_maintenance_task(self):
+        self.get_logger().info(f"MAINTENANCE")
+        self.log_with_info("Move to Maintenance Area")
+        # 정비 구역 위치 설정
+        map_x, map_y = maintenance
+        goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
+        maintenance_yaw = serving_deg
+        # goal(정비구역 위치) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, maintenance_yaw)
+        self.log_with_info("Moving to Maintenance Area")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Maintenance Area")
+            # 정비 시작
+            self.log_with_info("정비모션중(모션 추가 예정)...")
+                # 추가예정
+            self.log_with_info("Maintenance Completed")
+        else: 
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
+
+    def handle_cleaning_task(self):
+        self.get_logger().info("CLEANING")
+        self.log_with_info("Move to Maintenance Area")
+        # 청소 구역 위치 설정
+        map_x, map_y = cleaning_area[self.robot_id][0], cleaning_area[self.robot_id][1]
+        goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
+        cleaning_yaw = temp_deg
+        # goal(청소구역 위치) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, cleaning_yaw)
+        self.log_with_info("Moving to Cleaning Area")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Cleaning Area")
+            # 정비 시작
+            self.log_with_info("청소중(모션 추가 예정)...")
+                # 추가예정
+            self.log_with_info("Cleaning Completed")
+        else: 
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
+
+    def handle_security_task(self):
+        self.get_logger().info("SECURITY")
+        self.log_with_info("Move to Security Area")
+        # 경비 구역 위치 설정
+        map_x, map_y = security_area[self.robot_id][0], security_area[self.robot_id][1]
+        goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
+        security_yaw = temp_deg
+        # goal(경비 구역) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, security_yaw)
+        self.log_with_info("Moving to Security Area")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Security Area")
+            # 경비 모드 시작
+            self.log_with_info("경비 모션중...")
+                # 추가 예정
+        else: 
             self.log_with_info("Move Failed or Goal Send Rejected")
 
 

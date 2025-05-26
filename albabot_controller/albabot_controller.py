@@ -8,7 +8,7 @@ from std_msgs.msg import String
 import json
 #from alba_manager.albabot_controller import MoveToGoal
 #from albabot_controller import *
-from move_controller import *
+#from move_controller import *
 from mapping import *
 import math
 import time
@@ -37,6 +37,7 @@ class RobotMoverNode(Node):
         self.timer = self.create_timer(0.1, self.process_queue)
         self.pub_command = self.create_publisher(String, '/command', qos)
         # RobotMoverNode.__init__ 내부 마지막 줄에 추가
+
 
     def handle_pickup_task(self):
         self.get_logger().info("PICKUP")
@@ -236,6 +237,7 @@ class RobotMoverNode(Node):
         time.sleep(10)
         self.get_logger().info("완료했습니다.")
         return True
+
 
     def handle_maintenance_task(self):
         self.get_logger().info(f"MAINTENANCE")
