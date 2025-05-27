@@ -1,0 +1,2 @@
+string robot_task
+int8 robot_id

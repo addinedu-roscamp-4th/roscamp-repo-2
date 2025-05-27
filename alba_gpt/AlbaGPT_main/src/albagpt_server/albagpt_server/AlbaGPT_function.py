@@ -29,30 +29,51 @@ def alba_task_discriminator(user_query, llm):
     Returns : 
         GREETINGS, GOODBYE, CELEBRATE, none 중 하나
     """
+
+    task_example_csv_path = './contents/example/task_example.csv' # 유저 프롬프트에 따른 분류된 task를 정리한 csv 파일
+    task_example_list = []
+
+    with open(task_example_csv_path, 'r', encoding='utf-8') as csvfile:
+        csvreader = csv.reader(csvfile)
+        next(csvreader)
+    
+        for row in csvreader:
+            task_example_list.append({
+                "prompt": row[0],
+                "result": row[1]
+            })
+    
+    task_example = "\n".join(
+        f'{{"prompt": "{task["prompt"]}", "result": "{task["result"]}"}}'
+        for task in task_example_list
+    )
+
+    logger.info(user_query)
     
     discriminator_prompt = """
-    당신은 레스토랑에서 업무를 하는 '핑키'라는 이름을 가진 모바일 로봇입니다.
-    당신은 레스토랑에 온 손님의 다음 요청을 보고, 그것이 GREETINGS인지, GOODBYE인지, CELEBRATE인지, none인지 구분해야 합니다.
+    당신은 레스토랑에서 업무를 수행하는 '핑키'라는 모바일 로봇입니다.
+    당신은 손님의 발화를 보고, 그것이 다음 중 어떤 유형에 속하는지 판단해야 합니다:
 
-    다음 요청: {user_query}
-    
-    판단 기준은 다음과 같습니다:
+    - GREETINGS: 인사 표현 (예: "안녕", "좋은 아침", "하이", "오랜만이야" 등)
+    - GOODBYE: 작별 인사 표현 (예: "잘 가", "또 봐", "안녕히 계세요", "잘 있어" 등)
+    - CELEBRATE: 생일과 관련된 표현 (예: "오늘 내 생일이야", "생일 축하해줘", "오늘은 특별한 날", "나를 축하해줘", "생일파티" 등)
+    - none: 위의 어느 것도 아닌 경우. 가급적이면 반환하지 마세요.
 
-    1. 요청이 인사인 경우 → 정확히 **"GREETINGS"** 라고만 출력하세요.
-    2. 요청이 작별 인사인 경우 -> 정확히 **"GOODBYE"** 라고만 출력하세요.
-    3. 요청에서 생일에 대한 내용이 있는 경우 -> 정확히 **"CELEBRATE"** 라고만 출력하세요.
-    4. 그 외의 경우 -> 정확히 **"none"** 이라고 출력하세요.
+    예시:
+    {task_example}
 
-    이때 아래 조건을 반드시 따르세요:
-    - 출력은 반드시 **대문자** 단어 하나로만 답변하세요.
-    - 추가 설명, 문장, 다른 단어는 절대 포함하지 마세요.
-    - 가능한 한 명확하고 단정적으로 판단하세요.
-    - 설명, 문장, 구두점은 답변으로 내놓지 마세요.
+    아래 발화를 보고, GREETINGS / GOODBYE / CELEBRATE / none 중 **정확히 한 단어로만 출력**하세요.
+    다른 말은 절대 하지 마세요. 설명도 하지 마세요. 마침표나 문장 부호도 붙이지 마세요.
+
+    손님 발화:
+    {user_query}
+
+    정답:
     """
 
     discriminator_template = PromptTemplate(
         template=discriminator_prompt,
-        input_variables=["user_query"],
+        input_variables=["user_query", "task_example"],
     )
 
     chain = LLMChain(
@@ -63,9 +84,12 @@ def alba_task_discriminator(user_query, llm):
     try:
         result = chain.invoke({
             "user_query": user_query,
+            "task_example": task_example,
         })
 
         discriminated_task = result.get('text', '').replace(".", "").strip()
+
+        logger.info(discriminated_task)
 
         if discriminated_task == "":
             logger.warning("⚠️ LLM returned empty text.")

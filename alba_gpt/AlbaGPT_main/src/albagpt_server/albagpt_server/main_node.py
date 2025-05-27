@@ -27,7 +27,7 @@ from rclpy.qos import QoSHistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import String
-from pinky_interfaces.srv import Pinkytask
+from pinky_interfaces.msg import Pinkytask
 
 ChatOpenAI.model_rebuild()
 
@@ -46,7 +46,7 @@ class AlbaGPTNode(Node):
             for name in self.alba_ports
         }
         self.llm = ChatOpenAI(
-            temperature=0.7,  # 창의성 (0.0 ~ 2.0)
+            temperature=0.3,  # 창의성 (0.0 ~ 2.0)
             max_tokens=2048,  # 최대 토큰수
             model_name="gpt-4o",  # 모델명
         )
@@ -72,12 +72,14 @@ class AlbaGPTNode(Node):
             String,
             'discriminated_obstacle',
             QOS_RKL10V)
+        
+        self.pinky_interaction_publisher = self.create_publisher(
+            Pinkytask,
+            'set_task',
+            10
+        )
 
         self.publish_timer = self.create_timer(1.0, self.publish_obstacle_information)
-
-        self.client = self.create_client(Pinkytask, 'set_task')
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('⏳ Waiting for service server...')
 
     def udp_server(self, robot_id, port):
         """
@@ -137,7 +139,7 @@ class AlbaGPTNode(Node):
                     # 결과 이미지를 JPEG 형식으로 인코딩
                     retval, encoded_bbox_image = cv2.imencode('.jpg', decoded_frame)
 
-                    if port == 5002 : # MultiThreading 환경에서는 한 번에 여러개의 cv2 창을 띄울 수 없음
+                    if port == 5001 : # MultiThreading 환경에서는 한 번에 여러개의 cv2 창을 띄울 수 없음
                         cv2.imshow("AlbaBot Detection", decoded_frame)
                         cv2.waitKey(1)
 
@@ -158,7 +160,7 @@ class AlbaGPTNode(Node):
         samplerate = 16000
         duration = 5
         tts_path = "./contents/mic/tts.wav"
-        model = whisper.load_model("tiny")
+        model = whisper.load_model("small")
 
         while True:
             try:
@@ -180,12 +182,13 @@ class AlbaGPTNode(Node):
                     self.get_logger().info(f"💼 Detected Alba Task : {robot_task}")
                     self.get_logger().info(f"🪪 Detected Alba ID : {robot_id}")
 
-                    request = Pinkytask.Request()
+                    request = Pinkytask()
                     request.robot_id = int(robot_id)
                     request.robot_task = str(robot_task)
 
-                    self.future = self.client.call_async(request)  # 비동기 호출
-                    self.get_logger().info("🚀 서비스 요청 전송 완료")
+                    if request.robot_task == "GREETINGS" or request.robot_task == "GOODBYE" or request.robot_task == "CELEBRATE" :
+                        self.pinky_interaction_publisher.publish(request)
+                        self.get_logger().info(f"🚀 {request.robot_task} 명령 전송 완료")
                 else:
                     self.get_logger().info("⚠️ Whisper가 아무 텍스트도 추출하지 못했습니다.")
             except Exception as e:

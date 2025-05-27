@@ -13,8 +13,8 @@ find_package(rosidl_default_generators REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-set(srv_files
-  "srv/Pinkytask.srv"
+set(msg_files
+  "msg/Pinkytask.msg"
 )
 
 if(BUILD_TESTING)
@@ -30,7 +30,7 @@ if(BUILD_TESTING)
 endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  ${srv_files}
+  ${msg_files}
   DEPENDENCIES builtin_interfaces
 )
 
