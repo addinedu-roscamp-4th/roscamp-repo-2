@@ -26,6 +26,14 @@ enum class RobotType {
     PINKY = 1
 };
 
+// 로봇 상태 열거형
+enum class RobotStatus {
+    OFFLINE = 0,
+    ONLINE = 1,
+    RECONNECTING = 2,
+    ERROR = 3
+};
+
 // 로봇 정보 구조체
 struct RobotInfo {
     QString name;
@@ -36,6 +44,7 @@ struct RobotInfo {
     bool emergency_stop{false};
     float battery_level{0.8f};  // 기본값
     QMap<QString, QString> position;  // x, y, z 위치 정보
+    RobotStatus status{RobotStatus::OFFLINE};  // 로봇 상태 추가
 };
 
 class MainWindow : public QMainWindow

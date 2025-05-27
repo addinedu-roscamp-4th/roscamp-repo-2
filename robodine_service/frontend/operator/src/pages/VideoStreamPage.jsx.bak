@@ -65,50 +65,8 @@ const VideoStreamPage = () => {
     }
   }, []);
   
-  // 페이지 로드 시 바로 LIVE 탭으로 설정
-  useEffect(() => {
-    // 페이지 로드 시 LIVE 탭으로 설정
-    setActiveTab('LIVE');
-    // 스트림 데이터는 백엔드에서 직접 가져옴
-    loadStreams();
-  }, []);
-
-  // 스트림 목록 직접 가져오기
-  const loadStreams = useCallback(() => {
-    setIsLoading(true);
-    
-    fetch(`http://${window.location.hostname}:8000/streams`)
-      .then(response => response.json())
-      .then(data => {
-        console.log('스트림 데이터 가져옴:', data);
-        if (data.streams) {
-          setIsLoading(false);
-          // 웹캠 스트림이 있으면 자동 선택
-          const streams = data.streams;
-          if (streams && streams.length > 0) {
-            const webcam = streams.find(stream => stream.type === 'webcam');
-            if (webcam) {
-              console.log('웹캠 스트림 선택:', webcam.id);
-              setSelectedStreamId(webcam.id);
-            } else if (streams.length > 0) {
-              console.log('첫 번째 스트림 선택:', streams[0].id);
-              setSelectedStreamId(streams[0].id);
-            }
-          }
-        }
-      })
-      .catch(err => {
-        console.error('스트림 목록 가져오기 오류:', err);
-        setIsLoading(false);
-        setErrorMessage('스트림 목록을 가져오는 중 오류가 발생했습니다');
-      });
-  }, []);
-
   // 비디오 스트림 데이터 - 에러 방어 로직 추가
   const videoStreams = useMemo(() => {
-    // 로컬 로딩 중인 경우 빈 배열 반환
-    if (isLoading) return [];
-    
     // 에러 없이 데이터가 있는 경우만 사용
     if (Array.isArray(data.video_streams) && data.video_streams.length > 0) {
       return data.video_streams;
@@ -125,20 +83,14 @@ const VideoStreamPage = () => {
     }
     
     return [];
-  }, [data.video_streams, isLoading]);
+  }, [data.video_streams]);
 
-  // 페이지 로드 시 바로 LIVE 탭에서 첫 번째 스트림 자동 선택
+  // 비디오 스트림 데이터 캐싱
   useEffect(() => {
-    if (activeTab === 'LIVE' && Array.isArray(videoStreams) && videoStreams.length > 0 && !selectedStreamId) {
-      // 웹캠 우선 선택, 없으면 첫 번째 스트림 선택
-      const webcam = videoStreams.find(stream => stream.type === 'webcam');
-      if (webcam) {
-        setSelectedStreamId(webcam.id);
-      } else if (videoStreams.length > 0) {
-        setSelectedStreamId(videoStreams[0].id);
-      }
+    if (Array.isArray(data.video_streams) && data.video_streams.length > 0) {
+      localStorage.setItem('cachedVideoStreams', JSON.stringify(data.video_streams));
     }
-  }, [activeTab, videoStreams, selectedStreamId]);
+  }, [data.video_streams]);
 
   // 스트림 새로고침 핸들러 - 디바운스 및 오류 처리 개선
   const handleRefreshStreams = useCallback(() => {
@@ -208,11 +160,11 @@ const VideoStreamPage = () => {
         
         // 연결이 복구되면 자동으로 데이터 갱신
         if (Date.now() - lastRefreshTime > 5000) {
-          loadStreams(); // handleRefreshStreams 대신 loadStreams 호출
+          handleRefreshStreams();
         }
       }
     }
-  }, [connected.video_streams, errorMessage, lastRefreshTime, loadStreams]);
+  }, [connected.video_streams, errorMessage, handleRefreshStreams, lastRefreshTime]);
   
   // 페이지 초기 로드 및 WebSocket 오류 처리
   useEffect(() => {
@@ -689,15 +641,31 @@ const VideoStreamPage = () => {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center">
                 <Radio className="h-5 w-5 text-red-500 mr-2 animate-pulse" />
-                <h3 className="text-lg font-medium text-gray-900">웹캠 스트리밍</h3>
+                <h3 className="text-lg font-medium text-gray-900">실시간 스트림</h3>
               </div>
+              
               <button 
-                onClick={loadStreams}
+                onClick={() => {
+                  setIsLoading(true);
+                  // 스트림 리스트 새로고침 
+                  fetch(`http://${window.location.hostname}:8000/refresh-streams`, {
+                    method: 'POST'
+                  })
+                  .then(response => response.json())
+                  .then(data => {
+                    if (data.streams) {
+                      setIsLoading(false);
+                    }
+                  })
+                  .catch(err => {
+                    console.error('스트림 목록 새로고침 오류:', err);
+                    setIsLoading(false);
+                  });
+                }} 
                 className="flex items-center bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md text-sm hover:bg-blue-100"
-                disabled={isLoading}
               >
-                <RefreshCw size={14} className={isLoading ? "mr-1 animate-spin" : "mr-1"} />
-                {isLoading ? "로딩 중..." : "새로고침"}
+                <RefreshCw size={14} className="mr-1" />
+                디바이스 새로고침
               </button>
             </div>
 
@@ -705,84 +673,166 @@ const VideoStreamPage = () => {
               <div className="mb-4 p-3 bg-yellow-50 rounded border border-yellow-200 flex items-center">
                 <AlertTriangle className="mr-2 text-yellow-600" size={16} />
                 <span className="text-sm text-yellow-800">
-                  웹캠 스트림에 문제가 발생했습니다. 서버를 확인하세요.
+                  실시간 스트림에 문제가 발생했습니다. 서버를 확인하세요.
                 </span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* 웹캠/스트림 목록 */}
-              <div className="md:col-span-1 border border-gray-200 rounded-lg p-4">
-                <h4 className="font-medium mb-4 flex items-center">
-                  <Webcam className="h-5 w-5 text-blue-500 mr-2" />
-                  웹캠 목록
-                </h4>
-                
-                {isLoading ? (
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-                    <p className="mt-2 text-gray-500 text-xs">로딩 중...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {videoStreams && videoStreams.length > 0 ? (
-                      videoStreams
-                        .filter(stream => stream.type === 'webcam')
-                        .map((stream) => (
-                          <div 
-                            key={stream.id} 
-                            className={`border ${selectedStreamId === stream.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'} rounded-lg p-3 cursor-pointer hover:bg-gray-50`}
-                            onClick={() => setSelectedStreamId(stream.id)}
-                          >
-                            <div className="flex items-center mb-1">
-                              <Webcam className="h-4 w-4 text-blue-500 mr-1" />
-                              <span className="text-sm font-medium">{stream.display_name || stream.id}</span>
+            {/* 사용 가능한 스트림 목록 */}
+            <div className="mt-4">
+              <h4 className="font-medium mb-4 flex items-center">
+                <Video className="h-5 w-5 text-gray-500 mr-2" />
+                사용 가능한 스트림 목록
+                <span className="ml-2 text-xs text-gray-500">(스트림을 선택하여 연결하세요)</span>
+              </h4>
+              
+              {isLoading ? (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="mt-2 text-gray-500 text-sm">스트림 정보를 불러오는 중...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {connected.video_streams ? (
+                    <>
+                      {videoStreams && videoStreams.length > 0 ? (
+                        videoStreams.map((stream) => (
+                          <div key={stream.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex items-center">
+                                {stream.type === STREAM_TYPES.WEBCAM ? (
+                                  <Webcam className="h-4 w-4 text-blue-500 mr-1" />
+                                ) : (
+                                  <Cast className="h-4 w-4 text-purple-500 mr-1" />
+                                )}
+                                <span className="text-sm font-medium">{stream.display_name || stream.id}</span>
+                              </div>
+                              <span className={`px-2 py-0.5 ${stream.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'} rounded-full text-xs`}>
+                                {stream.status === 'ACTIVE' ? '활성' : '준비됨'}
+                              </span>
                             </div>
-                            <p className="text-xs text-gray-500">
-                              디바이스: {stream.path}
+                            <p className="text-xs text-gray-500 mb-2">
+                              {stream.type === STREAM_TYPES.WEBCAM 
+                                ? `디바이스: ${stream.path}`
+                                : `RTSP URL: ${stream.url}`
+                              }
                             </p>
+                            <button 
+                              onClick={() => {
+                                setSelectedStreamId(stream.id);
+                              }}
+                              className={`text-xs ${
+                                selectedStreamId === stream.id 
+                                  ? 'bg-blue-600 text-white' 
+                                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                              } px-2 py-1 rounded-md`}
+                            >
+                              {selectedStreamId === stream.id ? '연결됨' : '연결하기'}
+                            </button>
                           </div>
                         ))
-                    ) : (
-                      <div className="text-center py-4">
-                        <AlertTriangle className="mx-auto h-5 w-5 text-gray-400 mb-1" />
-                        <p className="text-gray-500 text-xs">사용 가능한 웹캠이 없습니다</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      ) : (
+                        <div className="col-span-3 bg-gray-50 p-4 rounded-lg text-center">
+                          <AlertTriangle className="mx-auto h-6 w-6 text-gray-400 mb-2" />
+                          <p className="text-gray-600">사용 가능한 스트림이 없습니다.</p>
+                          <p className="text-sm text-gray-500 mt-1">카메라 또는 RTSP 스트림을 추가해주세요.</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="col-span-3 bg-gray-50 p-4 rounded-lg text-center">
+                      <WifiOff className="mx-auto h-6 w-6 text-gray-400 mb-2" />
+                      <p className="text-gray-600">서버에 연결할 수 없습니다.</p>
+                      <p className="text-sm text-gray-500 mt-1">네트워크 연결을 확인하세요.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* 선택된 스트림 뷰어 */}
+            {selectedStreamId && (
+              <div className="mt-6">
+                <h4 className="font-medium mb-4 flex items-center">
+                  <PlayCircle className="h-5 w-5 text-gray-500 mr-2" />
+                  라이브 스트림 뷰어
+                </h4>
+                <div className="aspect-video overflow-hidden rounded-lg border border-gray-200 bg-black">
+                  <LiveStreamComponent 
+                    streamId={selectedStreamId} 
+                    onError={(err) => {
+                      console.error("스트림 에러:", err);
+                      setStreamError(true);
+                    }} 
+                    onConnected={() => setStreamError(false)}
+                  />
+                </div>
               </div>
-              
-              {/* 비디오 플레이어 */}
-              <div className="md:col-span-3">
-                {selectedStreamId ? (
-                  <div className="border border-gray-200 rounded-lg">
-                    <div className="p-3 border-b border-gray-200">
-                      <h4 className="font-medium flex items-center">
-                        <PlayCircle className="h-5 w-5 text-gray-500 mr-2" />
-                        {videoStreams && videoStreams.find(s => s.id === selectedStreamId)?.display_name || selectedStreamId}
-                      </h4>
-                    </div>
-                    <div className="aspect-video overflow-hidden bg-black">
-                      <LiveStreamComponent 
-                        streamId={selectedStreamId} 
-                        onError={(err) => {
-                          console.error("스트림 에러:", err);
-                          setStreamError(true);
-                        }} 
-                        onConnected={() => setStreamError(false)}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="aspect-video border border-gray-200 rounded-lg flex items-center justify-center bg-gray-50">
-                    <div className="text-center p-8">
-                      <Webcam className="mx-auto h-12 w-12 text-gray-300 mb-2" />
-                      <p className="text-gray-500">왼쪽 목록에서 웹캠을 선택하세요</p>
-                    </div>
-                  </div>
-                )}
+            )}
+
+            {/* RTSP 스트림 추가 인터페이스 */}
+            <div className="mt-8 p-4 border border-gray-200 rounded-lg">
+              <div className="flex items-center mb-3">
+                <Cast className="h-5 w-5 text-purple-500 mr-2" />
+                <h4 className="font-medium">RTSP 스트림 추가</h4>
               </div>
+              <p className="text-sm text-gray-600 mb-3">
+                RTSP URL을 입력하여 외부 CCTV 또는 IP 카메라 스트림을 추가할 수 있습니다.
+              </p>
+              <form className="flex flex-col sm:flex-row gap-2" onSubmit={(e) => {
+                e.preventDefault();
+                const rtspUrl = e.target.rtspUrl.value;
+                if (rtspUrl) {
+                  setIsLoading(true);
+                  // RTSP 스트림 추가 요청
+                  fetch(`http://${window.location.hostname}:8000/rtsp-stream?rtsp_url=${encodeURIComponent(rtspUrl)}`, {
+                    method: 'POST'
+                  })
+                  .then(response => response.json())
+                  .then(data => {
+                    setIsLoading(false);
+                    if (data.stream_id) {
+                      alert(`스트림이 추가되었습니다: ${data.stream_id}`);
+                      handleRefreshStreams();
+                      e.target.reset();
+                    } else if (data.error) {
+                      alert(`오류: ${data.error}`);
+                    }
+                  })
+                  .catch(err => {
+                    console.error('RTSP 스트림 추가 오류:', err);
+                    setIsLoading(false);
+                    alert('스트림 추가 중 오류가 발생했습니다');
+                  });
+                }
+              }}>
+                <input 
+                  type="text" 
+                  name="rtspUrl"
+                  className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1"
+                  placeholder="rtsp://사용자명:비밀번호@192.168.1.100:554/stream"
+                />
+                <button 
+                  type="submit" 
+                  className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm hover:bg-purple-700 flex items-center"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <RefreshCw size={14} className="mr-2 animate-spin" />
+                      처리중...
+                    </>
+                  ) : (
+                    <>
+                      <Cast size={14} className="mr-2" />
+                      스트림 추가
+                    </>
+                  )}
+                </button>
+              </form>
+              <p className="mt-2 text-xs text-gray-500">
+                * RTSP URL은 반드시 rtsp://로 시작해야 합니다.
+              </p>
             </div>
           </div>
         )}

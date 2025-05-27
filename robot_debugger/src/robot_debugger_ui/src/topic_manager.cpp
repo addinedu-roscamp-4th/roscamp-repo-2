@@ -1,6 +1,8 @@
 #include "robot_debugger_ui/topic_manager.hpp"
 #include <QDebug>
 #include <regex>
+#include <fstream>
+#include <cstdlib>
 
 namespace robot_debugger_ui {
 
@@ -69,7 +71,52 @@ void TopicManager::stopTopicScan()
 
 bool TopicManager::subscribeTopic(const std::string& topic_name, const std::string& topic_type)
 {
-    return createSubscriptionForType(topic_name, topic_type);
+    if (!node_) {
+        qWarning() << "토픽 관리자: ROS 노드가 초기화되지 않아 구독을 생성할 수 없습니다:" << topic_name.c_str();
+        return false;
+    }
+    
+    try {
+        // 이미 구독 중인지 확인
+        std::lock_guard<std::mutex> lock(topic_mutex_);
+        
+        // 이미 구독 중인지 확인
+        if (subscriptions_.find(topic_name) != subscriptions_.end()) {
+            qDebug() << "토픽 이미 구독 중:" << topic_name.c_str();
+            return true;  // 이미 구독 중
+        }
+        
+        qDebug() << "새 토픽 구독 시작:" << topic_name.c_str() << "(" << topic_type.c_str() << ")";
+        
+        // ROS 2 QoS 설정
+        rclcpp::QoS qos(10);
+        
+        // 일반 구독자 생성
+        auto subscription = node_->create_generic_subscription(
+            topic_name,
+            topic_type,
+            qos,
+            [this, topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
+                genericMessageCallback(topic_name, msg);
+            }
+        );
+        
+        // 구독자 저장
+        subscriptions_[topic_name] = subscription;
+        
+        // 토픽 정보 업데이트
+        auto it = topic_infos_.find(topic_name);
+        if (it != topic_infos_.end()) {
+            it->second.is_subscribed = true;
+            emit topicStatusChanged(topic_name, true);
+        }
+        
+        qDebug() << "토픽 구독 성공:" << topic_name.c_str();
+        return true;
+    } catch (const std::exception& e) {
+        qWarning() << "구독 생성 중 오류 발생:" << topic_name.c_str() << ":" << e.what();
+        return false;
+    }
 }
 
 bool TopicManager::unsubscribeTopic(const std::string& topic_name)
@@ -258,61 +305,23 @@ void TopicManager::scanTopics()
     }
 }
 
-bool TopicManager::createSubscriptionForType(const std::string& topic_name, const std::string& topic_type)
-{
-    if (!node_) {
-        qWarning() << "토픽 관리자: ROS 노드가 초기화되지 않아 구독을 생성할 수 없습니다:" << topic_name.c_str();
-        return false;
-    }
-    
-    try {
-        std::lock_guard<std::mutex> lock(topic_mutex_);
-        
-        // 이미 구독 중인지 확인
-        if (subscriptions_.find(topic_name) != subscriptions_.end()) {
-            return true;  // 이미 구독 중
-        }
-        
-        // ROS 2 QoS 설정
-        rclcpp::QoS qos(10);
-        
-        // 일반 구독자 생성
-        auto subscription = node_->create_generic_subscription(
-            topic_name,
-            topic_type,
-            qos,
-            [this, topic_name](std::shared_ptr<rclcpp::SerializedMessage> msg) {
-                genericMessageCallback(topic_name, msg);
-            }
-        );
-        
-        // 구독자 저장
-        subscriptions_[topic_name] = subscription;
-        
-        // 토픽 정보 업데이트
-        auto it = topic_infos_.find(topic_name);
-        if (it != topic_infos_.end()) {
-            it->second.is_subscribed = true;
-            emit topicStatusChanged(topic_name, true);
-        }
-        
-        return true;
-    } catch (const std::exception& e) {
-        qWarning() << "구독 생성 중 오류 발생:" << topic_name.c_str() << ":" << e.what();
-        return false;
-    }
-}
-
 void TopicManager::genericMessageCallback(const std::string& topic_name, 
                                        std::shared_ptr<rclcpp::SerializedMessage> serialized_msg)
 {
-    // 메시지 데이터를 std::vector<uint8_t>로 변환
-    const auto& rcl_serialized_msg = serialized_msg->get_rcl_serialized_message();
-    std::vector<uint8_t> data(rcl_serialized_msg.buffer, 
-                            rcl_serialized_msg.buffer + rcl_serialized_msg.buffer_length);
-    
-    // 메시지 수신 시그널 방출
-    emit messageReceived(topic_name, data);
+    try {
+        // 메시지 데이터를 std::vector<uint8_t>로 변환
+        const auto& rcl_serialized_msg = serialized_msg->get_rcl_serialized_message();
+        std::vector<uint8_t> data(rcl_serialized_msg.buffer, 
+                                rcl_serialized_msg.buffer + rcl_serialized_msg.buffer_length);
+        
+        // 디버그 로그
+        qDebug() << "메시지 수신:" << topic_name.c_str() << ", 크기:" << data.size() << "바이트";
+        
+        // 메시지 수신 시그널 방출
+        emit messageReceived(topic_name, data);
+    } catch (const std::exception& e) {
+        qWarning() << "메시지 처리 중 오류 발생:" << topic_name.c_str() << ":" << e.what();
+    }
 }
 
 bool TopicManager::matchesPattern(const std::string& topic_name) const
@@ -367,115 +376,112 @@ std::vector<std::pair<std::string, std::string>> TopicManager::getTopicList() co
     std::vector<std::pair<std::string, std::string>> topics;
     
     if (!node_) {
-        qWarning() << "토픽 관리자: ROS 노드가 초기화되지 않았습니다.";
-        
-        // 노드가 없는 경우, 도메인 ID에 따른 테스트 데이터 반환
-        if (current_domain_id_ == 10) {
-            // 10번 도메인 (Jetcobot)에 대한 테스트 데이터
-            topics.push_back({"coords_real", "geometry_msgs/msg/PoseStamped"});
-            topics.push_back({"pose", "geometry_msgs/msg/Pose"});
-            topics.push_back({"velocity", "geometry_msgs/msg/Twist"});
-            topics.push_back({"battery", "std_msgs/msg/Float32"});
-            topics.push_back({"motor_state", "std_msgs/msg/String"});
-        } else if (current_domain_id_ == 74) {
-            // 74번 도메인 (Pinky)에 대한 테스트 데이터 (사용자가 제공한 실제 토픽 목록)
-            topics.push_back({"/albabot_1/odom", "nav_msgs/msg/Odometry"});
-            topics.push_back({"/behavior_server/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/behavior_tree_log", "std_msgs/msg/String"});
-            topics.push_back({"/bond", "bond/msg/Status"});
-            topics.push_back({"/bt_navigator/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/cmd_vel", "geometry_msgs/msg/Twist"});
-            topics.push_back({"/cmd_vel_nav", "geometry_msgs/msg/Twist"});
-            topics.push_back({"/cmd_vel_smoothed", "geometry_msgs/msg/Twist"});
-            topics.push_back({"/cmd_vel_teleop", "geometry_msgs/msg/Twist"});
-            topics.push_back({"/command", "std_msgs/msg/String"});
-            topics.push_back({"/constraint_list", "std_msgs/msg/String"});
-            topics.push_back({"/controller_selector", "std_msgs/msg/String"});
-            topics.push_back({"/controller_server/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/cost_cloud", "sensor_msgs/msg/PointCloud2"});
-            topics.push_back({"/diagnostics", "diagnostic_msgs/msg/DiagnosticArray"});
-            topics.push_back({"/evaluation", "std_msgs/msg/Float64"});
-            topics.push_back({"/global_costmap/costmap", "nav_msgs/msg/OccupancyGrid"});
-            topics.push_back({"/global_costmap/costmap_raw", "nav2_msgs/msg/Costmap"});
-            topics.push_back({"/global_costmap/costmap_raw_updates", "nav2_msgs/msg/CostmapUpdate"});
-            topics.push_back({"/global_costmap/costmap_updates", "map_msgs/msg/OccupancyGridUpdate"});
-            topics.push_back({"/global_costmap/footprint", "geometry_msgs/msg/PolygonStamped"});
-            topics.push_back({"/global_costmap/global_costmap/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/global_costmap/obstacle_layer", "nav_msgs/msg/OccupancyGrid"});
-            topics.push_back({"/global_costmap/obstacle_layer_raw", "nav2_msgs/msg/Costmap"});
-            topics.push_back({"/global_costmap/obstacle_layer_raw_updates", "nav2_msgs/msg/CostmapUpdate"});
-            topics.push_back({"/global_costmap/obstacle_layer_updates", "map_msgs/msg/OccupancyGridUpdate"});
-            topics.push_back({"/global_costmap/published_footprint", "geometry_msgs/msg/PolygonStamped"});
-            topics.push_back({"/global_costmap/static_layer", "nav_msgs/msg/OccupancyGrid"});
-            topics.push_back({"/global_costmap/static_layer_raw", "nav2_msgs/msg/Costmap"});
-            topics.push_back({"/global_costmap/static_layer_raw_updates", "nav2_msgs/msg/CostmapUpdate"});
-            topics.push_back({"/global_costmap/static_layer_updates", "map_msgs/msg/OccupancyGridUpdate"});
-            topics.push_back({"/goal_pose", "geometry_msgs/msg/PoseStamped"});
-            topics.push_back({"/imu", "sensor_msgs/msg/Imu"});
-            topics.push_back({"/imu/mag_raw", "sensor_msgs/msg/MagneticField"});
-            topics.push_back({"/initialpose", "geometry_msgs/msg/PoseWithCovarianceStamped"});
-            topics.push_back({"/joint_states", "sensor_msgs/msg/JointState"});
-            topics.push_back({"/landmark_poses_list", "slam_toolbox/msg/MergeMaps"});
-            topics.push_back({"/local_costmap/clearing_endpoints", "sensor_msgs/msg/PointCloud2"});
-            topics.push_back({"/local_costmap/costmap", "nav_msgs/msg/OccupancyGrid"});
-            topics.push_back({"/local_costmap/costmap_raw", "nav2_msgs/msg/Costmap"});
-            topics.push_back({"/local_costmap/costmap_raw_updates", "nav2_msgs/msg/CostmapUpdate"});
-            topics.push_back({"/local_costmap/costmap_updates", "map_msgs/msg/OccupancyGridUpdate"});
-            topics.push_back({"/local_costmap/footprint", "geometry_msgs/msg/PolygonStamped"});
-            topics.push_back({"/local_costmap/local_costmap/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/local_costmap/published_footprint", "geometry_msgs/msg/PolygonStamped"});
-            topics.push_back({"/local_costmap/voxel_grid", "nav2_msgs/msg/VoxelGrid"});
-            topics.push_back({"/local_costmap/voxel_layer", "nav_msgs/msg/OccupancyGrid"});
-            topics.push_back({"/local_costmap/voxel_layer_raw", "nav2_msgs/msg/Costmap"});
-            topics.push_back({"/local_costmap/voxel_layer_raw_updates", "nav2_msgs/msg/CostmapUpdate"});
-            topics.push_back({"/local_costmap/voxel_layer_updates", "map_msgs/msg/OccupancyGridUpdate"});
-            topics.push_back({"/local_plan", "nav_msgs/msg/Path"});
-            topics.push_back({"/map", "nav_msgs/msg/OccupancyGrid"});
-            topics.push_back({"/map_server/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/marker", "visualization_msgs/msg/Marker"});
-            topics.push_back({"/odom", "nav_msgs/msg/Odometry"});
-            topics.push_back({"/parameter_events", "rcl_interfaces/msg/ParameterEvent"});
-            topics.push_back({"/pinky_battery_present", "std_msgs/msg/Bool"});
-            topics.push_back({"/plan", "nav_msgs/msg/Path"});
-            topics.push_back({"/plan_smoothed", "nav_msgs/msg/Path"});
-            topics.push_back({"/planner_selector", "std_msgs/msg/String"});
-            topics.push_back({"/planner_server/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/preempt_teleop", "std_msgs/msg/Empty"});
-            topics.push_back({"/received_global_plan", "nav_msgs/msg/Path"});
-            topics.push_back({"/robot_command", "std_msgs/msg/String"});
-            topics.push_back({"/robot_description", "std_msgs/msg/String"});
-            topics.push_back({"/rosout", "rcl_interfaces/msg/Log"});
-            topics.push_back({"/scan", "sensor_msgs/msg/LaserScan"});
-            topics.push_back({"/scan_matched_points2", "sensor_msgs/msg/PointCloud2"});
-            topics.push_back({"/smoother_server/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/speed_limit", "nav2_msgs/msg/SpeedLimit"});
-            topics.push_back({"/submap_list", "slam_toolbox/msg/SubmapList"});
-            topics.push_back({"/tf", "tf2_msgs/msg/TFMessage"});
-            topics.push_back({"/tf_static", "tf2_msgs/msg/TFMessage"});
-            topics.push_back({"/tracked_pose", "geometry_msgs/msg/PoseStamped"});
-            topics.push_back({"/trajectory_node_list", "slam_toolbox/msg/TrajectoryList"});
-            topics.push_back({"/transformed_global_plan", "nav_msgs/msg/Path"});
-            topics.push_back({"/velocity_smoother/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-            topics.push_back({"/waypoint_follower/transition_event", "lifecycle_msgs/msg/TransitionEvent"});
-        } else {
-            // 기본 토픽 (기타 도메인)
-            topics.push_back({"parameter_events", "rcl_interfaces/msg/ParameterEvent"});
-            topics.push_back({"rosout", "rcl_interfaces/msg/Log"});
-        }
-        
-        return topics;
+        qWarning() << "토픽 관리자: ROS 노드가 초기화되지 않았습니다. 토픽 목록을 가져올 수 없습니다.";
+        return topics; // 빈 목록 반환
     }
     
     try {
-        // 실제 ROS 노드에서 토픽 목록 가져오기
-        auto topic_names_and_types = node_->get_topic_names_and_types();
-        qDebug() << "현재 노드의 도메인에서" << topic_names_and_types.size() << "개의 토픽 발견";
+        // 시스템 환경변수 백업
+        char* orig_domain_id = getenv("ROS_DOMAIN_ID");
+        std::string orig_domain_id_str = orig_domain_id ? orig_domain_id : "";
         
-        for (const auto& entry : topic_names_and_types) {
-            if (!entry.second.empty()) {
-                topics.push_back({entry.first, entry.second[0]});
+        // 임시 환경변수 설정
+        std::string domain_id_str = std::to_string(current_domain_id_);
+        setenv("ROS_DOMAIN_ID", domain_id_str.c_str(), 1);
+        qDebug() << "ROS_DOMAIN_ID 환경변수를" << domain_id_str.c_str() << "로 임시 설정";
+        
+        // 방법 1: 새로운 외부 프로세스로 특정 도메인 ID의 토픽 목록 가져오기
+        std::string temp_script = "/tmp/ros_topic_list_" + std::to_string(current_domain_id_) + ".sh";
+        
+        // 임시 스크립트 파일 생성
+        std::ofstream script_file(temp_script);
+        if (script_file.is_open()) {
+            script_file << "#!/bin/bash\n";
+            script_file << "export ROS_DOMAIN_ID=" << current_domain_id_ << "\n";
+            script_file << "ros2 topic list --include-hidden-topics -t 2>/dev/null\n";
+            script_file.close();
+            
+            // 스크립트 실행 권한 설정
+            std::string chmod_cmd = "chmod +x " + temp_script;
+            system(chmod_cmd.c_str());
+            
+            // 스크립트 실행하여 토픽 목록 가져오기
+            FILE* pipe = popen(temp_script.c_str(), "r");
+            if (pipe) {
+                char buffer[256];
+                while (fgets(buffer, sizeof(buffer), pipe)) {
+                    std::string line(buffer);
+                    // 줄 끝의 개행 문자 제거
+                    if (!line.empty() && line[line.length()-1] == '\n') {
+                        line.erase(line.length()-1);
+                    }
+                    
+                    // 토픽 이름과 타입 추출 (예: /topic [msg_type])
+                    size_t pos = line.find(" [");
+                    if (pos != std::string::npos && line.back() == ']') {
+                        std::string topic_name = line.substr(0, pos);
+                        std::string topic_type = line.substr(pos + 2, line.length() - pos - 3);
+                        topics.push_back({topic_name, topic_type});
+                    }
+                }
+                pclose(pipe);
+                
+                // 임시 스크립트 파일 삭제
+                std::string rm_cmd = "rm " + temp_script;
+                system(rm_cmd.c_str());
             }
         }
+        
+        // 방법 1로 토픽을 찾지 못했다면 방법 2 시도: 직접 ros2 명령 실행
+        if (topics.empty()) {
+            std::string cmd = "ROS_DOMAIN_ID=" + domain_id_str + " ros2 topic list --include-hidden-topics -t 2>/dev/null";
+            FILE* pipe = popen(cmd.c_str(), "r");
+            if (!pipe) {
+                qWarning() << "ROS2 CLI 명령 실행 실패";
+            } else {
+                char buffer[256];
+                while (fgets(buffer, sizeof(buffer), pipe)) {
+                    std::string line(buffer);
+                    // 줄 끝의 개행 문자 제거
+                    if (!line.empty() && line[line.length()-1] == '\n') {
+                        line.erase(line.length()-1);
+                    }
+                    
+                    // 토픽 이름과 타입 추출 (예: /topic [msg_type])
+                    size_t pos = line.find(" [");
+                    if (pos != std::string::npos && line.back() == ']') {
+                        std::string topic_name = line.substr(0, pos);
+                        std::string topic_type = line.substr(pos + 2, line.length() - pos - 3);
+                        topics.push_back({topic_name, topic_type});
+                    }
+                }
+                pclose(pipe);
+            }
+        }
+        
+        // 방법 3: 마지막 대안으로 ROS 노드 API 사용
+        if (topics.empty()) {
+            // 토픽 목록 조회
+            auto topic_names_and_types = node_->get_topic_names_and_types();
+            qDebug() << "도메인" << current_domain_id_ << "에서" << topic_names_and_types.size() << "개의 토픽 발견";
+            
+            // 결과 저장
+            for (const auto& entry : topic_names_and_types) {
+                if (!entry.second.empty()) {
+                    topics.push_back({entry.first, entry.second[0]});
+                }
+            }
+        } else {
+            qDebug() << "도메인" << current_domain_id_ << "에서" << topics.size() << "개의 토픽 발견";
+        }
+        
+        // 환경변수 복원
+        if (orig_domain_id) {
+            setenv("ROS_DOMAIN_ID", orig_domain_id_str.c_str(), 1);
+        } else {
+            unsetenv("ROS_DOMAIN_ID");
+        }
+        qDebug() << "ROS_DOMAIN_ID 환경변수를 원래 값으로 복원:" << (orig_domain_id ? orig_domain_id : "없음");
     } catch (const std::exception& e) {
         qWarning() << "토픽 목록 가져오기 중 오류 발생:" << e.what();
     }

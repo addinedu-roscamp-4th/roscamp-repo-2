@@ -1,6 +1,9 @@
 import React from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 
 const MenuCard = ({ item, onTap, onAdd }) => {
+  const { t, language } = useLanguage();
+  
   // 가격 포맷
   const formattedPrice = new Intl.NumberFormat('ko-KR', {
     style: 'currency',
@@ -28,13 +31,22 @@ const MenuCard = ({ item, onTap, onAdd }) => {
     onAdd(itemToAdd, 1);
   };
 
+  // 언어에 따른 조리시간 텍스트
+  const getCookingTimeText = () => {
+    switch(language) {
+      case 'en': return 'Estimated cooking time: ';
+      case 'ja': return '予想調理時間: ';
+      default: return '예상 조리시간: ';
+    }
+  };
+
   return (
     <div 
       className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200"
       onClick={onTap}
       role="button"
       tabIndex={0}
-      aria-label={`${item.name} 메뉴 상세 보기`}
+      aria-label={`${item.name} ${t('menu.viewDetails')}`}
     >
       <div className="h-56 w-full flex items-center justify-center bg-gray-50">
         <img
@@ -46,15 +58,21 @@ const MenuCard = ({ item, onTap, onAdd }) => {
 
       <div className="p-5">
         <h3 className="text-2xl font-bold">{item.name}</h3>
-        <p className="text-sm text-gray-500 mt-1">예상 조리시간: {prepareTime}분</p>
+        <p className="text-sm text-gray-500 mt-1">
+          {getCookingTimeText()}{prepareTime}
+          {language === 'en' ? ' min' : language === 'ja' ? '分' : '분'}
+        </p>
         <div className="flex justify-between items-center mt-4">
-          <span className="text-xl font-medium">{formattedPrice}</span>
+          <span className="text-xl font-medium">
+            {formattedPrice}
+            {language === 'en' ? '' : language === 'ja' ? '円' : '원'}
+          </span>
           <button
             className="bg-[#C49E69] text-white px-7 py-4 rounded-md text-xl font-bold hover:brightness-95"
             onClick={handleAddToCart}
-            aria-label={`${item.name} 장바구니에 담기`}
+            aria-label={`${item.name} ${t('menu.addToCart')}`}
           >
-            담기
+            {t('cart.addItem')}
           </button>
         </div>
       </div>

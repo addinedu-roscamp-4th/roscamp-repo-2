@@ -317,6 +317,48 @@ def update_order_status(
             background_tasks
         )
 
+    # 주문이 서빙완료일시 전체 주문 항목도 서빙완료로 변경
+    if new_status == "SERVED":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.SERVED
+            db.add(item)
+            db.commit()
+        # Log order item serving
+        log_info(db,
+            f"주문 항목 {order_id} 서빙완료됨",
+            background_tasks
+        )
+
+    # 주문이 준비중일시 전체 주문 항목도 준비중으로 변경 및 핑키에게 서빙 요청 명령
+    if new_status == "PREPARING":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.PREPARING
+            db.add(item)
+            db.commit()
+        # Log order item preparing
+        log_info(db,
+            f"주문 항목 {order_id} 준비중됨",
+            background_tasks
+        )
+        command = {
+            "robot_id": None,             # 필요에 맞게 설정
+            "command": "SERVING",
+            "parameters": {
+                "order_id": order_id,
+                "table_id": order.table_id,
+            },
+            "status": "PENDING"
+        }
+        from app.routes.robot import send_command
+        send_command(command, db)
+    # Log order status change
+    log_info(db,
+        f"주문 {order_id} 상태 변경: {old_status} → {new_status}",
+        background_tasks
+    )
+
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
     background_tasks.add_task(

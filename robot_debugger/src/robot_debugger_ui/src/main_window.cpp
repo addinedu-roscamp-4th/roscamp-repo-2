@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
-#include <QFormLayout>
+#include <QFormLayout>  // QFormLayout 헤더 추가
 #include <QLineEdit>
 #include <QComboBox>
 #include <QSpinBox>
@@ -34,6 +34,9 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QIcon>
+#include <QListView>
+#include <QTimer>
+#include <QSlider>
 
 namespace robot_debugger_ui {
 
@@ -138,47 +141,77 @@ void MainWindow::initializeUi()
     
     // 클릭 이벤트 연결 및 스타일 업데이트
     connect(dashboardAction, &QAction::triggered, [=]() {
-        central_widget_->setCurrentWidget(dashboard_);
-        statusBar()->showMessage("대시보드");
-        // 버튼 스타일 업데이트
-        if (dashboardButton) dashboardButton->setStyleSheet(activeStyle);
-        if (jetcobotButton) jetcobotButton->setStyleSheet(inactiveStyle);
-        if (pinkyButton) pinkyButton->setStyleSheet(inactiveStyle);
-        if (settingsButton) settingsButton->setStyleSheet(inactiveStyle);
+        if (dashboard_ && central_widget_) {
+            central_widget_->setCurrentWidget(dashboard_);
+            statusBar()->showMessage("대시보드");
+            // 버튼 스타일 업데이트
+            if (dashboardButton) dashboardButton->setStyleSheet(activeStyle);
+            if (jetcobotButton) jetcobotButton->setStyleSheet(inactiveStyle);
+            if (pinkyButton) pinkyButton->setStyleSheet(inactiveStyle);
+            if (settingsButton) settingsButton->setStyleSheet(inactiveStyle);
+        } else {
+            qWarning() << "대시보드 위젯이 null입니다. 탭 전환 불가.";
+        }
     });
     
     connect(jetcobotAction, &QAction::triggered, [=]() {
-        central_widget_->setCurrentIndex(1);  // 인덱스 수정
-        statusBar()->showMessage("Jetcobot 패널");
-        // 버튼 스타일 업데이트
-        if (dashboardButton) dashboardButton->setStyleSheet(inactiveStyle);
-        if (jetcobotButton) jetcobotButton->setStyleSheet(activeStyle);
-        if (pinkyButton) pinkyButton->setStyleSheet(inactiveStyle);
-        if (settingsButton) settingsButton->setStyleSheet(inactiveStyle);
+        if (central_widget_ && central_widget_->count() > 1) {
+            QWidget* jetcobotWidget = central_widget_->widget(1);
+            if (jetcobotWidget) {
+                central_widget_->setCurrentWidget(jetcobotWidget);
+                statusBar()->showMessage("Jetcobot 패널");
+                // 버튼 스타일 업데이트
+                if (dashboardButton) dashboardButton->setStyleSheet(inactiveStyle);
+                if (jetcobotButton) jetcobotButton->setStyleSheet(activeStyle);
+                if (pinkyButton) pinkyButton->setStyleSheet(inactiveStyle);
+                if (settingsButton) settingsButton->setStyleSheet(inactiveStyle);
+            } else {
+                qWarning() << "Jetcobot 위젯이 null입니다. 탭 전환 불가.";
+            }
+        } else {
+            qWarning() << "Jetcobot 위젯 인덱스가 존재하지 않습니다. 탭 전환 불가.";
+        }
     });
     
     connect(pinkyAction, &QAction::triggered, [=]() {
-        central_widget_->setCurrentIndex(2);  // 인덱스 수정
-        statusBar()->showMessage("Pinky 패널");
-        // 버튼 스타일 업데이트
-        if (dashboardButton) dashboardButton->setStyleSheet(inactiveStyle);
-        if (jetcobotButton) jetcobotButton->setStyleSheet(inactiveStyle);
-        if (pinkyButton) pinkyButton->setStyleSheet(activeStyle);
-        if (settingsButton) settingsButton->setStyleSheet(inactiveStyle);
+        if (central_widget_ && central_widget_->count() > 2) {
+            QWidget* pinkyWidget = central_widget_->widget(2);
+            if (pinkyWidget) {
+                central_widget_->setCurrentWidget(pinkyWidget);
+                statusBar()->showMessage("Pinky 패널");
+                // 버튼 스타일 업데이트
+                if (dashboardButton) dashboardButton->setStyleSheet(inactiveStyle);
+                if (jetcobotButton) jetcobotButton->setStyleSheet(inactiveStyle);
+                if (pinkyButton) pinkyButton->setStyleSheet(activeStyle);
+                if (settingsButton) settingsButton->setStyleSheet(inactiveStyle);
+            } else {
+                qWarning() << "Pinky 위젯이 null입니다. 탭 전환 불가.";
+            }
+        } else {
+            qWarning() << "Pinky 위젯 인덱스가 존재하지 않습니다. 탭 전환 불가.";
+        }
     });
     
     connect(settingsAction, &QAction::triggered, [=]() {
-        central_widget_->setCurrentWidget(settings_tab_);
-        statusBar()->showMessage("설정");
-        // 버튼 스타일 업데이트
-        if (dashboardButton) dashboardButton->setStyleSheet(inactiveStyle);
-        if (jetcobotButton) jetcobotButton->setStyleSheet(inactiveStyle);
-        if (pinkyButton) pinkyButton->setStyleSheet(inactiveStyle);
-        if (settingsButton) settingsButton->setStyleSheet(activeStyle);
+        if (settings_tab_ && central_widget_) {
+            central_widget_->setCurrentWidget(settings_tab_);
+            statusBar()->showMessage("설정");
+            // 버튼 스타일 업데이트
+            if (dashboardButton) dashboardButton->setStyleSheet(inactiveStyle);
+            if (jetcobotButton) jetcobotButton->setStyleSheet(inactiveStyle);
+            if (pinkyButton) pinkyButton->setStyleSheet(inactiveStyle);
+            if (settingsButton) settingsButton->setStyleSheet(activeStyle);
+        } else {
+            qWarning() << "설정 위젯이 null입니다. 탭 전환 불가.";
+        }
     });
 
-    // 최초 탭 선택
-    central_widget_->setCurrentWidget(dashboard_);
+    // 최초 탭 선택 - dashboard_가 null이 아닌 경우에만 설정
+    if (dashboard_) {
+        central_widget_->setCurrentWidget(dashboard_);
+    } else if (central_widget_->count() > 0) {
+        central_widget_->setCurrentIndex(0);
+    }
 }
 
 void MainWindow::initializeRos()
@@ -338,779 +371,328 @@ void MainWindow::setupSidebar()
 
 void MainWindow::setupDashboardTab()
 {
-    // 대시보드 탭 생성
-    QWidget* dashboard = new QWidget(central_widget_);
-    QVBoxLayout* main_layout = new QVBoxLayout(dashboard);
-    
-    // 제목
-    QLabel* title = new QLabel("대시보드");
-    title->setStyleSheet("font-size: 18px; font-weight: bold;");
-    main_layout->addWidget(title);
-    
-    // 대시보드 탭 위젯 생성
-    QTabWidget* dashboard_tabs = new QTabWidget();
-    
-    // 탭 위젯 스타일 개선 - 동일한 스타일을 다른 탭 위젯에도 적용하기 위해 분리
-    dashboard_tabs->setStyleSheet(
-        "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
-        "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
-        "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
-        "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
-    );
-    
-    main_layout->addWidget(dashboard_tabs);
-    
-    // 1. 플릿 오버뷰 탭 추가
-    QWidget* fleet_overview_tab = new QWidget();
-    QVBoxLayout* fleet_layout = new QVBoxLayout(fleet_overview_tab);
-    
-    // 부제목 제거 (불필요한 중복 제거)
-    
-    // 로봇 카드 컨테이너 영역
-    QScrollArea* cardsScrollArea = new QScrollArea();
-    cardsScrollArea->setWidgetResizable(true);
-    QWidget* cardsContainer = new QWidget();
-    
-    // 그리드 레이아웃으로 변경
-    QGridLayout* cardsLayout = new QGridLayout(cardsContainer);
-    cardsLayout->setContentsMargins(10, 10, 10, 10);
-    cardsLayout->setSpacing(15);
-    
-    // 카드 추가는 나중에 로봇 정보가 로드된 후 수행
-    
-    cardsScrollArea->setWidget(cardsContainer);
-    fleet_layout->addWidget(cardsScrollArea);
-    
-    // 2. 글로벌 로그 탭 추가
-    QWidget* log_tab = new QWidget();
-    QVBoxLayout* log_layout = new QVBoxLayout(log_tab);
-    
-    // 로그 필터 컨트롤
-    QHBoxLayout* log_filter_layout = new QHBoxLayout();
-    
-    QLabel* log_level_label = new QLabel("로그 레벨:");
-    QComboBox* log_level_combo = new QComboBox();
-    log_level_combo->addItem("디버그", 0);
-    log_level_combo->addItem("정보", 1);
-    log_level_combo->addItem("경고", 2);
-    log_level_combo->addItem("오류", 3);
-    log_level_combo->addItem("심각", 4);
-    
-    // 현재 로그 레벨 설정
-    if (config_manager_) {
-    log_level_combo->setCurrentIndex(config_manager_->getLogLevel());
-    } else {
-        log_level_combo->setCurrentIndex(1);  // 기본값은 정보 레벨
-    }
-    
-    connect(log_level_combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &MainWindow::onLogLevelChanged);
-    
-    log_filter_layout->addWidget(log_level_label);
-    log_filter_layout->addWidget(log_level_combo);
-    
-    // 검색 필드
-    QLabel* search_label = new QLabel("검색:");
-    QLineEdit* search_edit = new QLineEdit();
-    search_edit->setPlaceholderText("로그 검색...");
-    
-    log_filter_layout->addWidget(search_label);
-    log_filter_layout->addWidget(search_edit);
-    log_filter_layout->addStretch();
-    
-    // 로그 필터 버튼
-    QPushButton* clear_log_button = new QPushButton("로그 지우기");
-    connect(clear_log_button, &QPushButton::clicked, [this]() {
-        // 로그 지우기 로직
-        QPlainTextEdit* log_text_edit = dashboard_->findChild<QPlainTextEdit*>("logTextEdit");
-        if (log_text_edit) {
-            log_text_edit->clear();
-        }
-    });
-    
-    log_filter_layout->addWidget(clear_log_button);
-    
-    log_layout->addLayout(log_filter_layout);
-    
-    // 로그 텍스트 영역
-    QPlainTextEdit* log_text_edit = new QPlainTextEdit();
-    log_text_edit->setObjectName("logTextEdit");
-    log_text_edit->setReadOnly(true);
-    log_text_edit->setFont(QFont("Monospace", 9));
-    log_text_edit->setLineWrapMode(QPlainTextEdit::NoWrap);
-    
-    // 기본 로그 메시지 추가
-    log_text_edit->appendPlainText("[INFO] 로봇 디버깅 도구 시작됨");
-    log_text_edit->appendPlainText("[INFO] ROS 2 환경 초기화 완료");
-    
-    log_layout->addWidget(log_text_edit);
-    
-    // 3. 이벤트 탭 추가
-    QWidget* event_tab = new QWidget();
-    QVBoxLayout* event_layout = new QVBoxLayout(event_tab);
-    
-    // 이벤트 필터 컨트롤
-    QHBoxLayout* event_filter_layout = new QHBoxLayout();
-    
-    QLabel* event_type_label = new QLabel("이벤트 유형:");
-    QComboBox* event_type_combo = new QComboBox();
-    event_type_combo->addItem("모든 이벤트", 0);
-    event_type_combo->addItem("연결 이벤트", 1);
-    event_type_combo->addItem("장애 이벤트", 2);
-    event_type_combo->addItem("명령 이벤트", 3);
-    
-    event_filter_layout->addWidget(event_type_label);
-    event_filter_layout->addWidget(event_type_combo);
-    
-    // 로봇 필터
-    QLabel* robot_filter_label = new QLabel("로봇 필터:");
-    QComboBox* robot_filter_combo = new QComboBox();
-    robot_filter_combo->addItem("모든 로봇", 0);
-    
-    event_filter_layout->addWidget(robot_filter_label);
-    event_filter_layout->addWidget(robot_filter_combo);
-    event_filter_layout->addStretch();
-    
-    // 이벤트 필터 버튼
-    QPushButton* clear_events_button = new QPushButton("이벤트 지우기");
-    connect(clear_events_button, &QPushButton::clicked, [this]() {
-        // 이벤트 지우기 로직
-        QTableView* event_table = dashboard_->findChild<QTableView*>("eventTableView");
-        if (event_table && event_table->model()) {
-            QAbstractItemModel* model = event_table->model();
-            model->removeRows(0, model->rowCount());
-        }
-    });
-    
-    event_filter_layout->addWidget(clear_events_button);
-    
-    event_layout->addLayout(event_filter_layout);
-    
-    // 이벤트 테이블
-    QTableView* event_table = new QTableView();
-    event_table->setObjectName("eventTableView");
-    event_table->setAlternatingRowColors(true);
-    event_table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    event_table->horizontalHeader()->setStretchLastSection(true);
-    
-    // 이벤트 테이블 모델 설정 (간단한 예시)
-    QStandardItemModel* event_model = new QStandardItemModel(0, 4, event_table);
-    if (event_model) {
-    event_model->setHorizontalHeaderLabels(QStringList() << "시간" << "로봇" << "유형" << "설명");
-    
-    // 예시 이벤트 데이터 추가
-    QList<QStandardItem*> event1;
-    event1.append(new QStandardItem(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")));
-    event1.append(new QStandardItem("Jetcobot_1"));
-    event1.append(new QStandardItem("연결"));
-    event1.append(new QStandardItem("로봇이 연결되었습니다."));
-    event_model->appendRow(event1);
-    
-    QList<QStandardItem*> event2;
-    event2.append(new QStandardItem(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")));
-    event2.append(new QStandardItem("Pinky_1"));
-    event2.append(new QStandardItem("명령"));
-    event2.append(new QStandardItem("경로 이동 명령이 실행되었습니다."));
-    event_model->appendRow(event2);
-    
-    event_table->setModel(event_model);
-    }
-    
-    event_layout->addWidget(event_table);
-    
-    // 탭에 추가
-    dashboard_tabs->addTab(fleet_overview_tab, "플릿 오버뷰");
-    dashboard_tabs->addTab(log_tab, "글로벌 로그");
-    dashboard_tabs->addTab(event_tab, "이벤트");
-    
-    // 대시보드 위젯을 중앙 위젯에 추가
-    central_widget_->addWidget(dashboard);
-    
-    // 대시보드 멤버 변수에 저장
-    dashboard_ = dashboard;
-    
-    // 플릿 오버뷰 탭을 멤버 변수로 저장 (기존 fleet_overview_tab_ 대체)
-    fleet_overview_tab_ = fleet_overview_tab;
-}
-
-void MainWindow::setupJetcobotTab()
-{
-    // Jetcobot UI 파일 로드
+    // 대시보드 UI 파일 로드
     QUiLoader loader;
+    QStringList ui_paths = {
+        QDir::currentPath() + "/share/robot_debugger_ui/ui",
+        QDir::currentPath() + "/../share/robot_debugger_ui/ui",
+        QDir::currentPath() + "/../../share/robot_debugger_ui/ui",
+        QDir::currentPath() + "/ui",
+        QDir::currentPath() + "/src/robot_debugger_ui/ui",  // 직접 테스트에서 성공한 경로 추가
+        QDir(QCoreApplication::applicationDirPath()).absolutePath() + "/../share/robot_debugger_ui/ui",
+        QDir(QCoreApplication::applicationDirPath()).absolutePath() + "/../../share/robot_debugger_ui/ui"
+    };
     
-    // 여러 가능한 경로에서 UI 파일 찾기
-    QStringList uiPaths;
-    
-    // 1. 환경 변수에서 설정된 경로
-    QString qtUiPath = QString::fromLocal8Bit(qgetenv("QT_UI_PATH"));
-    if (!qtUiPath.isEmpty()) {
-        uiPaths << qtUiPath;
+    // 유효한 경로들 로그 출력
+    qDebug() << "대시보드 UI 파일 검색 경로:";
+    for (const QString& path : ui_paths) {
+        qDebug() << " - " << path;
+        if (QDir(path).exists()) {
+            qDebug() << "   (유효한 디렉토리)";
+        }
     }
     
-    // 2. 애플리케이션 디렉토리 기준 경로
-    uiPaths << QCoreApplication::applicationDirPath() + "/../share/robot_debugger_ui/ui";
-    
-    // 3. AMENT_PREFIX_PATH 경로 기반 검색
-    QString ament_prefix_path = QString::fromLocal8Bit(qgetenv("AMENT_PREFIX_PATH"));
-    QStringList prefixes = ament_prefix_path.split(':');
-    for (const QString& prefix : prefixes) {
-        uiPaths << prefix + "/share/robot_debugger_ui/ui";
-    }
-    
-    // 4. 상대 경로 추가
-    uiPaths << QDir::current().absolutePath() + "/install/robot_debugger_ui/share/robot_debugger_ui/ui";
-    uiPaths << QDir::current().absolutePath() + "/src/robot_debugger_ui/ui";
-    
-    // UI 파일 검색
     QString ui_file_path;
-    for (const QString& path : uiPaths) {
-        QString potential_path = path + "/jetcobot_tab.ui";
-        if (QFile::exists(potential_path)) {
-            ui_file_path = potential_path;
-            qDebug() << "Jetcobot UI 파일 찾음: " << potential_path;
+    for (const QString& path : ui_paths) {
+        QString temp_path = path + "/dashboard.ui";
+        if (QFileInfo::exists(temp_path)) {
+            ui_file_path = temp_path;
+            qDebug() << "대시보드 UI 파일 찾음:" << temp_path;
             break;
         }
     }
     
-    // 경로 확인 및 로드
-    QFile file(ui_file_path);
-    qDebug() << "Jetcobot UI 파일 로드 시도: " << ui_file_path;
-    
-    if (!file.open(QFile::ReadOnly)) {
-        // UI 파일을 찾을 수 없는 경우 빈 위젯 사용
-        qDebug() << "Jetcobot UI 파일을 열 수 없음: " << file.errorString();
-        qDebug() << "시도한 경로들:";
-        for (const QString& path : uiPaths) {
-            qDebug() << " - " << path;
-        }
+    if (ui_file_path.isEmpty()) {
+        qWarning() << "대시보드 UI 파일을 찾을 수 없습니다.";
         
-        QWidget* jetcobot_tab = new QWidget(central_widget_);
-        QLabel* label = new QLabel("기본 Jetcobot 패널 (UI 파일을 찾을 수 없음)", jetcobot_tab);
-        QVBoxLayout* layout = new QVBoxLayout(jetcobot_tab);
-        layout->addWidget(label);
-        central_widget_->addWidget(jetcobot_tab);
-        return;
-    }
-    
-    QWidget* jetcobot_tab = loader.load(&file, central_widget_);
-    file.close();
-    if (jetcobot_tab) {
-        central_widget_->addWidget(jetcobot_tab);
-        qDebug() << "Jetcobot UI 파일 로드 성공";
+        // UI 파일을 찾을 수 없는 경우 기본 위젯 생성
+        dashboard_ = new QWidget();
+        QVBoxLayout* layout = new QVBoxLayout(dashboard_);
         
-        // 활성화된 로봇 표시 레이블 제거 (요청에 따라 제거)
-        QLabel* activeRobotsLabel = jetcobot_tab->findChild<QLabel*>("activeRobotsLabel");
-        if (activeRobotsLabel) {
-            activeRobotsLabel->hide();
-        }
+        QLabel* titleLabel = new QLabel("대시보드");
+        titleLabel->setStyleSheet("font-size: 18px; font-weight: bold;");
+        layout->addWidget(titleLabel);
         
-        // 긴급 정지 버튼 제거 (요청에 따라 제거)
-        QPushButton* emergencyBtn = jetcobot_tab->findChild<QPushButton*>("pushButtonEmergency");
-        if (emergencyBtn) {
-            emergencyBtn->hide();
-        }
+        QTabWidget* tabWidget = new QTabWidget();
         
-        // UI에서 제목 라벨 찾기
-        QLabel* titleLabel = jetcobot_tab->findChild<QLabel*>("label");
-        if (titleLabel && titleLabel->text() == "Jetcobot 제어 패널") {
-            // hide 제거하고 보이게 설정
-            titleLabel->show();
-            titleLabel->setVisible(true);
-            
-            // 제목 스타일 개선
-            QFont font = titleLabel->font();
-            font.setPointSize(16);
-            font.setBold(true);
-            titleLabel->setFont(font);
-            titleLabel->setStyleSheet("margin-top: 10px; margin-bottom: 10px; padding: 5px;");
-            titleLabel->setContentsMargins(5, 5, 5, 5);
-            titleLabel->setMaximumHeight(40);
-        }
+        // 플릿 오버뷰 탭 (빈 탭)
+        QWidget* fleetTab = new QWidget();
+        QVBoxLayout* fleetLayout = new QVBoxLayout(fleetTab);
+        QScrollArea* scrollArea = new QScrollArea();
+        scrollArea->setWidgetResizable(true);
+        QWidget* cardsContainer = new QWidget();
+        QGridLayout* cardsLayout = new QGridLayout(cardsContainer);
+        cardsLayout->setContentsMargins(10, 10, 10, 10);
+        cardsLayout->setSpacing(15);
+        scrollArea->setWidget(cardsContainer);
+        fleetLayout->addWidget(scrollArea);
         
-        // 적절한 여백 유지
-        QVBoxLayout* mainLayout = qobject_cast<QVBoxLayout*>(jetcobot_tab->layout());
-        if (mainLayout) {
-            // 상단 여백 복원
-            mainLayout->setContentsMargins(10, 10, 10, 10);
-            
-            // 레이아웃 내 위젯 간 간격 적절히 설정
-            mainLayout->setSpacing(8); // 간격을 8로 설정
-            
-            // 스페이서 위젯 조정
-            for (int i = 0; i < mainLayout->count(); ++i) {
-                QLayoutItem* item = mainLayout->itemAt(i);
-                QSpacerItem* spacer = dynamic_cast<QSpacerItem*>(item);
-                if (spacer) {
-                    // 스페이서 크기 조정 대신 유지
-                    continue;
-                }
-                
-                QWidget* widget = item->widget();
-                if (widget) {
-                    // 각 위젯 여백 설정
-                    widget->setContentsMargins(2, 2, 2, 2);
-                    
-                    // 위젯 레이아웃 여백 조정
-                    if (widget->layout()) {
-                        widget->layout()->setContentsMargins(2, 2, 2, 2);
-                        widget->layout()->setSpacing(8);
-                    }
+        // 로그 탭 (빈 탭)
+        QWidget* logTab = new QWidget();
+        QVBoxLayout* logLayout = new QVBoxLayout(logTab);
+        QPlainTextEdit* logText = new QPlainTextEdit();
+        logText->setObjectName("logTextEdit");
+        logText->setReadOnly(true);
+        logText->appendPlainText("[INFO] 로봇 디버거 UI가 시작되었습니다.");
+        QHBoxLayout* logControlLayout = new QHBoxLayout();
+        QComboBox* logLevelCombo = new QComboBox();
+        logLevelCombo->setObjectName("comboBoxLogLevel");
+        logLevelCombo->addItems(QStringList() << "디버그" << "정보" << "경고" << "오류" << "심각");
+        logLevelCombo->setCurrentIndex(1); // 기본값: 정보
+        QPushButton* clearLogButton = new QPushButton("로그 지우기");
+        clearLogButton->setObjectName("pushButtonClearLog");
+        logControlLayout->addWidget(new QLabel("로그 레벨:"));
+        logControlLayout->addWidget(logLevelCombo);
+        logControlLayout->addStretch();
+        logControlLayout->addWidget(clearLogButton);
+        logLayout->addWidget(logText);
+        logLayout->addLayout(logControlLayout);
+        
+        // 설정된 로그 레벨에 따라 로그 필터링 
+        connect(logLevelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, &MainWindow::onLogLevelChanged);
+        
+        // 로그 지우기 버튼 연결
+        connect(clearLogButton, &QPushButton::clicked, [logText]() {
+            logText->clear();
+            logText->appendPlainText("[INFO] 로그가 지워졌습니다.");
+        });
+        
+        // 이벤트 탭 (빈 탭)
+        QWidget* eventTab = new QWidget();
+        QVBoxLayout* eventLayout = new QVBoxLayout(eventTab);
+        
+        // 테이블 뷰 생성 및 모델 설정
+        QTableView* eventTable = new QTableView();
+        eventTable->setObjectName("eventTableView");
+        eventTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        eventTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        eventTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        eventTable->horizontalHeader()->setStretchLastSection(true);
+        eventTable->verticalHeader()->setVisible(false);
+        QStandardItemModel* model = new QStandardItemModel(0, 4, eventTable);
+        model->setHorizontalHeaderLabels(QStringList() << "시간" << "로봇" << "유형" << "설명");
+        eventTable->setModel(model);
+        
+        // 이벤트 필터 및 제어 레이아웃
+        QHBoxLayout* eventControlLayout = new QHBoxLayout();
+        QCheckBox* warnCheck = new QCheckBox("경고");
+        warnCheck->setObjectName("checkBoxWarn");
+        warnCheck->setChecked(true);
+        QCheckBox* errorCheck = new QCheckBox("오류");
+        errorCheck->setObjectName("checkBoxError");
+        errorCheck->setChecked(true);
+        QCheckBox* criticalCheck = new QCheckBox("심각");
+        criticalCheck->setObjectName("checkBoxCritical");
+        criticalCheck->setChecked(true);
+        QPushButton* restoreButton = new QPushButton("이벤트 초기화");
+        restoreButton->setObjectName("pushButtonRestoreEvent");
+        eventControlLayout->addWidget(new QLabel("표시:"));
+        eventControlLayout->addWidget(warnCheck);
+        eventControlLayout->addWidget(errorCheck);
+        eventControlLayout->addWidget(criticalCheck);
+        eventControlLayout->addStretch();
+        eventControlLayout->addWidget(restoreButton);
+        
+        // 이벤트 필터링 기능 연결
+        auto updateEventFilter = [warnCheck, errorCheck, criticalCheck, eventTable]() {
+            // 필터링 로직 구현 (간단한 예시)
+            // 실제로는 모델 필터링 적용 필요
+            if (eventTable && eventTable->model()) {
+                qDebug() << "이벤트 필터 업데이트: 경고=" << warnCheck->isChecked() 
+                         << ", 오류=" << errorCheck->isChecked()
+                         << ", 심각=" << criticalCheck->isChecked();
+            }
+        };
+        connect(warnCheck, &QCheckBox::toggled, updateEventFilter);
+        connect(errorCheck, &QCheckBox::toggled, updateEventFilter);
+        connect(criticalCheck, &QCheckBox::toggled, updateEventFilter);
+        
+        // 이벤트 초기화 버튼 연결
+        connect(restoreButton, &QPushButton::clicked, [eventTable]() {
+            if (eventTable && eventTable->model()) {
+                QStandardItemModel* model = qobject_cast<QStandardItemModel*>(eventTable->model());
+                if (model) {
+                    model->removeRows(0, model->rowCount());
+                    qDebug() << "이벤트 목록이 초기화되었습니다.";
                 }
             }
-            
-            // 첫 번째 탭 위젯 찾기 (위치 제어, 경로 탐색 등 탭을 포함하는 위젯)
-            QTabWidget* tabWidget = jetcobot_tab->findChild<QTabWidget*>();
-            if (tabWidget) {
-                // 탭 위젯 여백 설정
-                tabWidget->setContentsMargins(5, 5, 5, 5);
-                
-                // 대시보드 스타일과 유사하게 선택된 탭 디자인 개선
-                tabWidget->setStyleSheet(
-                    "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
-                    "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
-                    "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
-                    "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
-                );
-                
-                // 탭 위젯 위치 조정 (제목과 적절히 분리되도록)
-                QRect geo = tabWidget->geometry();
-                geo.moveTop(std::max(0, geo.top() + 15)); // 위치 아래로 조정
-                tabWidget->setGeometry(geo);
-            }
-        }
+        });
+        
+        eventLayout->addWidget(eventTable);
+        eventLayout->addLayout(eventControlLayout);
+        
+        // 탭 위젯에 탭 추가
+        tabWidget->addTab(fleetTab, "플릿 오버뷰");
+        tabWidget->addTab(logTab, "로그");
+        tabWidget->addTab(eventTab, "이벤트");
+        
+        // 스타일 설정
+        tabWidget->setStyleSheet(
+            "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
+            "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
+            "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
+            "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
+        );
+        
+        layout->addWidget(tabWidget);
+        
+        // 기본 로그 입력
+        qDebug() << "대시보드 UI 파일을 찾을 수 없어 기본 위젯을 생성했습니다.";
+        // 로그 이벤트 추가
+        logEvent("시스템", "정보", "로봇 디버거 UI가 초기화되었습니다.");
+        
+        // 중앙 위젯에 추가
+        central_widget_->addWidget(dashboard_);
     } else {
-        // UI 로드 실패 시 빈 위젯 사용
-        qDebug() << "Jetcobot UI 파일 로드 실패: " << loader.errorString();
-        QWidget* jetcobot_tab = new QWidget(central_widget_);
-        QLabel* label = new QLabel("Jetcobot 패널 로드 실패: " + loader.errorString(), jetcobot_tab);
-        QVBoxLayout* layout = new QVBoxLayout(jetcobot_tab);
-        layout->addWidget(label);
-        central_widget_->addWidget(jetcobot_tab);
-    }
-}
-
-void MainWindow::setupPinkyTab()
-{
-    // Pinky UI 파일 로드
-    QUiLoader loader;
-    
-    // 여러 가능한 경로에서 UI 파일 찾기
-    QStringList uiPaths;
-    
-    // 1. 환경 변수에서 설정된 경로
-    QString qtUiPath = QString::fromLocal8Bit(qgetenv("QT_UI_PATH"));
-    if (!qtUiPath.isEmpty()) {
-        uiPaths << qtUiPath;
-    }
-    
-    // 2. 애플리케이션 디렉토리 기준 경로
-    uiPaths << QCoreApplication::applicationDirPath() + "/../share/robot_debugger_ui/ui";
-    
-    // 3. AMENT_PREFIX_PATH 경로 기반 검색
-    QString ament_prefix_path = QString::fromLocal8Bit(qgetenv("AMENT_PREFIX_PATH"));
-    QStringList prefixes = ament_prefix_path.split(':');
-    for (const QString& prefix : prefixes) {
-        uiPaths << prefix + "/share/robot_debugger_ui/ui";
-    }
-    
-    // 4. 상대 경로 추가
-    uiPaths << QDir::current().absolutePath() + "/install/robot_debugger_ui/share/robot_debugger_ui/ui";
-    uiPaths << QDir::current().absolutePath() + "/src/robot_debugger_ui/ui";
-    
-    // UI 파일 검색
-    QString ui_file_path;
-    for (const QString& path : uiPaths) {
-        QString potential_path = path + "/pinky_tab.ui";
-        if (QFile::exists(potential_path)) {
-            ui_file_path = potential_path;
-            qDebug() << "Pinky UI 파일 찾음: " << potential_path;
-            break;
-        }
-    }
-    
-    // 경로 확인 및 로드
-    QFile file(ui_file_path);
-    qDebug() << "Pinky UI 파일 로드 시도: " << ui_file_path;
-    
-    if (!file.open(QFile::ReadOnly)) {
-        // UI 파일을 찾을 수 없는 경우 빈 위젯 사용
-        qDebug() << "Pinky UI 파일을 열 수 없음: " << file.errorString();
-        qDebug() << "시도한 경로들:";
-        for (const QString& path : uiPaths) {
-            qDebug() << " - " << path;
+        QFile file(ui_file_path);
+        qDebug() << "대시보드 UI 파일 로드 시도:" << ui_file_path;
+        
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "대시보드 UI 파일을 열 수 없습니다:" << file.errorString();
+            return;
         }
         
-        QWidget* pinky_tab = new QWidget(central_widget_);
-        QLabel* label = new QLabel("기본 Pinky 패널 (UI 파일을 찾을 수 없음)", pinky_tab);
-        QVBoxLayout* layout = new QVBoxLayout(pinky_tab);
-        layout->addWidget(label);
-        central_widget_->addWidget(pinky_tab);
-        return;
-    }
-    
-    QWidget* pinky_tab = loader.load(&file, central_widget_);
-    file.close();
-    if (pinky_tab) {
-        central_widget_->addWidget(pinky_tab);
-        qDebug() << "Pinky UI 파일 로드 성공";
+        dashboard_ = loader.load(&file);
+        file.close();
         
-        // 활성화된 로봇 표시 레이블 제거 (요청에 따라 제거)
-        QLabel* activeRobotsLabel = pinky_tab->findChild<QLabel*>("activeRobotsLabel");
-        if (activeRobotsLabel) {
-            activeRobotsLabel->hide();
+        if (!dashboard_) {
+            qWarning() << "대시보드 UI 로드 실패:" << loader.errorString();
+            return;
         }
         
-        // 긴급 정지 버튼 제거 (요청에 따라 제거)
-        QPushButton* emergencyBtn = pinky_tab->findChild<QPushButton*>("pushButtonEmergency");
-        if (emergencyBtn) {
-            emergencyBtn->hide();
+        qDebug() << "대시보드 UI 파일 로드 성공:" << ui_file_path;
+        
+        // 중앙 위젯에 추가
+        central_widget_->addWidget(dashboard_);
+        
+        // 플릿 오버뷰 그리드 레이아웃 찾기
+        QGridLayout* fleet_layout = dashboard_->findChild<QGridLayout*>("gridLayoutFleet");
+        if (!fleet_layout) {
+            qWarning() << "플릿 오버뷰 그리드 레이아웃을 찾을 수 없습니다.";
+            return;
         }
         
-        // UI에서 제목 라벨 찾기
-        QLabel* titleLabel = pinky_tab->findChild<QLabel*>("label");
-        if (titleLabel && titleLabel->text() == "Pinky 제어 패널") {
-            // hide 제거하고 보이게 설정
-            titleLabel->show();
-            titleLabel->setVisible(true);
+        // 로봇 카드 추가
+        int row = 0, col = 0;
+        const int cols = 2;  // 2열 그리드
+        
+        for (auto it = robots_.begin(); it != robots_.end(); ++it) {
+            QWidget* card = createRobotCard(it.value());
+            fleet_layout->addWidget(card, row, col);
             
-            // 제목 스타일 개선
-            QFont font = titleLabel->font();
-            font.setPointSize(16);
-            font.setBold(true);
-            titleLabel->setFont(font);
-            titleLabel->setStyleSheet("margin-top: 10px; margin-bottom: 10px; padding: 5px;");
-            titleLabel->setContentsMargins(5, 5, 5, 5);
-            titleLabel->setMaximumHeight(40);
-        }
-        
-        // 적절한 여백 유지
-        QVBoxLayout* mainLayout = qobject_cast<QVBoxLayout*>(pinky_tab->layout());
-        if (mainLayout) {
-            // 상단 여백 복원
-            mainLayout->setContentsMargins(10, 10, 10, 10);
+            robot_cards_[it.key()] = card;
             
-            // 레이아웃 내 위젯 간 간격 적절히 설정
-            mainLayout->setSpacing(8); // 간격을 8로 설정
-            
-            // 스페이서 위젯 조정
-            for (int i = 0; i < mainLayout->count(); ++i) {
-                QLayoutItem* item = mainLayout->itemAt(i);
-                QSpacerItem* spacer = dynamic_cast<QSpacerItem*>(item);
-                if (spacer) {
-                    // 스페이서 크기 조정 대신 유지
-                    continue;
-                }
-                
-                QWidget* widget = item->widget();
-                if (widget) {
-                    // 각 위젯 여백 설정
-                    widget->setContentsMargins(2, 2, 2, 2);
-                    
-                    // 위젯 레이아웃 여백 조정
-                    if (widget->layout()) {
-                        widget->layout()->setContentsMargins(2, 2, 2, 2);
-                        widget->layout()->setSpacing(8);
-                    }
-                }
-            }
-            
-            // 첫 번째 탭 위젯 찾기 (맵 편집기, 경로 컨트롤러 등 탭을 포함하는 위젯)
-            QTabWidget* tabWidget = pinky_tab->findChild<QTabWidget*>();
-            if (tabWidget) {
-                // 탭 위젯 여백 설정
-                tabWidget->setContentsMargins(5, 5, 5, 5);
-                
-                // 대시보드 스타일과 유사하게 선택된 탭 디자인 개선
-                tabWidget->setStyleSheet(
-                    "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
-                    "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
-                    "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
-                    "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
-                );
-                
-                // 탭 위젯 위치 조정 (제목과 적절히 분리되도록)
-                QRect geo = tabWidget->geometry();
-                geo.moveTop(std::max(0, geo.top() + 15)); // 위치 아래로 조정
-                tabWidget->setGeometry(geo);
+            // 다음 위치 계산
+            col++;
+            if (col >= cols) {
+                col = 0;
+                row++;
             }
         }
-    } else {
-        // UI 로드 실패 시 빈 위젯 사용
-        qDebug() << "Pinky UI 파일 로드 실패: " << loader.errorString();
-        QWidget* pinky_tab = new QWidget(central_widget_);
-        QLabel* label = new QLabel("Pinky 패널 로드 실패: " + loader.errorString(), pinky_tab);
-        QVBoxLayout* layout = new QVBoxLayout(pinky_tab);
-        layout->addWidget(label);
-        central_widget_->addWidget(pinky_tab);
-    }
-}
-
-void MainWindow::setupSettingsTab()
-{
-    // 설정 탭 생성
-    settings_tab_ = new QWidget();
-    QVBoxLayout* main_layout = new QVBoxLayout(settings_tab_);
-    
-    // 제목
-    QLabel* title = new QLabel("설정");
-    title->setStyleSheet("font-size: 18px; font-weight: bold;");
-    main_layout->addWidget(title);
-    
-    // 설정 탭 내부에 탭 위젯 생성
-    QTabWidget* settings_tabs = new QTabWidget();
-    settings_tabs->setObjectName("settingsTabWidget");
-    
-    // 탭 위젯 스타일 설정 (대시보드와 동일)
-    settings_tabs->setStyleSheet(
-        "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
-        "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
-        "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
-        "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
-    );
-    
-    // 1. 로봇 설정 탭
-    QWidget* robotSettingsTab = new QWidget();
-    QVBoxLayout* robotSettingsLayout = new QVBoxLayout(robotSettingsTab);
-    
-    // 로봇 목록과 설정 영역을 포함하는 컨테이너
-    QWidget* settingsContainer = new QWidget();
-    settingsContainer->setObjectName("settingsContainer");
-    QHBoxLayout* containerLayout = new QHBoxLayout(settingsContainer);
-    
-    // 왼쪽: 로봇 목록
-    QGroupBox* robotListGroup = new QGroupBox("로봇 목록");
-    QVBoxLayout* listLayout = new QVBoxLayout(robotListGroup);
-    
-    // 도움말 레이블 추가
-    QLabel* helpLabel = new QLabel("로봇을 선택하여 설정을 확인하고 수정할 수 있습니다.");
-    helpLabel->setStyleSheet("color: #555;");
-    helpLabel->setWordWrap(true);
-    listLayout->addWidget(helpLabel);
-    
-    // 로봇 목록 위젯
-    robot_list_ = new QListWidget();
-    robot_list_->setSelectionMode(QAbstractItemView::SingleSelection);
-    robot_list_->setStyleSheet("QListWidget::item { padding: 6px; }");
-    listLayout->addWidget(robot_list_);
-    
-    // 로봇 추가/제거 버튼
-    QWidget* listButtonsWidget = new QWidget();
-    QHBoxLayout* listButtonsLayout = new QHBoxLayout(listButtonsWidget);
-    
-    QPushButton* addButton = new QPushButton("추가");
-    QPushButton* removeButton = new QPushButton("제거");
-    
-    listButtonsLayout->addWidget(addButton);
-    listButtonsLayout->addWidget(removeButton);
-    
-    connect(addButton, &QPushButton::clicked, this, &MainWindow::onAddRobotClicked);
-    connect(removeButton, &QPushButton::clicked, this, &MainWindow::onRemoveRobotClicked);
-    
-    // 시그널 연결을 itemClicked로 변경 (currentItemChanged 대신)
-    connect(robot_list_, &QListWidget::itemClicked, this, &MainWindow::onRobotSelectionChanged);
-    // 더블 클릭 시에도 설정 표시 처리
-    connect(robot_list_, &QListWidget::itemDoubleClicked, this, &MainWindow::onRobotSelectionChanged);
-    
-    listLayout->addWidget(listButtonsWidget);
-    
-    // 오른쪽: 로봇 설정 필드 (처음에는 비어 있고, 로봇 선택 시 내용이 채워짐)
-    QGroupBox* settingsGroup = new QGroupBox("로봇 설정");
-    settingsGroup->setObjectName("settingsGroup");
-    QFormLayout* formLayout = new QFormLayout(settingsGroup);
-    
-    // 로봇을 선택하라는 메시지 표시
-    QLabel* selectRobotLabel = new QLabel("왼쪽에서 로봇을 선택하면 설정이 표시됩니다.");
-    selectRobotLabel->setObjectName("selectRobotLabel");
-    selectRobotLabel->setAlignment(Qt::AlignCenter);
-    selectRobotLabel->setStyleSheet("color: #555;");
-    formLayout->addRow(selectRobotLabel);
-    
-    // 빈 폼 위젯 미리 생성
-    QLineEdit* nameEdit = new QLineEdit();
-    nameEdit->setObjectName("nameEdit");
-    nameEdit->setEnabled(false);
-    
-    QComboBox* typeCombo = new QComboBox();
-    typeCombo->setObjectName("typeCombo");
-    typeCombo->addItem("Jetcobot", static_cast<int>(RobotType::JETCOBOT));
-    typeCombo->addItem("Pinky", static_cast<int>(RobotType::PINKY));
-    typeCombo->setEnabled(false);
-    
-    QSpinBox* domainIdSpin = new QSpinBox();
-    domainIdSpin->setObjectName("domainIdSpin");
-    domainIdSpin->setRange(0, 232);
-    domainIdSpin->setEnabled(false);
-    
-    QLineEdit* namespaceEdit = new QLineEdit();
-    namespaceEdit->setObjectName("namespaceEdit");
-    namespaceEdit->setEnabled(false);
-    
-    formLayout->addRow("이름:", nameEdit);
-    formLayout->addRow("유형:", typeCombo);
-    formLayout->addRow("도메인 ID:", domainIdSpin);
-    formLayout->addRow("네임스페이스:", namespaceEdit);
-    
-    // 저장 버튼
-    QPushButton* saveButton = new QPushButton("설정 저장");
-    saveButton->setEnabled(false);
-    saveButton->setObjectName("saveButton");
-    connect(saveButton, &QPushButton::clicked, this, &MainWindow::onSaveConfigClicked);
-    
-    formLayout->addRow("", saveButton);
-    
-    // 로봇 목록 및 설정 필드 컨테이너에 추가
-    containerLayout->addWidget(robotListGroup, 1);
-    containerLayout->addWidget(settingsGroup, 2);
-    
-    robotSettingsLayout->addWidget(settingsContainer);
-    
-    // 2. 토픽 설정 탭
-    QWidget* topicSettingsTab = new QWidget();
-    QVBoxLayout* topicSettingsLayout = new QVBoxLayout(topicSettingsTab);
-    
-    // 토픽 설정 영역 생성
-    QGroupBox* topicGroup = new QGroupBox("토픽 구독 설정");
-    QVBoxLayout* topicLayout = new QVBoxLayout(topicGroup);
-    
-    // 도움말 레이블
-    QLabel* topicHelpLabel = new QLabel("로봇 별로 구독할 토픽을 선택하여 모니터링할 수 있습니다.");
-    topicHelpLabel->setStyleSheet("color: #555;");
-    topicHelpLabel->setWordWrap(true);
-    topicLayout->addWidget(topicHelpLabel);
-    
-    // 토픽 목록을 표시할 트리 위젯
-    QTreeWidget* topicTree = new QTreeWidget();
-    topicTree->setObjectName("topicTree");
-    topicTree->setHeaderLabels(QStringList() << "토픽 이름" << "타입" << "구독");
-    topicTree->setColumnWidth(0, 250);  // 토픽 이름 열 너비
-    topicTree->setColumnWidth(1, 200);  // 토픽 타입 열 너비
-    topicTree->setAlternatingRowColors(true);
-    topicLayout->addWidget(topicTree);
-    
-    // 토픽 스캔 버튼 및 필터 영역
-    QWidget* topicControlWidget = new QWidget();
-    QHBoxLayout* topicControlLayout = new QHBoxLayout(topicControlWidget);
-    
-    // 필터링
-    QLabel* filterLabel = new QLabel("필터:");
-    QLineEdit* filterEdit = new QLineEdit();
-    filterEdit->setObjectName("topicFilterEdit");
-    filterEdit->setPlaceholderText("토픽 이름 필터...");
-    
-    // 토픽 스캔 버튼
-    QPushButton* scanButton = new QPushButton("토픽 스캔");
-    scanButton->setObjectName("scanTopicsButton");
-    
-    // 전체 선택/해제 버튼
-    QPushButton* selectAllButton = new QPushButton("모두 선택");
-    QPushButton* deselectAllButton = new QPushButton("모두 해제");
-    
-    // 레이아웃에 위젯 추가
-    topicControlLayout->addWidget(filterLabel);
-    topicControlLayout->addWidget(filterEdit, 1);  // 필터가 더 넓게
-    topicControlLayout->addWidget(scanButton);
-    topicControlLayout->addWidget(selectAllButton);
-    topicControlLayout->addWidget(deselectAllButton);
-    
-    topicLayout->addWidget(topicControlWidget);
-    
-    // 토픽 구독 이벤트 연결
-    connect(topicTree, &QTreeWidget::itemChanged, this, &MainWindow::onTopicItemChanged);
-    
-    // 토픽 스캔 버튼 시그널 연결
-    connect(scanButton, &QPushButton::clicked, this, &MainWindow::onScanTopicsClicked);
-    
-    // 토픽 필터 시그널 연결
-    connect(filterEdit, &QLineEdit::textChanged, this, &MainWindow::onTopicFilterChanged);
-    
-    // 전체 선택/해제 버튼 시그널 연결
-    connect(selectAllButton, &QPushButton::clicked, [this, topicTree]() {
-        for (int i = 0; i < topicTree->topLevelItemCount(); ++i) {
-            QTreeWidgetItem* robotItem = topicTree->topLevelItem(i);
-            for (int j = 0; j < robotItem->childCount(); ++j) {
-                QTreeWidgetItem* topicItem = robotItem->child(j);
-                if (topicItem->checkState(2) != Qt::Checked) {
-                    topicItem->setCheckState(2, Qt::Checked);
+        
+        // 글로벌 로그 뷰어 설정
+        QPlainTextEdit* logTextEdit = dashboard_->findChild<QPlainTextEdit*>("plainTextEditLog");
+        if (logTextEdit) {
+            // 로그 뷰어 설정
+            logTextEdit->setObjectName("logTextEdit");
+            logTextEdit->setReadOnly(true);
+            logTextEdit->setMaximumBlockCount(1000);  // 최대 1000줄 제한
+            logTextEdit->appendPlainText("[INFO] 로봇 디버거 UI가 시작되었습니다.");
+            
+            // 로그 레벨 콤보박스 설정
+            QComboBox* logLevelCombo = dashboard_->findChild<QComboBox*>("comboBoxLogLevel");
+            if (logLevelCombo) {
+                connect(logLevelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                        this, &MainWindow::onLogLevelChanged);
+            }
+            
+            // 로그 지우기 버튼
+            QPushButton* clearLogButton = dashboard_->findChild<QPushButton*>("pushButtonClearLog");
+            if (clearLogButton) {
+                connect(clearLogButton, &QPushButton::clicked, [logTextEdit]() {
+                    logTextEdit->clear();
+                    logTextEdit->appendPlainText("[INFO] 로그가 지워졌습니다.");
+                });
+            }
+        }
+        
+        // 이벤트 타임라인 설정 (QListView에서 QTableView로 변경)
+        QListView* timelineView = dashboard_->findChild<QListView*>("listViewTimeline");
+        if (timelineView) {
+            // 기존 QListView를 제거하고 QTableView로 대체
+            QVBoxLayout* parentLayout = qobject_cast<QVBoxLayout*>(timelineView->parentWidget()->layout());
+            if (parentLayout) {
+                parentLayout->removeWidget(timelineView);
+                delete timelineView;
+                
+                // 새 테이블 뷰 생성
+                QTableView* eventTableView = new QTableView(dashboard_);
+                eventTableView->setObjectName("eventTableView");
+                eventTableView->setSelectionBehavior(QAbstractItemView::SelectRows);
+                eventTableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+                eventTableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+                eventTableView->horizontalHeader()->setStretchLastSection(true);
+                eventTableView->verticalHeader()->setVisible(false);
+                
+                // 모델 설정
+                QStandardItemModel* model = new QStandardItemModel(0, 4, eventTableView);
+                model->setHorizontalHeaderLabels(QStringList() << "시간" << "로봇" << "유형" << "설명");
+                eventTableView->setModel(model);
+                
+                // 레이아웃에 추가
+                parentLayout->insertWidget(0, eventTableView);
+                
+                // 이벤트 필터 체크박스 연결
+                QCheckBox* warnCheck = dashboard_->findChild<QCheckBox*>("checkBoxWarn");
+                QCheckBox* errorCheck = dashboard_->findChild<QCheckBox*>("checkBoxError");
+                QCheckBox* criticalCheck = dashboard_->findChild<QCheckBox*>("checkBoxCritical");
+                
+                auto updateEventFilter = [=]() {
+                    // 필터링 로직 구현 (나중에)
+                };
+                
+                if (warnCheck) connect(warnCheck, &QCheckBox::toggled, updateEventFilter);
+                if (errorCheck) connect(errorCheck, &QCheckBox::toggled, updateEventFilter);
+                if (criticalCheck) connect(criticalCheck, &QCheckBox::toggled, updateEventFilter);
+                
+                // 이벤트 복원 버튼
+                QPushButton* restoreButton = dashboard_->findChild<QPushButton*>("pushButtonRestoreEvent");
+                if (restoreButton) {
+                    connect(restoreButton, &QPushButton::clicked, [this]() {
+                        // 이벤트 복원 로직 구현 (나중에)
+                        QTableView* eventTable = dashboard_->findChild<QTableView*>("eventTableView");
+                        if (eventTable && eventTable->model()) {
+                            QStandardItemModel* model = qobject_cast<QStandardItemModel*>(eventTable->model());
+                            if (model) model->removeRows(0, model->rowCount());
+                        }
+                    });
                 }
             }
         }
-    });
-    
-    connect(deselectAllButton, &QPushButton::clicked, [this, topicTree]() {
-        for (int i = 0; i < topicTree->topLevelItemCount(); ++i) {
-            QTreeWidgetItem* robotItem = topicTree->topLevelItem(i);
-            for (int j = 0; j < robotItem->childCount(); ++j) {
-                QTreeWidgetItem* topicItem = robotItem->child(j);
-                if (topicItem->checkState(2) != Qt::Unchecked) {
-                    topicItem->setCheckState(2, Qt::Unchecked);
-                }
-            }
+        
+        // 패널 추가 기능
+        QComboBox* panelTypeCombo = dashboard_->findChild<QComboBox*>("comboBoxPanelType");
+        QPushButton* addPanelButton = dashboard_->findChild<QPushButton*>("pushButtonAddPanel");
+        if (panelTypeCombo && addPanelButton) {
+            connect(addPanelButton, &QPushButton::clicked, [this, panelTypeCombo]() {
+                QString panelType = panelTypeCombo->currentText();
+                qDebug() << "패널 추가:" << panelType;
+                // 패널 추가 로직 구현 (나중에)
+            });
         }
-    });
-    
-    topicSettingsLayout->addWidget(topicGroup);
-    
-    // 설정 탭에 서브탭 추가
-    settings_tabs->addTab(robotSettingsTab, "로봇 설정");
-    settings_tabs->addTab(topicSettingsTab, "토픽 설정");
-    
-    // 메인 레이아웃에 탭 위젯 추가
-    main_layout->addWidget(settings_tabs);
-    
-    // 중앙 위젯에 추가
-    central_widget_->addWidget(settings_tab_);
-    
-    // 디버깅 로그
-    qDebug() << "설정 탭 초기화 완료";
-}
-
-void MainWindow::onReconnectClicked()
-{
-    statusBar()->showMessage("재연결 중...");
-    
-    // 선택된 로봇 확인
-    QStringList selectedRobots;
-    for (auto it = robot_checkboxes_.begin(); it != robot_checkboxes_.end(); ++it) {
-        if (it.value()->isChecked()) {
-            selectedRobots.append(it.key());
+        
+        // 레이아웃 초기화 버튼
+        QPushButton* resetButton = dashboard_->findChild<QPushButton*>("pushButtonResetLayout");
+        if (resetButton) {
+            connect(resetButton, &QPushButton::clicked, [this]() {
+                // 레이아웃 초기화 로직 구현 (나중에)
+                QMessageBox::information(this, "레이아웃 초기화", "대시보드 레이아웃이 초기화되었습니다.");
+            });
         }
+        
+        qDebug() << "대시보드 탭 초기화 완료";
     }
-    
-    if (selectedRobots.isEmpty()) {
-        QMessageBox::warning(this, "경고", "재연결할 로봇을 선택해주세요.");
-        return;
-    }
-    
-    // 선택된 로봇 재연결 시도
-    for (const QString& robotName : selectedRobots) {
-        if (robots_.contains(robotName)) {
-            RobotInfo& robot = robots_[robotName];
-            
-            // 연결 시도 (실제로는 ROS 연결 로직 구현 필요)
-            robot.connected = true;
-            
-            // 연결 상태 업데이트
-            updateRobotCard(robot);
-            
-            // 토픽 구독 시작
-            if (robot.type == RobotType::JETCOBOT) {
-                // Jetcobot coords_real 토픽 구독
-                std::string topic = robot.namespace_name.toStdString() + "/coords_real";
-                topic_manager_->subscribeTopic(topic, "geometry_msgs/msg/PoseStamped");
-                
-                // coords_real 토픽 메시지 처리 함수 연결
-                connect(topic_manager_.get(), &TopicManager::messageReceived,
-                        this, &MainWindow::onCoordsRealReceived);
-            }
-            
-            // 이벤트 로그에 추가
-            logEvent(robotName, "연결", "로봇에 재연결되었습니다.");
-        }
-    }
-    
-    statusBar()->showMessage(selectedRobots.count() == 1 ? 
-                            "로봇에 재연결되었습니다." : 
-                            QString("%1개의 로봇에 재연결되었습니다.").arg(selectedRobots.count()));
 }
 
 void MainWindow::onEmergencyClicked()
@@ -1230,11 +812,11 @@ void MainWindow::onAddRobotClicked()
             }
             
             // 체크박스 생성 및 추가
-    QCheckBox* checkbox = new QCheckBox(name);
+            QCheckBox* checkbox = new QCheckBox(name);
             checkbox->setChecked(true);  // 기본적으로 선택됨
-    connect(checkbox, &QCheckBox::stateChanged, this, &MainWindow::onRobotCheckStateChanged);
+            connect(checkbox, &QCheckBox::stateChanged, this, &MainWindow::onRobotCheckStateChanged);
             containerLayout->addWidget(checkbox);
-    robot_checkboxes_[name] = checkbox;
+            robot_checkboxes_[name] = checkbox;
         }
     }
     
@@ -1249,7 +831,6 @@ void MainWindow::onAddRobotClicked()
     
     if (cardsLayout) {
         // 현재 그리드의 행과 열 수 계산
-        int rowCount = 0;
         int colCount = 2; // 고정 2열 레이아웃
         
         // 그리드 레이아웃의 항목 수 계산
@@ -1741,33 +1322,113 @@ void MainWindow::onCoordsRealReceived(const std::string& topic, const std::vecto
     updateRobotCard(robot);
 }
 
-void MainWindow::onMessageReceived(const std::string& topic, const std::vector<uint8_t>& msg)
+void MainWindow::onMessageReceived(const std::string& topic_name, const std::vector<uint8_t>& message_data)
 {
-    // 메시지 저장소에 메시지 저장
-    message_store_->storeMessage(topic, msg);
+    // 토픽 이름에서 로봇 이름 추출
+    QString fullTopic = QString::fromStdString(topic_name);
+    QString robotName = "Unknown";
+    QString topicBaseName = fullTopic;
     
-    // 상태바 업데이트 (토픽 이름과 시간 표시)
-    statusBar()->showMessage(QString("메시지 수신: %1").arg(topic.c_str()));
-    
-    // 토픽 이름에서 로봇 네임스페이스 추출
-    std::string ns = topic.substr(0, topic.find_last_of("/"));
-    ns = ns.substr(0, ns.find_last_of("/") + 1);
-    
-    // 해당 네임스페이스를 가진 로봇 찾기
-    QString qtNs = QString::fromStdString(ns);
-    QString robotName;
-    
-    for (auto it = robots_.begin(); it != robots_.end(); ++it) {
-        if (qtNs.startsWith(it.value().namespace_name)) {
-            robotName = it.key();
-            break;
+    // 네임스페이스가 있는 경우 추출
+    int firstSlash = fullTopic.indexOf('/');
+    if (firstSlash >= 0) {
+        int secondSlash = fullTopic.indexOf('/', firstSlash + 1);
+        if (secondSlash > firstSlash) {
+            QString ns = fullTopic.left(secondSlash);
+            
+            // 해당 네임스페이스를 가진 로봇 찾기
+            for (auto it = robots_.begin(); it != robots_.end(); ++it) {
+                if (fullTopic.startsWith(it.value().namespace_name)) {
+                    robotName = it.key();
+                    // 기본 토픽 이름 추출 (네임스페이스 제거)
+                    topicBaseName = fullTopic.mid(it.value().namespace_name.length());
+                    if (topicBaseName.startsWith('/')) {
+                        topicBaseName = topicBaseName.mid(1);
+                    }
+                    break;
+                }
+            }
         }
     }
     
-    // 로봇을 찾았다면 이벤트 로그에 추가
-    if (!robotName.isEmpty()) {
-        QString topicName = QString::fromStdString(topic.substr(topic.find_last_of("/") + 1));
-        logEvent(robotName, "토픽", QString("%1 메시지가 수신되었습니다.").arg(topicName));
+    // 디버그 로그
+    qDebug() << "메시지 수신:" << fullTopic << ", 크기:" << message_data.size() << "바이트";
+    
+    // 모든 메시지 타입에 대해 표준 출력으로 로그
+    QString consoleLogStr = QString("[로그] 로봇: %1, 토픽: %2, 크기: %3 바이트")
+                             .arg(robotName)
+                             .arg(topicBaseName)
+                             .arg(message_data.size());
+    std::cout << consoleLogStr.toStdString() << std::endl;
+    
+    try {
+        // 메시지 타입에 따라 처리
+        if (topic_name.find("/coords_real") != std::string::npos || 
+            topic_name.find("/pose") != std::string::npos) {
+            // 위치 정보 처리는 onCoordsRealReceived에서 처리
+            onCoordsRealReceived(topic_name, message_data);
+            
+            // 대시보드 로그에 기록
+            logEvent(robotName, "위치 정보", QString("현재 위치 정보 업데이트 - %1").arg(topicBaseName));
+        }
+        else if (topic_name.find("/battery") != std::string::npos) {
+            // 배터리 정보 처리
+            // 메시지 타입에 따라 적절한 처리 필요
+            if (message_data.size() >= 4) {
+                // Float32 타입 메시지라고 가정
+                float battery_level = 0.0f;
+                std::memcpy(&battery_level, message_data.data(), sizeof(float));
+                
+                // 로봇 배터리 레벨 업데이트
+                if (robots_.contains(robotName)) {
+                    robots_[robotName].battery_level = battery_level;
+                    updateRobotCard(robots_[robotName]);
+                    
+                    // 배터리 레벨이 낮으면 이벤트 기록
+                    if (battery_level < 0.2f) {
+                        logEvent(robotName, "배터리 경고", QString("배터리 레벨 낮음: %1%").arg(battery_level * 100, 0, 'f', 1));
+                    } else {
+                        // 일반 로그 기록
+                        logEvent(robotName, "배터리 정보", QString("배터리 레벨: %1%").arg(battery_level * 100, 0, 'f', 1));
+                    }
+                }
+            }
+        }
+        else if (topic_name.find("/cmd_vel") != std::string::npos) {
+            // 속도 명령 처리
+            logEvent(robotName, "이동 명령", QString("속도 명령 수신 - %1").arg(topicBaseName));
+        }
+        else if (topic_name.find("/status") != std::string::npos) {
+            // 상태 정보 처리
+            logEvent(robotName, "상태 업데이트", QString("로봇 상태 정보 수신 - %1").arg(topicBaseName));
+        }
+        else if (topic_name.find("/scan") != std::string::npos ||
+                topic_name.find("/laser_scan") != std::string::npos) {
+            // 스캔 데이터 처리
+            logEvent(robotName, "센서 데이터", QString("레이저 스캔 데이터 수신 - %1").arg(topicBaseName));
+        }
+        else if (topic_name.find("/map") != std::string::npos) {
+            // 맵 데이터 처리
+            logEvent(robotName, "맵 데이터", QString("맵 데이터 수신 - %1").arg(topicBaseName));
+        }
+        else if (topic_name.find("/goal") != std::string::npos ||
+                topic_name.find("/goal_pose") != std::string::npos) {
+            // 목표 위치 처리
+            logEvent(robotName, "목표 설정", QString("목표 위치 설정 - %1").arg(topicBaseName));
+        }
+        else if (topic_name.find("/tf") != std::string::npos) {
+            // TF 메시지는 로그 양이 많으므로 이벤트에는 기록하지 않음
+            // 디버그 로그만 남김
+            qDebug() << "TF 메시지 수신:" << fullTopic;
+        }
+        else {
+            // 기타 토픽 처리
+            logEvent(robotName, "토픽 메시지", QString("%1 토픽에서 %2 바이트 수신").arg(topicBaseName).arg(message_data.size()));
+        }
+    }
+    catch (const std::exception& e) {
+        qWarning() << "메시지 처리 중 오류 발생:" << e.what();
+        logEvent(robotName, "오류", QString("메시지 처리 중 오류: %1").arg(e.what()));
     }
 }
 
@@ -2093,15 +1754,34 @@ QWidget* MainWindow::createRobotCard(const RobotInfo& robot_info)
     
     // Jetcobot 탭 또는 Pinky 탭으로 이동하는 버튼 연결
     connect(detailsButton, &QPushButton::clicked, [this, robot_info]() {
-        if (robot_info.type == RobotType::JETCOBOT) {
-            central_widget_->setCurrentIndex(1);  // Jetcobot 탭 인덱스
-        } else {
-            central_widget_->setCurrentIndex(2);  // Pinky 탭 인덱스
+        if (!central_widget_ || central_widget_->count() <= 2) {
+            qWarning() << "탭 전환 실패: central_widget_가 null이거나 충분한 탭이 없습니다.";
+            return;
         }
         
-        // 해당 로봇 체크박스 선택
-        if (robot_checkboxes_.contains(robot_info.name)) {
-            robot_checkboxes_[robot_info.name]->setChecked(true);
+        QWidget* targetWidget = nullptr;
+        
+        if (robot_info.type == RobotType::JETCOBOT) {
+            // Jetcobot 탭 인덱스
+            if (central_widget_->count() > 1) {
+                targetWidget = central_widget_->widget(1);
+            }
+        } else {
+            // Pinky 탭 인덱스
+            if (central_widget_->count() > 2) {
+                targetWidget = central_widget_->widget(2);
+            }
+        }
+        
+        if (targetWidget) {
+            central_widget_->setCurrentWidget(targetWidget);
+            
+            // 해당 로봇 체크박스 선택
+            if (robot_checkboxes_.contains(robot_info.name)) {
+                robot_checkboxes_[robot_info.name]->setChecked(true);
+            }
+        } else {
+            qWarning() << "대상 탭 위젯을 찾을 수 없습니다.";
         }
     });
     
@@ -2131,10 +1811,37 @@ void MainWindow::updateRobotCard(const RobotInfo& robot_info)
     // 연결 상태 업데이트
     QLabel* statusLabel = card->findChild<QLabel*>();
     if (statusLabel && statusLabel->text().contains("연결")) {
-        statusLabel->setText(robot_info.connected ? "연결됨" : "연결 안됨");
-        statusLabel->setStyleSheet(robot_info.connected ? 
-                                  "color: green; font-weight: bold;" : 
-                                  "color: red; font-weight: bold;");
+        // 상태에 따라 다른 텍스트 표시
+        QString statusText;
+        QString statusStyle;
+        
+        switch (robot_info.status) {
+            case RobotStatus::ONLINE:
+                statusText = "온라인";
+                statusStyle = "color: green; font-weight: bold;";
+                break;
+            case RobotStatus::OFFLINE:
+                statusText = "오프라인";
+                statusStyle = "color: red; font-weight: bold;";
+                break;
+            case RobotStatus::RECONNECTING:
+                statusText = "재연결 중...";
+                statusStyle = "color: orange; font-weight: bold;";
+                break;
+            case RobotStatus::ERROR:
+                statusText = "오류";
+                statusStyle = "color: darkred; font-weight: bold;";
+                break;
+            default:
+                statusText = robot_info.connected ? "연결됨" : "연결 안됨";
+                statusStyle = robot_info.connected ? 
+                             "color: green; font-weight: bold;" : 
+                             "color: red; font-weight: bold;";
+                break;
+        }
+        
+        statusLabel->setText(statusText);
+        statusLabel->setStyleSheet(statusStyle);
     }
     
     // 배터리 상태 업데이트
@@ -2208,28 +1915,76 @@ void MainWindow::onLogLevelChanged(int level)
 
 void MainWindow::logEvent(const QString& robotName, const QString& eventType, const QString& description)
 {
-    // 대시보드가 활성화되어 있는지 확인
-    if (!dashboard_) return;
+    // 대시보드가 활성화되어 있는지 확인하고 디버그 출력
+    if (!dashboard_) {
+        qWarning() << "logEvent: 대시보드 위젯이 null입니다.";
+        return;
+    }
     
-    // 이벤트 테이블 찾기
-    QTableView* eventTable = dashboard_->findChild<QTableView*>("eventTableView");
-    if (!eventTable || !eventTable->model()) return;
+    // 디버그 출력 추가
+    qDebug() << "로그 이벤트 추가 시도: " << robotName << " - " << eventType << " - " << description;
     
-    // 이벤트 추가
-    QStandardItemModel* model = qobject_cast<QStandardItemModel*>(eventTable->model());
-    if (!model) return;
+    // 탭 위젯 찾기
+    QTabWidget* tabWidget = dashboard_->findChild<QTabWidget*>();
+    if (!tabWidget) {
+        qWarning() << "logEvent: 대시보드 탭 위젯을 찾을 수 없습니다.";
+        return;
+    }
     
-    QList<QStandardItem*> items;
-    items.append(new QStandardItem(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")));
-    items.append(new QStandardItem(robotName));
-    items.append(new QStandardItem(eventType));
-    items.append(new QStandardItem(description));
+    // 이벤트 테이블 찾기 - 다양한 방법 시도
+    QTableView* eventTable = nullptr;
     
-    model->insertRow(0, items);  // 최신 이벤트를 맨 위에 추가
+    // 방법 1: 직접 찾기
+    eventTable = dashboard_->findChild<QTableView*>("eventTableView");
     
-    // 로그에도 추가
-    QPlainTextEdit* logText = dashboard_->findChild<QPlainTextEdit*>("logTextEdit");
-    if (logText) {
+    // 방법 2: 이벤트 탭에서 찾기
+    if (!eventTable && tabWidget->count() >= 3) {
+        QWidget* eventTab = tabWidget->widget(2); // 이벤트 탭 (인덱스 2)
+        if (eventTab) {
+            eventTable = eventTab->findChild<QTableView*>();
+        }
+    }
+    
+    // 이벤트 테이블 위젯과 모델이 있는지 확인
+    if (!eventTable) {
+        qWarning() << "logEvent: 이벤트 테이블 위젯을 찾을 수 없습니다.";
+    } else if (!eventTable->model()) {
+        qWarning() << "logEvent: 이벤트 테이블에 모델이 설정되지 않았습니다.";
+    } else {
+        // 이벤트 추가
+        QStandardItemModel* model = qobject_cast<QStandardItemModel*>(eventTable->model());
+        if (model) {
+            QList<QStandardItem*> items;
+            items.append(new QStandardItem(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")));
+            items.append(new QStandardItem(robotName));
+            items.append(new QStandardItem(eventType));
+            items.append(new QStandardItem(description));
+            
+            model->insertRow(0, items);  // 최신 이벤트를 맨 위에 추가
+            qDebug() << "이벤트 테이블에 항목 추가 완료";
+        } else {
+            qWarning() << "logEvent: QStandardItemModel로 변환할 수 없습니다.";
+        }
+    }
+    
+    // 로그 텍스트 위젯 찾기 - 다양한 방법 시도
+    QPlainTextEdit* logText = nullptr;
+    
+    // 방법 1: 직접 찾기
+    logText = dashboard_->findChild<QPlainTextEdit*>("logTextEdit");
+    
+    // 방법 2: 로그 탭에서 찾기
+    if (!logText && tabWidget->count() >= 2) {
+        QWidget* logTab = tabWidget->widget(1); // 로그 탭 (인덱스 1)
+        if (logTab) {
+            logText = logTab->findChild<QPlainTextEdit*>();
+        }
+    }
+    
+    // 로그 텍스트 위젯 확인 및 로그 추가
+    if (!logText) {
+        qWarning() << "logEvent: 로그 텍스트 위젯을 찾을 수 없습니다.";
+    } else {
         QString logMessage;
         if (eventType == "연결") {
             logMessage = QString("[INFO] %1: %2").arg(robotName).arg(description);
@@ -2242,6 +1997,7 @@ void MainWindow::logEvent(const QString& robotName, const QString& eventType, co
         }
         
         logText->appendPlainText(logMessage);
+        qDebug() << "로그 텍스트에 메시지 추가 완료: " << logMessage;
     }
 }
 
@@ -2369,6 +2125,7 @@ void MainWindow::onScanTopicsClicked()
         QStringList robotTopicTypes;
         
         // 로봇의 도메인 ID를 사용하여 토픽 목록 가져오기
+        // 이전에 작성한 테스트 데이터 로직을 모두 제거하고 실제 토픽 스캔을 실행
         if (topic_manager_) {
             try {
                 // 로봇의 도메인 ID 설정 (현재 도메인을 백업하고 로봇 도메인으로 임시 변경)
@@ -2407,7 +2164,7 @@ void MainWindow::onScanTopicsClicked()
                         
                         robotTopics << relativeTopicName;
                         robotTopicTypes << topicType;
-                        qDebug() << "  토픽 추가:" << relativeTopicName << "(" << topicType << ")";
+                        qDebug() << "  토픽 추가:" << topicName << "(" << topicType << ")";
                     }
                 }
                 
@@ -2418,34 +2175,6 @@ void MainWindow::onScanTopicsClicked()
             } catch (const std::exception& e) {
                 qDebug() << "토픽 스캔 중 오류 발생:" << e.what();
                 statusBar()->showMessage(QString("토픽 스캔 오류: %1").arg(e.what()));
-            }
-        } else {
-            // 테스트용 데이터 (topic_manager가 없는 경우)
-            qDebug() << "토픽 매니저 없음, 테스트 데이터 사용";
-            if (robot.type == RobotType::JETCOBOT) {
-                robotTopics << "coords_real" << "pose" << "velocity" << "battery" << "motor_state";
-                robotTopicTypes << "geometry_msgs/msg/PoseStamped" << "geometry_msgs/msg/Pose" 
-                               << "geometry_msgs/msg/Twist" << "std_msgs/msg/Float32" << "std_msgs/msg/String";
-            } else if (robot.domain_id == 74) {
-                // 74번 도메인에 대한 특별한 테스트 데이터 추가
-                robotTopics << "odom" << "cmd_vel" << "map" << "scan" << "goal_pose" 
-                           << "global_costmap/costmap" << "local_costmap/costmap" 
-                           << "plan" << "tf" << "tf_static" << "robot_description" 
-                           << "joint_states" << "pinky_battery_present" << "imu";
-                           
-                robotTopicTypes << "nav_msgs/msg/Odometry" << "geometry_msgs/msg/Twist"
-                               << "nav_msgs/msg/OccupancyGrid" << "sensor_msgs/msg/LaserScan"
-                               << "geometry_msgs/msg/PoseStamped" << "nav_msgs/msg/OccupancyGrid"
-                               << "nav_msgs/msg/OccupancyGrid" << "nav_msgs/msg/Path"
-                               << "tf2_msgs/msg/TFMessage" << "tf2_msgs/msg/TFMessage"
-                               << "std_msgs/msg/String" << "sensor_msgs/msg/JointState"
-                               << "std_msgs/msg/Bool" << "sensor_msgs/msg/Imu";
-            } else {
-                // 기본 Pinky 토픽
-                robotTopics << "pose" << "map" << "path" << "cmd_vel" << "battery" << "status";
-                robotTopicTypes << "geometry_msgs/msg/PoseStamped" << "nav_msgs/msg/OccupancyGrid" 
-                               << "nav_msgs/msg/Path" << "geometry_msgs/msg/Twist" 
-                               << "std_msgs/msg/Float32" << "std_msgs/msg/String";
             }
         }
         
@@ -2598,6 +2327,479 @@ void MainWindow::onTopicFilterChanged(const QString& text)
         // 로봇 항목은 자식 항목이 하나라도 표시되면 표시, 아니면 숨김
         robotItem->setHidden(!anyChildVisible);
     }
+}
+
+void MainWindow::onReconnectClicked()
+{
+    // 선택된 로봇 확인
+    QStringList selectedRobots;
+    for (auto it = robot_checkboxes_.begin(); it != robot_checkboxes_.end(); ++it) {
+        if (it.value()->isChecked()) {
+            selectedRobots.append(it.key());
+        }
+    }
+    
+    if (selectedRobots.isEmpty()) {
+        QMessageBox::warning(this, "경고", "재연결할 로봇을 선택해주세요.");
+        return;
+    }
+    
+    // 선택된 로봇 재연결 시도
+    for (const QString& robotName : selectedRobots) {
+        if (robots_.contains(robotName)) {
+            RobotInfo& robot = robots_[robotName];
+            
+            // 연결 시도 (실제로는 ROS 연결 로직 구현 필요)
+            robot.connected = true;
+            robot.status = RobotStatus::RECONNECTING;
+            
+            // 연결 상태 업데이트
+            updateRobotCard(robot);
+            
+            // 이벤트 로그에 추가
+            logEvent(robotName, "연결", "로봇에 재연결 시도 중입니다.");
+            
+            // 몇 초 후에 상태를 온라인으로 변경 (테스트용)
+            QTimer::singleShot(3000, [this, robotName]() {
+                if (robots_.contains(robotName)) {
+                    RobotInfo& robot = robots_[robotName];
+                    robot.status = RobotStatus::ONLINE;
+                    updateRobotCard(robot);
+                    logEvent(robotName, "정보", "로봇이 재연결되었습니다.");
+                }
+            });
+        }
+    }
+    
+    statusBar()->showMessage(selectedRobots.count() == 1 ? 
+                            "로봇에 재연결 중..." : 
+                            QString("%1개의 로봇에 재연결 중...").arg(selectedRobots.count()));
+}
+
+void MainWindow::setupJetcobotTab()
+{
+    // Jetcobot UI용 임시 위젯 생성
+    QWidget* jetcobot_tab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(jetcobot_tab);
+    
+    // 제목 라벨
+    QLabel* titleLabel = new QLabel("Jetcobot 제어 패널");
+    QFont font = titleLabel->font();
+    font.setPointSize(16);
+    font.setBold(true);
+    titleLabel->setFont(font);
+    titleLabel->setStyleSheet("margin-top: 10px; margin-bottom: 10px; padding: 5px;");
+    titleLabel->setContentsMargins(5, 5, 5, 5);
+    layout->addWidget(titleLabel);
+    
+    // 탭 위젯 생성
+    QTabWidget* tabWidget = new QTabWidget();
+    tabWidget->setStyleSheet(
+        "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
+        "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
+        "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
+        "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
+    );
+    
+    // 탭 1: 상태 모니터링
+    QWidget* statusTab = new QWidget();
+    QVBoxLayout* statusLayout = new QVBoxLayout(statusTab);
+    
+    QLabel* statusLabel = new QLabel("현재 Jetcobot 상태:");
+    statusLayout->addWidget(statusLabel);
+    
+    QTreeWidget* statusTree = new QTreeWidget();
+    statusTree->setHeaderLabels(QStringList() << "항목" << "값");
+    statusTree->setColumnWidth(0, 150);
+    
+    QTreeWidgetItem* positionItem = new QTreeWidgetItem(QStringList() << "위치" << "");
+    QTreeWidgetItem* xItem = new QTreeWidgetItem(QStringList() << "X" << "0.0");
+    QTreeWidgetItem* yItem = new QTreeWidgetItem(QStringList() << "Y" << "0.0");
+    QTreeWidgetItem* zItem = new QTreeWidgetItem(QStringList() << "Z" << "0.0");
+    positionItem->addChild(xItem);
+    positionItem->addChild(yItem);
+    positionItem->addChild(zItem);
+    
+    QTreeWidgetItem* batteryItem = new QTreeWidgetItem(QStringList() << "배터리" << "80%");
+    QTreeWidgetItem* statusItem = new QTreeWidgetItem(QStringList() << "상태" << "온라인");
+    
+    statusTree->addTopLevelItem(positionItem);
+    statusTree->addTopLevelItem(batteryItem);
+    statusTree->addTopLevelItem(statusItem);
+    statusTree->expandAll();
+    
+    statusLayout->addWidget(statusTree);
+    
+    // 탭 2: 제어 패널
+    QWidget* controlTab = new QWidget();
+    QVBoxLayout* controlLayout = new QVBoxLayout(controlTab);
+    
+    QLabel* controlLabel = new QLabel("Jetcobot 제어:");
+    controlLayout->addWidget(controlLabel);
+    
+    QGroupBox* moveGroupBox = new QGroupBox("이동 제어");
+    QGridLayout* moveLayout = new QGridLayout(moveGroupBox);
+    
+    QPushButton* forwardBtn = new QPushButton("앞으로");
+    QPushButton* backBtn = new QPushButton("뒤로");
+    QPushButton* leftBtn = new QPushButton("왼쪽");
+    QPushButton* rightBtn = new QPushButton("오른쪽");
+    QPushButton* stopBtn = new QPushButton("정지");
+    
+    moveLayout->addWidget(forwardBtn, 0, 1);
+    moveLayout->addWidget(backBtn, 2, 1);
+    moveLayout->addWidget(leftBtn, 1, 0);
+    moveLayout->addWidget(rightBtn, 1, 2);
+    moveLayout->addWidget(stopBtn, 1, 1);
+    
+    controlLayout->addWidget(moveGroupBox);
+    
+    QGroupBox* speedGroupBox = new QGroupBox("속도 설정");
+    QHBoxLayout* speedLayout = new QHBoxLayout(speedGroupBox);
+    
+    QLabel* speedLabel = new QLabel("속도:");
+    QSlider* speedSlider = new QSlider(Qt::Horizontal);
+    speedSlider->setRange(0, 100);
+    speedSlider->setValue(50);
+    QLabel* speedValueLabel = new QLabel("50%");
+    
+    connect(speedSlider, &QSlider::valueChanged, [speedValueLabel](int value) {
+        speedValueLabel->setText(QString::number(value) + "%");
+    });
+    
+    speedLayout->addWidget(speedLabel);
+    speedLayout->addWidget(speedSlider);
+    speedLayout->addWidget(speedValueLabel);
+    
+    controlLayout->addWidget(speedGroupBox);
+    
+    // 탭 추가
+    tabWidget->addTab(statusTab, "상태");
+    tabWidget->addTab(controlTab, "제어");
+    
+    layout->addWidget(tabWidget);
+    
+    // 중앙 위젯에 추가
+    central_widget_->addWidget(jetcobot_tab);
+    
+    qDebug() << "Jetcobot 탭 초기화 완료";
+}
+
+void MainWindow::setupPinkyTab()
+{
+    // Pinky UI용 임시 위젯 생성
+    QWidget* pinky_tab = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(pinky_tab);
+    
+    // 제목 라벨
+    QLabel* titleLabel = new QLabel("Pinky 제어 패널");
+    QFont font = titleLabel->font();
+    font.setPointSize(16);
+    font.setBold(true);
+    titleLabel->setFont(font);
+    titleLabel->setStyleSheet("margin-top: 10px; margin-bottom: 10px; padding: 5px;");
+    titleLabel->setContentsMargins(5, 5, 5, 5);
+    layout->addWidget(titleLabel);
+    
+    // 탭 위젯 생성
+    QTabWidget* tabWidget = new QTabWidget();
+    tabWidget->setStyleSheet(
+        "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
+        "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
+        "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
+        "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
+    );
+    
+    // 탭 1: 상태 모니터링
+    QWidget* statusTab = new QWidget();
+    QVBoxLayout* statusLayout = new QVBoxLayout(statusTab);
+    
+    QLabel* statusLabel = new QLabel("현재 Pinky 상태:");
+    statusLayout->addWidget(statusLabel);
+    
+    QTreeWidget* statusTree = new QTreeWidget();
+    statusTree->setHeaderLabels(QStringList() << "항목" << "값");
+    statusTree->setColumnWidth(0, 150);
+    
+    QTreeWidgetItem* positionItem = new QTreeWidgetItem(QStringList() << "위치" << "");
+    QTreeWidgetItem* xItem = new QTreeWidgetItem(QStringList() << "X" << "0.0");
+    QTreeWidgetItem* yItem = new QTreeWidgetItem(QStringList() << "Y" << "0.0");
+    QTreeWidgetItem* zItem = new QTreeWidgetItem(QStringList() << "Z" << "0.0");
+    positionItem->addChild(xItem);
+    positionItem->addChild(yItem);
+    positionItem->addChild(zItem);
+    
+    QTreeWidgetItem* batteryItem = new QTreeWidgetItem(QStringList() << "배터리" << "75%");
+    QTreeWidgetItem* statusItem = new QTreeWidgetItem(QStringList() << "상태" << "온라인");
+    
+    statusTree->addTopLevelItem(positionItem);
+    statusTree->addTopLevelItem(batteryItem);
+    statusTree->addTopLevelItem(statusItem);
+    statusTree->expandAll();
+    
+    statusLayout->addWidget(statusTree);
+    
+    // 탭 2: 제어 패널
+    QWidget* controlTab = new QWidget();
+    QVBoxLayout* controlLayout = new QVBoxLayout(controlTab);
+    
+    QLabel* controlLabel = new QLabel("Pinky 제어:");
+    controlLayout->addWidget(controlLabel);
+    
+    QGroupBox* moveGroupBox = new QGroupBox("이동 제어");
+    QGridLayout* moveLayout = new QGridLayout(moveGroupBox);
+    
+    QPushButton* forwardBtn = new QPushButton("앞으로");
+    QPushButton* backBtn = new QPushButton("뒤로");
+    QPushButton* leftBtn = new QPushButton("왼쪽");
+    QPushButton* rightBtn = new QPushButton("오른쪽");
+    QPushButton* stopBtn = new QPushButton("정지");
+    
+    moveLayout->addWidget(forwardBtn, 0, 1);
+    moveLayout->addWidget(backBtn, 2, 1);
+    moveLayout->addWidget(leftBtn, 1, 0);
+    moveLayout->addWidget(rightBtn, 1, 2);
+    moveLayout->addWidget(stopBtn, 1, 1);
+    
+    controlLayout->addWidget(moveGroupBox);
+    
+    QGroupBox* emotionGroupBox = new QGroupBox("표정 제어");
+    QHBoxLayout* emotionLayout = new QHBoxLayout(emotionGroupBox);
+    
+    QPushButton* happyBtn = new QPushButton("행복");
+    QPushButton* sadBtn = new QPushButton("슬픔");
+    QPushButton* angryBtn = new QPushButton("화남");
+    QPushButton* normalBtn = new QPushButton("기본");
+    
+    emotionLayout->addWidget(happyBtn);
+    emotionLayout->addWidget(sadBtn);
+    emotionLayout->addWidget(angryBtn);
+    emotionLayout->addWidget(normalBtn);
+    
+    controlLayout->addWidget(emotionGroupBox);
+    
+    // 탭 추가
+    tabWidget->addTab(statusTab, "상태");
+    tabWidget->addTab(controlTab, "제어");
+    
+    layout->addWidget(tabWidget);
+    
+    // 중앙 위젯에 추가
+    central_widget_->addWidget(pinky_tab);
+    
+    qDebug() << "Pinky 탭 초기화 완료";
+}
+
+void MainWindow::setupSettingsTab()
+{
+    // 설정 탭 생성
+    settings_tab_ = new QWidget();
+    QVBoxLayout* main_layout = new QVBoxLayout(settings_tab_);
+    
+    // 제목
+    QLabel* title = new QLabel("설정");
+    title->setStyleSheet("font-size: 18px; font-weight: bold;");
+    main_layout->addWidget(title);
+    
+    // 설정 탭 내부에 탭 위젯 생성
+    QTabWidget* settings_tabs = new QTabWidget();
+    settings_tabs->setObjectName("settingsTabWidget");
+    
+    // 탭 위젯 스타일 설정
+    settings_tabs->setStyleSheet(
+        "QTabWidget::pane { margin-top: 8px; border: 1px solid #ddd; }"
+        "QTabBar::tab { height: 30px; padding: 5px 12px; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; margin-right: 2px; }"
+        "QTabBar::tab:selected { background-color: white; border-bottom: 3px solid #2196F3; font-weight: bold; }"
+        "QTabBar::tab:hover:!selected { background-color: #e0e0e0; }"
+    );
+    
+    // 1. 로봇 설정 탭
+    QWidget* robotSettingsTab = new QWidget();
+    QVBoxLayout* robotSettingsLayout = new QVBoxLayout(robotSettingsTab);
+    
+    // 로봇 목록과 설정 영역을 포함하는 컨테이너
+    QWidget* settingsContainer = new QWidget();
+    settingsContainer->setObjectName("settingsContainer");
+    QHBoxLayout* containerLayout = new QHBoxLayout(settingsContainer);
+    
+    // 왼쪽: 로봇 목록
+    QGroupBox* robotListGroup = new QGroupBox("로봇 목록");
+    QVBoxLayout* listLayout = new QVBoxLayout(robotListGroup);
+    
+    // 도움말 레이블 추가
+    QLabel* helpLabel = new QLabel("로봇을 선택하여 설정을 확인하고 수정할 수 있습니다.");
+    helpLabel->setStyleSheet("color: #555;");
+    helpLabel->setWordWrap(true);
+    listLayout->addWidget(helpLabel);
+    
+    // 로봇 추가/제거 버튼
+    QWidget* listButtonsWidget = new QWidget();
+    QHBoxLayout* listButtonsLayout = new QHBoxLayout(listButtonsWidget);
+    
+    QPushButton* addButton = new QPushButton("추가");
+    QPushButton* removeButton = new QPushButton("제거");
+    
+    listButtonsLayout->addWidget(addButton);
+    listButtonsLayout->addWidget(removeButton);
+    
+    connect(addButton, &QPushButton::clicked, this, &MainWindow::onAddRobotClicked);
+    connect(removeButton, &QPushButton::clicked, this, &MainWindow::onRemoveRobotClicked);
+    
+    // 시그널 연결
+    connect(robot_list_, &QListWidget::itemClicked, this, &MainWindow::onRobotSelectionChanged);
+    connect(robot_list_, &QListWidget::itemDoubleClicked, this, &MainWindow::onRobotSelectionChanged);
+    
+    listLayout->addWidget(robot_list_);
+    listLayout->addWidget(listButtonsWidget);
+    
+    // 오른쪽: 로봇 설정 필드
+    QGroupBox* settingsGroup = new QGroupBox("로봇 설정");
+    settingsGroup->setObjectName("settingsGroup");
+    QFormLayout* formLayout = new QFormLayout(settingsGroup);
+    
+    // 로봇을 선택하라는 메시지 표시
+    QLabel* selectRobotLabel = new QLabel("왼쪽에서 로봇을 선택하면 설정이 표시됩니다.");
+    selectRobotLabel->setObjectName("selectRobotLabel");
+    selectRobotLabel->setAlignment(Qt::AlignCenter);
+    selectRobotLabel->setStyleSheet("color: #555;");
+    formLayout->addRow(selectRobotLabel);
+    
+    // 빈 폼 위젯 미리 생성
+    QLineEdit* nameEdit = new QLineEdit();
+    nameEdit->setObjectName("nameEdit");
+    nameEdit->setEnabled(false);
+    
+    QComboBox* typeCombo = new QComboBox();
+    typeCombo->setObjectName("typeCombo");
+    typeCombo->addItem("Jetcobot", static_cast<int>(RobotType::JETCOBOT));
+    typeCombo->addItem("Pinky", static_cast<int>(RobotType::PINKY));
+    typeCombo->setEnabled(false);
+    
+    QSpinBox* domainIdSpin = new QSpinBox();
+    domainIdSpin->setObjectName("domainIdSpin");
+    domainIdSpin->setRange(0, 232);
+    domainIdSpin->setEnabled(false);
+    
+    QLineEdit* namespaceEdit = new QLineEdit();
+    namespaceEdit->setObjectName("namespaceEdit");
+    namespaceEdit->setEnabled(false);
+    
+    formLayout->addRow("이름:", nameEdit);
+    formLayout->addRow("유형:", typeCombo);
+    formLayout->addRow("도메인 ID:", domainIdSpin);
+    formLayout->addRow("네임스페이스:", namespaceEdit);
+    
+    // 저장 버튼
+    QPushButton* saveButton = new QPushButton("설정 저장");
+    saveButton->setEnabled(false);
+    saveButton->setObjectName("saveButton");
+    connect(saveButton, &QPushButton::clicked, this, &MainWindow::onSaveConfigClicked);
+    
+    formLayout->addRow("", saveButton);
+    
+    // 로봇 목록 및 설정 필드 컨테이너에 추가
+    containerLayout->addWidget(robotListGroup, 1);
+    containerLayout->addWidget(settingsGroup, 2);
+    
+    robotSettingsLayout->addWidget(settingsContainer);
+    
+    // 2. 토픽 설정 탭
+    QWidget* topicSettingsTab = new QWidget();
+    QVBoxLayout* topicSettingsLayout = new QVBoxLayout(topicSettingsTab);
+    
+    // 토픽 설정 영역 생성
+    QGroupBox* topicGroup = new QGroupBox("토픽 구독 설정");
+    QVBoxLayout* topicLayout = new QVBoxLayout(topicGroup);
+    
+    // 도움말 레이블
+    QLabel* topicHelpLabel = new QLabel("로봇 별로 구독할 토픽을 선택하여 모니터링할 수 있습니다.");
+    topicHelpLabel->setStyleSheet("color: #555;");
+    topicHelpLabel->setWordWrap(true);
+    topicLayout->addWidget(topicHelpLabel);
+    
+    // 토픽 목록을 표시할 트리 위젯
+    QTreeWidget* topicTree = new QTreeWidget();
+    topicTree->setObjectName("topicTree");
+    topicTree->setHeaderLabels(QStringList() << "토픽 이름" << "타입" << "구독");
+    topicTree->setColumnWidth(0, 250);  // 토픽 이름 열 너비
+    topicTree->setColumnWidth(1, 200);  // 토픽 타입 열 너비
+    topicTree->setAlternatingRowColors(true);
+    topicLayout->addWidget(topicTree);
+    
+    // 토픽 스캔 버튼 및 필터 영역
+    QWidget* topicControlWidget = new QWidget();
+    QHBoxLayout* topicControlLayout = new QHBoxLayout(topicControlWidget);
+    
+    // 필터링
+    QLabel* filterLabel = new QLabel("필터:");
+    QLineEdit* filterEdit = new QLineEdit();
+    filterEdit->setObjectName("topicFilterEdit");
+    filterEdit->setPlaceholderText("토픽 이름 필터...");
+    
+    // 토픽 스캔 버튼
+    QPushButton* scanButton = new QPushButton("토픽 스캔");
+    scanButton->setObjectName("scanTopicsButton");
+    
+    // 전체 선택/해제 버튼
+    QPushButton* selectAllButton = new QPushButton("모두 선택");
+    QPushButton* deselectAllButton = new QPushButton("모두 해제");
+    
+    // 레이아웃에 위젯 추가
+    topicControlLayout->addWidget(filterLabel);
+    topicControlLayout->addWidget(filterEdit, 1);  // 필터가 더 넓게
+    topicControlLayout->addWidget(scanButton);
+    topicControlLayout->addWidget(selectAllButton);
+    topicControlLayout->addWidget(deselectAllButton);
+    
+    topicLayout->addWidget(topicControlWidget);
+    
+    // 토픽 구독 이벤트 연결
+    connect(topicTree, &QTreeWidget::itemChanged, this, &MainWindow::onTopicItemChanged);
+    
+    // 토픽 스캔 버튼 시그널 연결
+    connect(scanButton, &QPushButton::clicked, this, &MainWindow::onScanTopicsClicked);
+    
+    // 토픽 필터 시그널 연결
+    connect(filterEdit, &QLineEdit::textChanged, this, &MainWindow::onTopicFilterChanged);
+    
+    // 전체 선택/해제 버튼 시그널 연결
+    connect(selectAllButton, &QPushButton::clicked, [this, topicTree]() {
+        for (int i = 0; i < topicTree->topLevelItemCount(); ++i) {
+            QTreeWidgetItem* robotItem = topicTree->topLevelItem(i);
+            for (int j = 0; j < robotItem->childCount(); ++j) {
+                QTreeWidgetItem* topicItem = robotItem->child(j);
+                if (topicItem->checkState(2) != Qt::Checked) {
+                    topicItem->setCheckState(2, Qt::Checked);
+                }
+            }
+        }
+    });
+    
+    connect(deselectAllButton, &QPushButton::clicked, [this, topicTree]() {
+        for (int i = 0; i < topicTree->topLevelItemCount(); ++i) {
+            QTreeWidgetItem* robotItem = topicTree->topLevelItem(i);
+            for (int j = 0; j < robotItem->childCount(); ++j) {
+                QTreeWidgetItem* topicItem = robotItem->child(j);
+                if (topicItem->checkState(2) != Qt::Unchecked) {
+                    topicItem->setCheckState(2, Qt::Unchecked);
+                }
+            }
+        }
+    });
+    
+    topicSettingsLayout->addWidget(topicGroup);
+    
+    // 설정 탭에 서브탭 추가
+    settings_tabs->addTab(robotSettingsTab, "로봇 설정");
+    settings_tabs->addTab(topicSettingsTab, "토픽 설정");
+    
+    // 메인 레이아웃에 탭 위젯 추가
+    main_layout->addWidget(settings_tabs);
+    
+    // 중앙 위젯에 추가
+    central_widget_->addWidget(settings_tab_);
+    
+    qDebug() << "설정 탭 초기화 완료";
 }
 
 } // namespace robot_debugger_ui 

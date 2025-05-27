@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import { UnifiedWebSocketProvider } from './context/UnifiedWebSocketProvider';
+import { LanguageProvider } from './context/LanguageContext';
 import CleaningButtonComponent from './components/CleaningButton';
 
 // 페이지 컴포넌트들
@@ -17,16 +18,18 @@ function App() {
   return (
     <UnifiedWebSocketProvider topics={topics}>
       <CartProvider>
-        <Router>
-          {/* 청소 완료 버튼 - 모든 페이지에서 표시 */}
-          <CleaningButtonComponent />
-          <Routes>
-            <Route index element={<HomePage />} />
-            <Route path="/order-status" element={<OrderStatusPage />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/order-complete" element={<OrderCompletePage />} />
-          </Routes>
-        </Router>
+        <LanguageProvider>
+          <Router>
+            {/* 청소 완료 버튼 - 모든 페이지에서 표시 */}
+            <CleaningButtonComponent />
+            <Routes>
+              <Route index element={<HomePage />} />
+              <Route path="/order-status" element={<OrderStatusPage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/order-complete" element={<OrderCompletePage />} />
+            </Routes>
+          </Router>
+        </LanguageProvider>
       </CartProvider>
     </UnifiedWebSocketProvider>
   );

@@ -1,31 +1,33 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import { useLanguage } from '../../context/LanguageContext';
 
 const Base_API_URL = process.env.REACT_APP_BASE_URL
 
 
 // 직원 호출 모달 컴포넌트
 const StaffCallModal = ({ isOpen, onClose, onSelect }) => {
+  const { t } = useLanguage();
   if (!isOpen) return null;
 
   const callOptions = [
-    { id: 'HELP', label: '일반 도움요청', icon: '🙋‍♂️' },
-    { id: 'MENU', label: '메뉴 문의', icon: '🍽️' },
-    { id: 'PAYMENT', label: '결제 도움', icon: '💳' },
-    { id: 'BIRTHDAY', label: '생일 축하', icon: '🎂' },
-    { id: 'OTHER', label: '기타 요청', icon: '❓' }
+    { id: 'HELP', label: t('staffCall.options.help'), icon: '🙋‍♂️' },
+    { id: 'MENU', label: t('staffCall.options.menu'), icon: '🍽️' },
+    { id: 'PAYMENT', label: t('staffCall.options.payment'), icon: '💳' },
+    { id: 'BIRTHDAY', label: t('staffCall.options.birthday'), icon: '🎂' },
+    { id: 'OTHER', label: t('staffCall.options.other'), icon: '❓' }
   ];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">직원 호출 유형</h2>
+          <h2 className="text-2xl font-bold">{t('staffCall.title')}</h2>
           <button 
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 text-3xl"
-            aria-label="닫기"
+            aria-label={t('staffCall.close')}
           >
             &times;
           </button>
@@ -33,6 +35,48 @@ const StaffCallModal = ({ isOpen, onClose, onSelect }) => {
         
         <div className="grid grid-cols-2 gap-4">
           {callOptions.map(option => (
+            <button
+              key={option.id}
+              className="flex flex-col items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg p-6 transition-colors duration-200"
+              onClick={() => onSelect(option)}
+            >
+              <span className="text-4xl mb-2">{option.icon}</span>
+              <span className="text-lg font-medium text-center">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 언어 선택 모달 컴포넌트
+const LanguageModal = ({ isOpen, onClose, onSelect }) => {
+  const { t } = useLanguage();
+  if (!isOpen) return null;
+
+  const languageOptions = [
+    { id: 'ko', label: t('language.korean'), icon: '🇰🇷' },
+    { id: 'en', label: t('language.english'), icon: '🇺🇸' },
+    { id: 'ja', label: t('language.japanese'), icon: '🇯🇵' }
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">{t('language.title')}</h2>
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-3xl"
+            aria-label={t('language.close')}
+          >
+            &times;
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4">
+          {languageOptions.map(option => (
             <button
               key={option.id}
               className="flex flex-col items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg p-6 transition-colors duration-200"
@@ -88,6 +132,10 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
   const [hasActiveOrder, setHasActiveOrder] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isClickDelay, setIsClickDelay] = useState(false); // 빠른 연속 클릭 방지
+  const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
+  
+  // LanguageContext에서 언어 관련 함수들 가져오기
+  const { language, changeLanguage, getLanguageIcon, t } = useLanguage();
 
   // 카테고리 목록 및 아이콘
   const iconMap = {
@@ -96,8 +144,12 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
     '음료': '🥤'
   };
 
-  // 카테고리 목록
-  const categories = ['추천', '음식', '음료'];
+  // 번역된 카테고리 목록
+  const translatedCategories = [
+    { id: '추천', label: t('categories.recommended') },
+    { id: '음식', label: t('categories.food') },
+    { id: '음료', label: t('categories.beverage') }
+  ];
 
   // 카테고리 클릭 처리
   const handleCategoryClick = (category) => {
@@ -152,13 +204,13 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
     }
     catch (error) {
       console.error('직원 호출 요청 중 오류 발생:', error);
-      alert('직원 호출 요청에 실패했습니다. 다시 시도해주세요.');
+      alert(t('staffCall.error'));
       return;
     }
 
     setStaffCalled(true);
     closeStaffCallModal();
-    alert(`${option.label} 요청이 전달되었습니다. 잠시만 기다려주세요.`);
+    alert(t('staffCall.success', { type: option.label }));
     
   // try {
   //   const response = await axios.post(`${API_URL}/orders`, orderData);
@@ -176,6 +228,24 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
     }, 10000);
   };
   
+  // 언어 모달 열기
+  const openLanguageModal = () => {
+    setIsLanguageModalOpen(true);
+  };
+
+  // 언어 모달 닫기
+  const closeLanguageModal = () => {
+    setIsLanguageModalOpen(false);
+  };
+
+  // 언어 선택 처리
+  const handleLanguageSelect = (option) => {
+    // Context를 통해 언어 변경
+    changeLanguage(option.id);
+    closeLanguageModal();
+    alert(t('language.success', { language: option.label }));
+  };
+  
   const isHomePage = location.pathname === '/';
 
   return (
@@ -183,15 +253,15 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
       <aside className="w-48 bg-[#F7F3EE] flex flex-col h-full">
         {/* 카테고리 버튼 영역 */}
         <div className="flex-grow flex flex-col items-center py-8 space-y-8">
-          {categories.map(cat => (
+          {translatedCategories.map(cat => (
             <CategoryButton
-              key={cat}
-              icon={iconMap[cat]}
-              label={cat}
-              selected={selectedCategory === cat}
-              active={isHomePage && selectedCategory === cat}
-              onClick={() => handleCategoryClick(cat)}
-              aria-label={`${cat} 메뉴`}
+              key={cat.id}
+              icon={iconMap[cat.id]}
+              label={cat.label}
+              selected={selectedCategory === cat.id}
+              active={isHomePage && selectedCategory === cat.id}
+              onClick={() => handleCategoryClick(cat.id)}
+              aria-label={`${cat.label} 메뉴`}
             />
           ))}
         </div>
@@ -200,15 +270,21 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
         <div className="p-4 border-t border-gray-300">
           <FunctionButton
             icon="📝"
-            label="주문 현황"
+            label={t('sidebar.orderStatus')}
             color="bg-blue-600 hover:bg-blue-700"
             onClick={goOrderStatus}
           />
           <FunctionButton
             icon="📢"
-            label={staffCalled ? "요청 중" : "직원 호출"}
+            label={staffCalled ? t('sidebar.callStaffInProgress') : t('sidebar.callStaff')}
             color="bg-red-600 hover:bg-red-700"
             onClick={openStaffCallModal}
+          />
+          <FunctionButton
+            icon={getLanguageIcon()}
+            label={t('sidebar.changeLanguage')}
+            color="bg-green-600 hover:bg-green-700"
+            onClick={openLanguageModal}
           />
         </div>
       </aside>
@@ -217,6 +293,12 @@ const Sidebar = ({ selectedCategory, onSelectCategory }) => {
         isOpen={isModalOpen} 
         onClose={closeStaffCallModal} 
         onSelect={handleCallTypeSelect}
+      />
+
+      <LanguageModal
+        isOpen={isLanguageModalOpen}
+        onClose={closeLanguageModal}
+        onSelect={handleLanguageSelect}
       />
     </>
   );

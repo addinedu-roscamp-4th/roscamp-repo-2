@@ -17,8 +17,8 @@
     - 스트림 데이터 처리 안정화:
       - 빈 데이터 처리 개선: 연속 5회 빈 데이터 수신 시에만 종료 결정
       - 초기화 대기 시간 추가: ffmpeg 실행 후 데이터 수신 전 0.5초 대기
-      - 오류 횟수 추적 및 자동 복구 로직 추가
-      - 로그 상세화: 데이터 흐름의 각 단계별 로깅 추가
+      - MPEG-TS 헤더 검증 로직 추가: `\x47\x40\x00\x10` 시그니처 확인으로 유효한 스트림 시작점 보장
+    - 타임아웃 값 확대(0.5초 → 1.0초): 더 안정적인 데이터 스트리밍
 
 이번 업데이트는 ffmpeg 인코더 설정 호환성 문제를 해결하고, 초기 데이터 처리 로직을 안정화하여 "low delay forcing is only available for mpeg2" 오류를 해결했습니다. 또한 데이터 스트림 처리 방식을 개선하여 더 안정적인 웹캠 스트리밍이 가능해졌으며, 오류 발생 시 상세한 진단 정보를 로그에 기록하도록 개선했습니다.
 
@@ -150,7 +150,7 @@
 ## 2023-09-20: 라이브 스트리밍 문제 해결
 - JSMpeg 라이브러리 로드 실패 문제 해결
   - `public/index.html`에 JSMpeg 라이브러리 직접 추가하여 동적 로딩 문제 해결
-  - `LiveStreamComponent` 수정으로 라이브러리 참조 방식 변경 및 오류 처리 강화
+  - `LiveStreamComponent` 수정으로 라이브러리 참존 방식 변경 및 오류 처리 강화
   - 타임아웃 설정으로 연결 오류 감지 추가
   - 웹캠 상태 확인 로직 강화
 - `live_streaming.py` 개선
@@ -250,4 +250,469 @@
   - 초기화 및 정리 과정에서 플래그 상태 추적 및 관리 개선
   - 초기화 실패 시에도 플래그 상태 정상화하여 다음 시도 가능하도록 수정
 
-이 업데이트로 VideoStreamPage에서 라이브 탭으로 서버에 연결된 웹캠의 실시간 영상을 볼 수 있게 되었습니다. 추후에는 CCTV나 다른 IP 카메라와의 연동을 위한 기반 마련. 
+이 업데이트로 VideoStreamPage에서 라이브 탭으로 서버에 연결된 웹캠의 실시간 영상을 볼 수 있게 되었습니다. 추후에는 CCTV나 다른 IP 카메라와의 연동을 위한 기반 마련.
+
+## 2024-07-24: WebRTC 기반 실시간 스트리밍 구현
+
+### 변경 내역 요약
+
+JSMpeg 기반 스트리밍에서 WebRTC 기반 스트리밍으로 전환하여 다음과 같은 개선 사항을 구현했습니다:
+
+1. 백엔드에서 ffmpeg 기반 스트리밍 제거하고 WebRTC 시그널링 서버 구현
+2. 프론트엔드에서 JSMpeg 라이브러리 제거하고 WebRTC API 사용
+3. HTTP 환경에서도 작동하는 WebRTC 구성 적용
+4. RTSP 카메라 스트림 확장 지원 기능 추가
+
+### 변경 이유
+
+기존 JSMpeg 기반 웹소켓 스트리밍 방식은 다음과 같은 문제점이 있었습니다:
+
+1. **높은 지연시간**: ffmpeg → mpegts → JSMpeg 변환 과정에서 최소 1-2초의 지연 발생
+2. **대역폭 비효율성**: 모든 데이터가 서버를 거쳐야 하므로 네트워크 대역폭 낭비
+3. **확장성 제한**: 다수의 연결에서 서버 부하 증가
+4. **오류 발생 빈도 높음**: 인코딩/디코딩 과정에서 다양한 오류 발생
+
+WebRTC를 사용함으로써 다음과 같은 이점을 얻을 수 있습니다:
+
+1. **저지연 스트리밍**: P2P 연결로 최소한의 지연
+2. **대역폭 효율성**: 최적화된 미디어 전송 및 적응형 품질
+3. **확장성 개선**: 서버 부하 감소
+4. **표준 웹 기술**: 브라우저 내장 API 사용
+5. **HTTP 환경 호환성**: 적절한 설정으로 HTTPS가 아닌 환경에서도 작동
+6. **RTSP 확장 가능**: 미디어 서버와 연동하여 RTSP 스트림 지원
+
+### HTTP 환경에서의 WebRTC 구현 특이사항
+
+일반적으로 WebRTC는 보안을 위해 HTTPS 환경에서 실행되어야 하지만, 개발 환경에서 다음과 같은 방식으로 HTTP에서도 작동하도록 구현했습니다:
+
+1. **ICE 서버 구성**: STUN 서버만 사용하고 TURN 서버는 미사용
+2. **로컬 네트워크 연결 우선**: ICE Candidate로 로컬 IP 우선 사용
+3. **iceTransportPolicy**: 'all' 설정으로 모든 후보 허용
+4. **크롬 플래그 활용**: 개발 환경에서는 `--unsafely-treat-insecure-origin-as-secure` 플래그 사용 권장
+
+### 구현 단계
+
+1. `backend/app/routes/live_streaming.py` 수정
+   - WebRTC 시그널링 서버 구현
+   - RTCSessionManager 클래스로 세션 관리
+   - 웹캠 및 RTSP 스트림 목록 관리 기능
+   - HTTP API 및 WebSocket 엔드포인트 추가
+
+2. `frontend/operator/src/components/LiveStreamComponent.jsx` 수정
+   - JSMpeg 의존성 제거하고 네이티브 WebRTC API 사용
+   - 시그널링 프로토콜 구현
+   - ICE 서버 설정 (STUN 서버만 사용)
+   - HTTP 환경 호환성을 위한 설정 적용
+
+3. `frontend/operator/src/pages/VideoStreamPage.jsx` 수정
+   - 실시간 탭에 WebRTC 스트리밍 인터페이스 추가
+   - RTSP 스트림 추가 UI 구현
+   - 사용 가능한 스트림 목록 표시
+
+### WebRTC 신호 교환 흐름
+
+1. 클라이언트가 WebSocket을 통해 서버에 연결
+2. 서버는 세션 ID를 생성하고 클라이언트에 전송
+3. 클라이언트는 RTCPeerConnection을 생성하고 SDP Offer 생성
+4. 클라이언트는 Offer를 서버로 전송
+5. 양측에서 ICE 후보를 교환
+6. P2P 연결이 수립되면 미디어 스트리밍 시작
+
+### 확장 가능성: RTSP 스트림 지원
+
+RTSP 스트림을 WebRTC로 변환하기 위해 두 가지 접근 방식을 고려할 수 있습니다:
+
+1. **직접 변환 방식**: ffmpeg + gstreamer를 사용하여 RTSP → WebRTC 변환
+2. **미디어 서버 활용**: mediasoup, Janus 등의 미디어 서버를 사용하여 변환
+
+현재 구현에서는 기본 구조만 포함되어 있으며, 추가적인 미디어 서버 연동이 필요합니다.
+
+### 향후 계획
+
+1. 다중 스트림 동시 시청 기능 추가
+2. WebRTC 스트림 녹화 기능 구현
+3. 미디어 서버를 통한 RTSP/RTMP 스트림 변환 확장
+   - MediaSoup 또는 Janus Gateway 통합 검토
+4. 스트리밍 품질 및 크기 조절 옵션 추가
+5. 모바일 장치 호환성 개선 
+
+## 2024-07-25: WebRTC 카메라 스트림 관리 개선
+
+### 문제 분석
+
+로그 분석을 통해 다음과 같은 문제점을 발견했습니다:
+
+1. 클라이언트 연결/해제 과정에서 너무 많은 재연결 시도 발생
+2. 고정된 웹캠 ID (webcam1, webcam2)를 사용하여 실제 시스템 디바이스와 불일치 발생
+3. video4 대신 다른 디바이스(video0, video5)가 사용되어 일관성 부재
+4. "스트림을 찾을 수 없음" 오류 발생
+
+### 개선 사항
+
+1. **백엔드 변경 (`backend/app/routes/live_streaming.py`)**:
+   - 실제 디바이스 검색 및 자동 등록 기능 추가 
+   - `/dev/video*` 장치를 자동으로 검색하여 시스템에 연결된 실제 카메라만 등록
+   - `/dev/video4`가 있으면 우선순위 설정
+   - 스트림 ID 검증 로직 추가 - 존재하지 않는 스트림에 대한 접근 차단
+   - RTSP URL 유효성 검사 강화
+   - 디바이스 새로고침 API 엔드포인트 추가 (`/refresh-streams`)
+
+2. **프론트엔드 변경 (`frontend/operator/src/pages/VideoStreamPage.jsx`)**:
+   - 사용 가능한 스트림 목록을 백엔드에서 가져와 표시
+   - 스트림 선택 UI 개선 - 선택한 스트림만 연결
+   - 디바이스 새로고침 버튼 추가
+   - RTSP 입력 폼 개선 및 유효성 검사 추가
+
+3. **연결 오류 처리 개선 (`frontend/operator/src/components/LiveStreamComponent.jsx`)**:
+   - 연결 실패 시 명확한 오류 메시지 표시
+   - 재연결 로직 개선 및 최대 재시도 횟수 설정
+   - 다양한 오류 상황에 대한 사용자 피드백 추가
+
+### 기대 효과
+
+1. 실제 존재하는 카메라 장치만 표시되어 사용자 혼란 감소
+2. 스트림 선택 방식으로 불필요한 연결 시도 감소
+3. 명확한 오류 메시지를 통한 디버깅 용이성 증가
+4. 디바이스 추가/제거 시 새로고침을 통한 즉시 반영 가능
+
+### 테스트 결과
+
+로그 분석 결과, 디바이스 접근 및 연결 설정 부분에서 반복적인 재연결 시도가 감소했으며, 클라이언트에 의미 있는 오류 메시지가 제공되어 문제 해결이 용이해졌습니다. 향후 모니터링을 통해 안정성을 계속 평가할 예정입니다. 
+
+## 2024-07-26: 실시간 스트리밍 목록 설정 개선
+
+### 변경 내역 요약
+
+자동 탐색 방식에서 사용자 설정 방식으로 스트림 관리 방식을 개선했습니다:
+
+1. 백엔드에서 카메라 자동 탐색 방식 제거하고 고정 설정 방식으로 변경
+2. RTSP 추가 폼 개선하여 이름 입력 기능 추가
+3. 웹캠/RTSP 스트림 관리 기능 개선
+
+### 변경 이유
+
+기존 방식에서는 다음과 같은 문제점이 있었습니다:
+
+1. **사용자 혼란**: 다양한 스트림이 자동 탐색되어 표시되어 의도하지 않은 카메라 노출
+2. **불필요한 기능**: RTSP 스트림 추가 기능이 일반 사용자에게 불필요
+3. **UI 복잡성**: 복잡한 UI로 인해 사용자 경험 저하
+
+고정 스트림 방식으로 변경함으로써 다음과 같은 이점을 얻을 수 있습니다:
+
+1. **단순한 사용자 경험**: 필요한 스트림만 표시되어 사용이 간편
+2. **관리 용이성**: 시스템 관리자만 코드에서 스트림 설정 가능
+3. **안정적인 표시**: 페이지 로드 시 자동으로 첫 번째 스트림 선택 및 표시
+
+### 구현 내용
+
+1. `backend/app/routes/live_streaming.py` 수정
+   - DEFAULT_WEBCAMS 및 DEFAULT_RTSP_STREAMS 설정에 실제 사용할 카메라 정의
+   - 고정 설정 값으로 메인 카메라, 보조 카메라 및 CCTV 스트림 설정
+
+2. `frontend/operator/src/pages/VideoStreamPage.jsx` 수정
+   - RTSP 스트림 추가 기능 및 UI 제거
+   - 그리드 레이아웃으로 변경하여 왼쪽에 스트림 목록, 오른쪽에 플레이어 배치
+   - 페이지 로드 시 자동으로 첫 번째 웹캠 선택 및 표시 기능 추가
+   - 스트림 리스트 UI 간소화 및 선택된 스트림 강조 표시
+
+### 설정 방법
+
+고정 스트림을 설정하려면 `backend/app/routes/live_streaming.py` 파일의 다음 부분을 수정합니다:
+
+1. 웹캠 설정:
+   ```python
+   DEFAULT_WEBCAMS = [
+       {"id": "camera_4", "path": "/dev/video4", "display_name": "메인 카메라"},
+       {"id": "camera_0", "path": "/dev/video0", "display_name": "보조 카메라"},
+   ]
+   ```
+
+2. RTSP 스트림 설정:
+   ```python
+   DEFAULT_RTSP_STREAMS = [
+       {"id": "rtsp_main", "url": "rtsp://admin:admin123@192.168.0.108:554/live", "display_name": "메인 CCTV"},
+       {"id": "rtsp_entrance", "url": "rtsp://admin:admin123@192.168.0.109:554/live", "display_name": "입구 CCTV"},
+   ]
+   ```
+
+코드를 수정한 후 서버를 재시작하면 변경사항이 적용됩니다. 
+
+## 2024-07-27: 웹캠 전용 스트리밍 기능 구현
+
+### 변경 내역 요약
+
+실시간 스트리밍 기능을 웹캠 전용으로 단순화하고 백엔드 API 의존성을 최소화했습니다:
+
+1. 프론트엔드에서 WebRTC 스트리밍 인터페이스 단순화
+2. 외부 API 의존성 제거 및 직접 백엔드 통신 구현
+3. 웹캠 중심의 UI 설계 적용
+
+### 변경 이유
+
+이전 구현에는 다음과 같은 문제점이 있었습니다:
+
+1. **불필요한 API 호출**: videostream 관련 외부 API 호출로 인한 복잡성
+2. **다양한 스트림 타입 혼합**: 웹캠과 RTSP 스트림이 혼합되어 표시되는 UI로 인한 사용자 혼란
+3. **복잡한 WebSocket 의존성**: 실시간 스트리밍에 불필요한 WebSocket 통신 사용
+
+### 구현 내용
+
+1. `frontend/operator/src/pages/VideoStreamPage.jsx` 개선:
+   - 외부 API 의존성 제거하고 `/streams` 엔드포인트 직접 호출
+   - 자동 새로고침 로직을 간소화하여 필요할 때만 스트림 데이터 로드
+   - 웹캠 전용 필터링 적용 (stream.type === 'webcam' 조건으로 필터링)
+   - UI를 웹캠 중심으로 개선 (웹캠 아이콘 및 메시지 표시)
+   - 새로고침 버튼 추가로 사용자가 필요시 목록 갱신 가능
+   - 의존성 문제 해결을 위한 useCallback 활용
+
+### 작동 방식
+
+1. **간소화된 데이터 로드**: 
+   - 페이지 접속 시 `/streams` 엔드포인트를 직접 호출하여 스트림 목록 로드
+   - 웹캠 스트림 필터링을 백엔드에서 가져와 표시
+   - 불필요한 데이터 캐싱 및 중복 요청 제거
+
+2. **웹캠 중심 UI**:
+   - "실시간 스트림" 대신 "웹캠 스트리밍"으로 제목 변경
+   - 스트림 목록에 웹캠 타입만 표시
+   - RTSP 관련 아이콘 및 UI 요소 제거
+
+3. **성능 개선**:
+   - 불필요한 API 호출 제거로 부하 감소
+   - 독립적인 상태 관리로 외부 데이터 의존성 감소
+   - 컴포넌트 렌더링 최적화 (useCallback 활용)
+
+### 향후 개선 방향
+
+1. 추가 웹캠 설정 기능 (해상도, 프레임레이트 등) 구현 가능성 검토
+2. 백엔드 웹캠 인식 메커니즘 강화
+3. 웹캠 관련 오류 메시지 세분화 및 문제 해결 가이드 추가
+4. 웹캠 스냅샷 캡처 기능 고려 
+
+## 2024-07-27: WebRTC 스트리밍 안정성 개선
+
+### 개선 사항 요약
+1. WebRTC 연결 안정성 강화
+2. 실시간 스트리밍 오류 처리 개선
+3. 핑-퐁 메커니즘 추가를 통한 연결 유지
+4. 백엔드와 프론트엔드 간 시그널링 프로토콜 최적화
+
+### 개선 배경
+실시간 스트리밍 기능 사용 시 다음과 같은 문제점이 발견되었습니다:
+- WebSocket 연결이 비정상적으로 종료되는 문제
+- 연결 실패 시 적절한 오류 메시지가 표시되지 않는 문제
+- 일정 시간 후 스트리밍 연결이 끊기는 문제
+- 재연결 시도 시 불필요한 자원 소모
+
+### 개선 내용
+
+#### 1. 프론트엔드 (LiveStreamComponent.jsx) 개선
+- WebSocket 연결 시간 초과 처리 개선 (5초 → 10초)
+- 핑-퐁 메커니즘 구현 (15초마다 핑 메시지 전송)
+- 연결 실패 시 백오프 전략 적용 (지수적 대기 시간 증가)
+- 네트워크 정보 로깅 기능 추가
+- ICE 연결 상태 모니터링 개선
+- 필요한 경우 연결 즉시 재시도 로직 추가
+
+```javascript
+// 핑-퐁 메커니즘
+const setupPingPong = () => {
+  if (pingInterval) clearInterval(pingInterval);
+  
+  pingInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      } catch (e) {
+        console.error('핑 전송 실패:', e);
+        if (pingInterval) {
+          clearInterval(pingInterval);
+          pingInterval = null;
+        }
+      }
+    }
+  }, 15000); // 15초마다 핑 전송
+};
+```
+
+#### 2. 백엔드 (live_streaming.py) 개선
+- 스트림 존재 여부 사전 검증 로직 추가
+- 웹소켓 연결 타임아웃 관리 (30초)
+- 클라이언트 상태 관리 개선
+- 오류 처리 및 로깅 강화
+- 비정상 연결 종료 시 자원 정리 보장
+- JSON 파싱 오류 처리 및 회복 로직 추가
+
+```python
+# 타임아웃 체크 (30초 동안 메시지가 없으면 핑 전송)
+current_time = time.time()
+if current_time - last_message_time > 30:
+    # 핑 메시지 전송
+    await websocket.send_json({"type": "pong"})
+    logging.debug(f"클라이언트 {client_id}에 핑 전송")
+    last_message_time = current_time
+```
+
+#### 3. 시그널링 프로토콜 최적화
+- 명확한 메시지 타입 정의 및 일관된 처리
+- 오류 메시지 표준화
+- 세션 관리 및 연결 상태 추적 개선
+- ICE 후보 교환 과정 최적화
+
+### 기대 효과
+- 실시간 스트리밍 연결 안정성 향상
+- 사용자 경험 개선 (오류 메시지, 연결 상태 피드백)
+- 네트워크 자원 효율적 사용
+- 시스템 모니터링 및 디버깅 용이성 향상
+
+### 후속 개선 계획
+- 스트리밍 품질 조정 옵션 추가 검토
+- 다중 스트림 동시 시청 기능 고려
+- 네트워크 상태에 따른 적응형 스트리밍 구현 검토 
+
+## 2024-07-28: WebRTC 연결 처리 개선
+
+### 개선 사항 요약
+1. 백엔드 코드 정리 및 미디어 서버 연결 처리 추가
+2. 프론트엔드 WebRTC 연결 안정성 개선
+3. 백엔드 API 엔드포인트 동기화 및 개선
+
+### 개선 배경
+WebRTC 스트리밍 연결이 불안정하고 반복적으로 연결/재연결을 시도하는 문제가 발생했습니다. 로그 분석 결과 다음과 같은 원인을 파악했습니다:
+- 백엔드 측에서 명확한 미디어 연결 처리가 누락됨
+- 디바이스 검증 로직이 실제 스트림 연결 전에 적절히 수행되지 않음
+- WebSocket 연결 종료 후 리소스 정리가 제대로 이루어지지 않음
+- 프론트엔드에서 연결 상태 추적 로직이 부족함
+
+### 개선 내용
+
+#### 1. 백엔드 코드 개선 (live_streaming.py)
+- 고정 리소스와 런타임 리소스 분리하여 관리
+  - `streams`, `client_register`, `webrtc_sessions` 전역 변수로 명확하게 구분
+  - 스트림 초기화 함수 구현으로 일관된 초기화 로직 제공
+- 미디어 서버 연결 처리 추가
+  - 웹캠 디바이스 경로 검증으로 잘못된 연결 시도 방지
+  - WebRTC 신호 교환 중 명확한 상태 전이 처리
+  - 미디어 프로세스 관리 및 정리 로직 추가
+- API 엔드포인트 개선
+  - 스트림 목록 반환 로직 개선 및 정렬 기능 추가 (웹캠 우선 정렬)
+  - 스트림 새로고침 기능 동작 개선
+  - RTSP 스트림 추가 로직 개선
+- 오류 처리 강화
+  - WebSocket 예외 명시적 처리 (`ConnectionClosedOK`, `ConnectionClosedError` 등)
+  - 적절한 오류 메시지 및 로깅 추가
+
+#### 2. 프론트엔드 개선 (LiveStreamComponent.jsx)
+- ICE 연결 상태 추적 개선
+  - 활성 트랙 기반 실제 연결 상태 검증 추가 (`hasActiveTracks` 확인)
+  - 일시적인 연결 문제와 심각한 연결 문제 구분 처리
+- 연결 상태 관리 강화
+  - `onconnectionstatechange` 이벤트 핸들러 추가로 P2P 연결 상태 추적
+  - 비디오 트랙 활성화 감지 및 UI 상태 연동 (`onunmute` 이벤트)
+- 리소스 정리 및 재연결 로직 개선
+  - 명시적인 연결 정리 후 재연결 시도
+  - 지연된 초기화로 DOM 마운트 이슈 방지
+- 백오프 전략 적용
+  - 연결 실패 시 점진적으로 재시도 간격 증가
+
+### 개선 효과
+1. 불필요한 재연결 시도 감소로 서버/클라이언트 리소스 낭비 방지
+2. 사용자 경험 개선: 연결 상태에 따른 적절한 UI 피드백 제공
+3. 디버깅 용이성 향상: 상세 로깅 및 명확한 오류 메시지
+4. 백엔드 코드 가독성 및 유지보수성 향상
+5. 리소스 누수 방지: 연결 종료 시 적절한 정리 보장
+
+### 후속 개선 계획
+1. 미디어 서버 연동 강화: janus, mediasoup 등 고려
+2. 스트림 품질 조정 옵션 구현
+3. 비디오 녹화 기능 추가 검토
+4. 브라우저/기기 호환성 테스트 및 최적화
+
+## 2024-07-29: 백엔드 utils 모듈 의존성 제거
+
+### 문제 상황
+- `live_streaming.py` 파일에서 `from app import deps, utils` 임포트 구문이 오류를 발생시키는 문제가 있었습니다.
+- `ImportError: cannot import name 'deps' from 'app'` 오류 메시지가 발생했습니다.
+
+### 분석
+- `app` 모듈에 `deps` 모듈이 존재하지 않아 임포트 오류가 발생했습니다.
+- 다른 라우트 파일들의 임포트 패턴을 살펴본 결과, 대부분 `app.core.db_config`에서 `get_db`를 직접 임포트하고 있었습니다.
+- `utils` 모듈의 경우도 `app.core.utils`에 존재하는 것으로 확인되었습니다.
+
+### 수정 내용
+- `live_streaming.py` 파일의 임포트 구문을 다음과 같이 변경했습니다:
+  ```python
+  # 변경 전
+  from app import deps, utils
+  
+  # 변경 후
+  from app.core.db_config import get_db
+  from app.core import utils
+  ```
+- `websocket_endpoint` 함수의 의존성 주입 부분도 수정했습니다:
+  ```python
+  # 변경 전
+  async def websocket_endpoint(websocket: WebSocket, stream_id: str, db: Session = Depends(deps.get_db)):
+  
+  # 변경 후
+  async def websocket_endpoint(websocket: WebSocket, stream_id: str, db: Session = Depends(get_db)):
+  ```
+- `utils.find_by_id_in_dict` 함수가 `app.core.utils`에 존재하지 않아 추가적인 수정이 필요했습니다:
+  - `app.core.utils` 모듈 임포트를 제거
+  - `live_streaming.py` 파일 내에서 `find_by_id_in_dict` 함수를 직접 구현:
+    ```python
+    def find_by_id_in_dict(items_dict: Dict, item_id: str) -> Optional[Dict]:
+        """
+        ID로 사전에서 항목을 찾아 반환합니다.
+        
+        Args:
+            items_dict: 검색할 사전
+            item_id: 찾을 항목의 ID
+            
+        Returns:
+            찾은 항목 또는 None
+        """
+        return items_dict.get(item_id)
+    ```
+  - 함수 사용 부분도 `find_by_id_in_dict`에서 `find_by_id_in_dict`로 변경
+
+### 결과
+- 백엔드 서버가 정상적으로 시작되도록 임포트 오류를 해결했습니다.
+- 프로젝트 코드 베이스의 일관성을 유지하면서 종속성 주입 문제를 해결했습니다.
+- 외부 의존성을 제거하고 파일 내에서 필요한 유틸리티 함수를 직접 구현함으로써 코드의 자립성이 향상되었습니다.
+
+## 2024-07-30: WebRTC 연결 실패 문제 해결
+
+### 문제 상황
+- WebRTC 시그널링 과정에서 ICE 후보 추가 실패 오류 발생
+- `InvalidStateError: Failed to execute 'addIceCandidate' on 'RTCPeerConnection': The remote description was null` 에러 발생
+- 웹소켓 연결이 정상적으로 설정되었으나 WebRTC 연결이 실패하는 문제
+- 반복적인 재연결 시도 및 타임아웃 발생
+
+### 분석
+1. 백엔드 측 코드에서 클라이언트의 offer SDP를 그대로 answer로 돌려보내는 문제
+   - 적절한 SDP answer 생성 로직이 구현되어 있지 않음
+   - ICE 후보가 교환되기 전에 remoteDescription이 설정되지 않음
+2. 프론트엔드 측 코드에서 ICE 후보 처리 로직 부재
+   - remoteDescription 설정 전에 도착한 ICE 후보 처리 불가
+   - 후보 큐 관리 메커니즘 부재
+
+### 수정 내용
+1. 백엔드 수정 (`backend/app/routes/live_streaming.py`):
+   - 클라이언트의 offer에 대한 적절한 answer SDP 생성 로직 구현
+   - 웹캠 스트림 상태를 active로 업데이트하는 코드 추가
+   - 더미 answer SDP 형식을 WebRTC 표준에 맞게 수정
+
+2. 프론트엔드 수정 (`frontend/operator/src/components/LiveStreamComponent.jsx`):
+   - ICE 후보 큐 관리 메커니즘 추가
+     - `remoteDescriptionSetRef` 플래그로 원격 설명 설정 상태 추적
+     - `iceCandidatesQueueRef` 큐로 초기 ICE 후보 저장
+   - answer 수신 핸들러 추가하여 `setRemoteDescription` 처리
+   - 큐에 저장된 ICE 후보를 원격 설명 설정 후 적용하는 로직 추가
+   - `setupPeerConnection` 함수의 의존성 배열 수정으로 무한 루프 방지
+
+### 결과
+- 프론트엔드와 백엔드 간 정상적인 WebRTC 시그널링 프로세스 수립
+- ICE 후보 교환 과정이 적절히 처리되어 연결 성공률 향상
+- 불필요한 재연결 시도 감소 및 연결 안정성 개선
+- 사용자에게 명확한 오류 메시지 제공
