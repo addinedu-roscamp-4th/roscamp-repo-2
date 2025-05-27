@@ -14,7 +14,7 @@ from mapping import *
 
 from motion.motion_pickup import *
 from motion.motion_seving import *
-from move.nav2_goal_send import send_goal_and_wait
+from motion.move.nav2_goal_send import send_goal_and_wait
 
 
 
@@ -122,9 +122,9 @@ class RobotMoverNode(Node):
         map_x, map_y = tables[table][0], tables[table][1]
         goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
         if table in (1, 3):
-            table_yaw = serving_deg
+            table_yaw = temp_deg
         else:
-            table_yaw = serving_deg2
+            table_yaw = temp_deg
         #goal(테이블 좌표) 전송, 이동 시작
         result = send_goal_and_wait(goal_x, goal_y, table_yaw)
         self.log_with_info(f'Moving to Table{table}: ({goal_x:.2f}, {goal_y:.2f}) ...')
@@ -146,9 +146,9 @@ class RobotMoverNode(Node):
         map_x, map_y = emergency_exit[self.robot_id][0], emergency_exit[self.robot_id][1]
         goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
         if self.robot_id == 3:
-            rotate_yaw = serving_deg
+            rotate_yaw = temp_deg
         else:
-            rotate_yaw = serving_deg2
+            rotate_yaw = temp_deg
         # goal(비상시 위치) 전송, 이동 시작
         result = send_goal_and_wait(goal_x, goal_y, rotate_yaw)
         self.log_with_info(f"Moving to Emergency Exit {self.robot_id}")
@@ -168,7 +168,7 @@ class RobotMoverNode(Node):
         # 정비 구역 위치 설정
         map_x, map_y = maintenance
         goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
-        maintenance_yaw = serving_deg
+        maintenance_yaw = temp_deg
         # goal(정비구역 위치) 전송, 이동 시작
         result = send_goal_and_wait(goal_x, goal_y, maintenance_yaw)
         self.log_with_info("Moving to Maintenance Area")
