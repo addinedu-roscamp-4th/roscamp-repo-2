@@ -6,10 +6,68 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 import json
-from alba_manager.move_controller import *
+import inspect
+#from alba_manager.albabot_controller import MoveToGoal
+#from albabot_controller import *
+#from move_controller import *
+from mapping import *
+
+from alba_manager.motion.motion_pickup import *
+from alba_manager.motion.motion_seving import *
+from alba_manager.motion.move.nav2_goal_send import send_goal_and_wait
 from alba_manager.mapping import *
-import math
-import time
+
+
+pickup_x, pickup_y = 51.70, 61.00
+serving_tables = {
+    1: (33.50, 67.00),
+    2: (33.50, 54.00),
+    3: (38.00, 67.00),
+    4: (39.50, 54.00)
+    }
+birthday_tables = {
+    1: (29.50, 67.00),
+    2: (29.50, 54.00),
+    3: (44.00, 67.00),
+    4: (44.00, 54.00)
+    }
+emergency_exit = {
+    1: (26.00, 56.00),
+    2: (38.00, 56.00),
+    3: (38.00, 68.00),
+    }
+security_area = {
+    1: (39.00, 55.00),
+    2: (32.00, 66.00),
+    3: (47.00, 66.00),
+    }
+cleaning_area = {
+    1: (27.00, 55.00), # -> 46, 55
+    2: (49.00, 61.00), # -> 26, 62
+    3: (27.00, 67.00), # -> 46, 69
+}
+cleaning_area2 = {
+    1: (49.00, 57.00),
+    2: (27.00, 62.00),
+    3: (49.00, 68.00),
+}
+cleaning_area3 = {
+    1: (27.00, 59.00),
+    2: (49.00, 63.00),
+    3: (27.00, 69.00),
+}
+cleaning_deg = {
+    1: (0.00, 180.00),
+    2: (180.00, 0.00),
+    3: (0.00, 180.00),
+}
+maintenance = (23.00, 64.00)
+temp_deg = 0.0
+pickup_deg = 180.0
+serving_deg = -90.0
+serving_deg2 = 90.0
+table_deg = 0.0
+
 
 # --------- 로봇 제어 노드 (각 도메인 별 프로세스) ---------
 class RobotMoverNode(Node):
@@ -17,6 +75,12 @@ class RobotMoverNode(Node):
         super().__init__(f'robot_mover_{domain_id}')
         self.domain_id = domain_id
         self.pose_queue = pose_queue
+        self.domain_to_robot_id = {
+            74: 1,
+            62: 2,
+            58: 3
+        }
+        self.robot_id = self.domain_to_robot_id.get(domain_id)
 
         # QoS 설정 (로봇 제어용)
         qos = QoSProfile(
@@ -30,105 +94,170 @@ class RobotMoverNode(Node):
         self.pub_command = self.create_publisher(String, '/command', qos)
         # RobotMoverNode.__init__ 내부 마지막 줄에 추가
 
+
     def handle_pickup_task(self):
-        self.get_logger().info("PICKUP")
-        self.get_logger().info("픽업존 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("픽업존 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("픽업 정밀 제어 시작")
-        time.sleep(3)
-        self.get_logger().info("픽업 정밀 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.log_with_info("Move to Pickup Zone")
+        # 픽업 위치 설정
+        map_x, map_y = (pickup_x, pickup_y) # pick-up
+        goal_x, goal_y = map_to_real(map_x, map_y) #goal_x, goal_y = (1.120, -0.325)
+        pickup_yaw = pickup_deg
+        # goal(픽업 좌표) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, pickup_yaw)
+        self.log_with_info(f"이동 시작: {goal_x:.2f}, {goal_y:.2f}")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info("Reached to Pickup Zone")
+            # 픽업 정밀 모션 시작
+            self.log_with_info("Pickup Motion Start")
+            run_pickup_motion(pickup_deg)
+            self.log_with_info("Pickup motion complete")
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
 
 
     def handle_serving_task(self, table):
-        self.get_logger().info(f"SERVING TO TABLE({table})")
-        self.get_logger().info("테이블 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("테이블 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("서빙 정밀 제어 시작")
-        time.sleep(3)
-        self.get_logger().info("서빙 정밀 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.log_with_info(f"Serving to Table {table}")
+        self.log_with_info("Move to Serving Table")
+        #서빙 테이블 위치 설정
+        map_x, map_y = serving_tables[table][0], serving_tables[table][1]
+        goal_x, goal_y = map_to_real(map_x, map_y) #goal_x, goal_y = (0.500, -0.500)
+        serving_yaw = serving_deg
+        # goal(테이블 서빙 좌표) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, serving_yaw)
+        self.log_with_info(f"이동 시작: {goal_x:.2f}, {goal_y:.2f}")
+        #결과 확인
+        if result == 1:
+            self.log_with_info("Reached to Serving Spot")
+            #서빙 정밀 모션 시작
+            self.log_with_info("Serving Motion")
+            run_serving_motion(serving_deg, table_deg, 1)
+            self.log_with_info("Serving motion complete")
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
 
     def handle_birthday_task(self, table):
         self.get_logger().info(f"BIRTHDAY TO TABLE({table})")
-        self.get_logger().info("테이블 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("테이블 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("정밀 제어 시작") # 테이블을 향해 회전
-        time.sleep(3)
-        self.get_logger().info("정밀 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.log_with_info(f"Move to Brithday Table: {table}")
+        #생일 테이블 위치 설정
+        map_x, map_y = birthday_tables[table][0], birthday_tables[table][1]
+        goal_x, goal_y = map_to_real(map_x, map_y)
+        if table in (1, 3):
+            table_yaw = temp_deg
+        else:
+            table_yaw = temp_deg
+        #goal(테이블 좌표) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, table_yaw)
+        self.log_with_info(f'Moving to Table{table}: ({goal_x:.2f}, {goal_y:.2f}) ...')
+        #이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Table{table}")
+            #생일 축하 모션 시작
+            self.log_with_info("생일 축하중(모션 추가 예정)...")
+                # 추가예정
+            self.log_with_info("Birthday Completed")
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
 
     def handle_emergency_task(self):
-        self.get_logger().info(f"EMERGENCY")
-        self.get_logger().info("비상구 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("비상구 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("정밀 제어 시작") # 벽 앞에 서서 안내하기 위해 회전
-        time.sleep(3)
-        self.get_logger().info("정밀 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.get_logger().info("EMERGENCY")
+        self.log_with_info(f"Move to Emergency Exit {self.robot_id}")
+        # 비상시 이동 위치 설정
+        map_x, map_y = emergency_exit[self.robot_id][0], emergency_exit[self.robot_id][1]
+        goal_x, goal_y = map_to_real(map_x, map_y)
+        if self.robot_id == 3:
+            rotate_yaw = temp_deg
+        else:
+            rotate_yaw = temp_deg
+        # goal(비상시 위치) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, rotate_yaw)
+        self.log_with_info(f"Moving to Emergency Exit {self.robot_id}")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Emergency Exit {self.robot_id}")
+            # 비상 동작 시작
+            self.log_with_info("비상구 안내중(모션 추가 예정)...")
+                # 추가예정
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
 
     def handle_maintenance_task(self):
         self.get_logger().info(f"MAINTENANCE")
-        self.get_logger().info("비상구 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("비상구 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("정밀 제어 시작") # 벽 앞에 서서 안내하기 위해 회전
-        time.sleep(3)
-        self.get_logger().info("정밀 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.log_with_info("Move to Maintenance Area")
+        # 정비 구역 위치 설정
+        map_x, map_y = maintenance
+        goal_x, goal_y = map_to_real(map_x, map_y)
+        maintenance_yaw = temp_deg
+        # goal(정비구역 위치) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, maintenance_yaw)
+        self.log_with_info("Moving to Maintenance Area")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Maintenance Area")
+            # 정비 시작
+            self.log_with_info("정비모션중(모션 추가 예정)...")
+                # 추가예정
+            self.log_with_info("Maintenance Completed")
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
 
     def handle_cleaning_task(self):
-        self.get_logger().info(f"CLEANING")
-        self.get_logger().info("청소구역 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("청소구역 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("청소 제어 시작") # 청소 모션 플래닝
-        time.sleep(3)
-        self.get_logger().info("청소 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.get_logger().info("CLEANING")
+        self.log_with_info("Move to Cleaning Area")
+        # 청소 구역 위치 설정
+        map1_x, map1_y = cleaning_area[self.robot_id][0], cleaning_area[self.robot_id][1]
+        goal1_x, goal1_y = map_to_real(map1_x, map1_y)
+        cleaning1_yaw = cleaning_deg[self.robot_id][0]
+        map2_x, map2_y = cleaning_area2[self.robot_id]
+        goal2_x, goal2_y = map_to_real(map2_x, map2_y)
+        cleaning2_yaw = cleaning_deg[self.robot_id][1]
+        map3_x, map3_y = cleaning_area3[self.robot_id]
+        goal3_x, goal3_y = map_to_real(map3_x, map3_y)
+        cleaning3_yaw = cleaning_deg[self.robot_id][1]
+
+        # goal(청소구역 위치) 전송, 이동 시작
+        result = send_goal_and_wait(goal1_x, goal1_y, cleaning1_yaw)
+        self.log_with_info("Moving to Cleaning Area")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Cleaning Area")
+            # 청소 시작
+            self.log_with_info("청소중(모션 추가 예정)...")
+            result1 = send_goal_and_wait(goal2_x, goal2_y, cleaning2_yaw)
+            if result1 != 1:
+                print("!!!")
+                return
+            else:
+                send_goal_and_wait(goal3_x, goal3_y, cleaning3_yaw)
+            self.log_with_info("Cleaning Completed")
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
+
 
     def handle_security_task(self):
-        self.get_logger().info(f"SECURITY")
-        self.get_logger().info("청소구역 이동 시작")
-        time.sleep(3)
-        self.get_logger().info("청소구역 이동 완료")
-        time.sleep(3)
-        self.get_logger().info("청소 제어 시작") # 청소 모션 플래닝
-        time.sleep(3)
-        self.get_logger().info("청소 제어 완료")
-        time.sleep(3)
-        self.get_logger().info("완료했습니다.")
-        return True
+        self.get_logger().info("SECURITY")
+        self.log_with_info("Move to Security Area")
+        # 경비 구역 위치 설정
+        map_x, map_y = security_area[self.robot_id][0], security_area[self.robot_id][1]
+        goal_x, goal_y = map_to_real(map_x, map_y)
+        security_yaw = temp_deg
+        # goal(경비 구역) 전송, 이동 시작
+        result = send_goal_and_wait(goal_x, goal_y, security_yaw)
+        self.log_with_info("Moving to Security Area")
+        # 이동 결과 확인
+        if result == 1:
+            self.log_with_info(f"Reached to Security Area")
+            # 경비 모드 시작
+            self.log_with_info("경비 모션중...")
+                # 추가 예정
+        else:
+            self.log_with_info("Move Failed or Goal Send Rejected")
 
-    def handle_waiting_task(self):
-        self.get_logger().info(f"MOVE TO WAITING LOCATION")
-        self.get_logger().info("복귀 시작")
-        time.sleep(3)
-        self.get_logger().info("복귀 완료")
-        return True
 
+    #------------------------------------------------------------
     def send_response(self, command_msg):
         status_msg = String()
         status_msg.data = json.dumps(command_msg)
@@ -201,7 +330,7 @@ class RobotMoverNode(Node):
                 if command_msg['command_status'] == "EXECUTED" and command != 'PICKUP':
                     # PICKUP은 음식을 실은 상태에서 SERVING해야 하므로 완료 처리 되어 새 TASK 받으면 안됨
                     # 그 외의 명령은 완료 후 대기 위치로 이동
-                    self.handle_waiting_task()
+                    self.handle_return_task()
                     command_msg['command_status'] = "COMPLETED"
                     self.send_response(command_msg)
 
@@ -209,6 +338,13 @@ class RobotMoverNode(Node):
             self.get_logger().error(f'❌ 누락된 키: {e}')
         except Exception as e:
             self.get_logger().error(f'❌ 큐 처리 중 예외 발생: {e}')
+
+    def log_with_info(self, message):
+        frame = inspect.currentframe()
+        caller_frame = frame.f_back
+        function_name = caller_frame.f_code.co_name
+        line_number = caller_frame.f_lineno
+        self.get_logger().info(f"[{function_name}({line_number})] {message}")
 
 
 
@@ -221,6 +357,7 @@ def robot_worker(domain_id, queue):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 
 
@@ -242,41 +379,6 @@ class CentralController(Node):
         )
         self.get_logger().info('🔧 중앙 제어기 준비 완료')
 
-    def simplify_path(self, path, angle_threshold_deg=30):
-        """
-        path: [[x0, y0], [x1, y1], ..., [xn, yn]] (리스트 또는 numpy array)
-        angle_threshold_deg: 각도 임계값(도 단위)
-        """
-        if len(path) < 3:
-            return path
-
-        angle_threshold_rad = np.deg2rad(angle_threshold_deg)
-        simplified = [path[0]]
-
-        for i in range(1, len(path)-1):
-            prev = np.array(path[i-1])
-            curr = np.array(path[i])
-            next = np.array(path[i+1])
-
-            v1 = curr - prev
-            v2 = next - curr
-
-            # 벡터 정규화
-            if np.linalg.norm(v1) == 0 or np.linalg.norm(v2) == 0:
-                continue
-            v1 = v1 / np.linalg.norm(v1)
-            v2 = v2 / np.linalg.norm(v2)
-
-            # 두 벡터 사이 각도 계산
-            dot = np.clip(np.dot(v1, v2), -1.0, 1.0)
-            angle = np.arccos(dot)
-
-            if angle >= angle_threshold_rad:
-                simplified.append(path[i])
-
-        simplified.append(path[-1])
-        return np.array(simplified).tolist()
-
     def command_callback(self, msg):
         try:
             print("\n\n")
@@ -284,19 +386,11 @@ class CentralController(Node):
             data = json.loads(msg.data)
             domain_id = int(data['domain_id'])
             command = data['command']
-            path = data['path']
-
-            """
-            if path:
-                for idx, (x, y) in enumerate(path):
-                    self.get_logger().info(f'Point {idx}: x={x}, y={y}')
-            """
 
             if command == 'PICKUP':
                 param1 = None
                 param2 = None
                 command_data = {'command': command, 'param1': param1, 'param2': param2}
-
             elif command == 'SERVING':
                 table = int(data['param1'])
                 order_id = int(data['param2'])
@@ -305,7 +399,6 @@ class CentralController(Node):
                 param1 = table
                 param2 = order_id
                 command_data = {'command': command, 'param1': param1, 'param2': param2}
-
             elif command == 'BIRTHDAY':
                 table = int(data['param1'])
                 if not self.is_existing_table(table):
@@ -313,10 +406,15 @@ class CentralController(Node):
                 param1 = table
                 param2 = None
                 command_data = {'command': command, 'param1': param1, 'param2': param2}
-
+            elif command == 'CLEANING':
+                param1 = None
+                param2 = None
+                command_data = {'command': command, 'param1': param1, 'param2': param2}
             else:
+                self.get_logger().warn(f"Unknown Command: {command}")
                 param1, param2 = None, None
                 command_data = {'command': command, 'param1': param1, 'param2': param2}
+
 
             # ✅ 상태 저장
             if domain_id in self.robot_status:
@@ -336,20 +434,8 @@ class CentralController(Node):
             self.get_logger().error('⚠️  명령 형식 오류: "domain_id command param1 param2" 입력 필요')
 
         # ✅ 상태 출력
-        #self.get_logger().info(f'📊 로봇 상태 요약: {json.dumps(self.robot_status, indent=2)}')
+        self.get_logger().info(f'📊 로봇 상태 요약: {json.dumps(self.robot_status, indent=2)}')
 
-
-    def is_within_map_bounds(self, x, y):
-        # 범위 정하기
-        min_x, min_y = 23, 51
-        max_x, max_y = 62, 72
-
-        # 조건문을 통해 좌표가 범위 내인지 확인
-        if min_x <= x <= max_x and min_y <= y <= max_y:
-            return True
-        else:
-            self.get_logger().error(f'❌ 잘못된 좌표 : x: {x}, y: {y} ( x: {min_x} ~ {max_x}, y: {min_y} ~ {max_y} )')
-            return False
 
     def is_existing_table(self, table):
         table_list = [1, 2, 3, 4]
@@ -358,6 +444,7 @@ class CentralController(Node):
         else:
             self.get_logger().error(f'❌ 존재하지 않는 테이블: {table} (테이블: {table_list})')
             return False
+
 
 
 
