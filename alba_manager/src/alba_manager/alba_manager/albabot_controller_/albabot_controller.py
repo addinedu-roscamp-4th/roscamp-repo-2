@@ -17,22 +17,28 @@ from motion.motion_seving import *
 from motion.move.nav2_goal_send import send_goal_and_wait
 
 
-pickup_x, pickup_y = 49.00, 61.00
-tables = {
-    1: (34.00, 67.00),
-    2: (34.00, 56.50),
+pickup_x, pickup_y = 51.70, 61.00
+serving_tables = {
+    1: (33.50, 67.00),
+    2: (33.50, 54.00),
     3: (38.00, 67.00),
-    4: (38.00, 56.50)
+    4: (39.50, 54.00)
+    }
+birthday_tables = {
+    1: (29.50, 67.00),
+    2: (29.50, 54.00),
+    3: (44.00, 67.00),
+    4: (44.00, 54.00)
     }
 emergency_exit = {
     1: (26.00, 56.00),
-    2: (26.00, 67.00),
-    3: (51.00, 70.00),
+    2: (38.00, 56.00),
+    3: (38.00, 68.00),
     }
 security_area = {
-    1: (39.00, 56.00),
-    2: (32.00, 67.00),
-    3: (46.00, 67.00),
+    1: (39.00, 55.00),
+    2: (32.00, 66.00),
+    3: (47.00, 66.00),
     }
 cleaning_area = {
     1: (27.00, 55.00), # -> 46, 55
@@ -54,7 +60,7 @@ cleaning_deg = {
     2: (180.00, 0.00),
     3: (0.00, 180.00), 
 }
-maintenance = (52.00, 54.50)
+maintenance = (23.00, 64.00)
 temp_deg = 0.0
 pickup_deg = 180.0
 serving_deg = -90.0
@@ -112,7 +118,7 @@ class RobotMoverNode(Node):
         self.log_with_info(f"Serving to Table {table}")
         self.log_with_info("Move to Serving Table")
         #서빙 테이블 위치 설정
-        map_x, map_y = tables[table][0], tables[table][1]
+        map_x, map_y = serving_tables[table][0], serving_tables[table][1]
         goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y) #goal_x, goal_y = (0.500, -0.500)
         serving_yaw = serving_deg
         # goal(테이블 서빙 좌표) 전송, 이동 시작
@@ -133,7 +139,7 @@ class RobotMoverNode(Node):
         self.get_logger().info(f"BIRTHDAY TO TABLE({table})")
         self.log_with_info(f"Move to Brithday Table: {table}")
         #생일 테이블 위치 설정
-        map_x, map_y = tables[table][0], tables[table][1]
+        map_x, map_y = birthday_tables[table][0], birthday_tables[table][1]
         goal_x, goal_y = pixel_to_real_coordinates(map_x, map_y)
         if table in (1, 3):
             table_yaw = temp_deg
