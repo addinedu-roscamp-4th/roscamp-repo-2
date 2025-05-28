@@ -1,7 +1,7 @@
 import os
 import sys
 
-CAM_DEVICE = "/dev/global_cam"
+CAM_DEVICE = "/dev/video2"
 #CAM_W = 1920
 #CAM_H = 1080
 CAM_W = 1280

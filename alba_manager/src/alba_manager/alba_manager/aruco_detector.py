@@ -26,8 +26,8 @@ import os
 pkg_path = get_package_share_directory('alba_manager')
 file_path = os.path.join(pkg_path, 'camera_calibration.pkl')
 
-window_name = 'ArUco Marker Detection'
-cv2.namedWindow(window_name)
+#window_name = 'ArUco Marker Detection'
+#cv2.namedWindow(window_name)
 
 """
 # 마우스 좌표를 저장하기 위한 전역 변수
@@ -170,7 +170,7 @@ class SendMapPosition(Node):
             self.battery[robot_id] = msg.data
 
     def pose_callback(self, robot_id, msg):
-	    pass
+        pass
 
     def normalize_angle(self, angle):
         return math.atan2(math.sin(angle), math.cos(angle))
@@ -492,7 +492,7 @@ class SendMapPosition(Node):
                     self.save_odom_topic(robot_id, odom_msg)
 
         # 화면 표시
-        cv2.imshow(window_name, frame_undistorted)
+        cv2.imshow('string', frame_undistorted)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             #self.destroy_node()
@@ -533,7 +533,7 @@ class SendMapPosition(Node):
 
     def destroy_node(self):
         self.cap.release()
-        cv2.destroyAllWindows()
+        #cv2.destroyAllWindows()
         super().destroy_node()
 
 
