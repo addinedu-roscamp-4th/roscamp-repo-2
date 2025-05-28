@@ -470,6 +470,7 @@ class AlbaBotTaskManager(Node):
             if (status_info["status"] == "IDLE" and status_info["command_status"] is None)
             or (status_info["status"] == "PICKUP" and status_info["command_status"] == "EXECUTED")
         ]
+        idle_robots = [robot_id for robot_id in idle_robots if (robot_id != 3)]
         return idle_robots
 
 

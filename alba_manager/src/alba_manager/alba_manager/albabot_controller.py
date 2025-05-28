@@ -13,7 +13,7 @@ import inspect
 #from mapping import *
 
 from alba_manager.motion.motion_pickup import *
-from alba_manager.motion.motion_seving import *
+from alba_manager.motion.motion_serving import *
 from alba_manager.motion.move.nav2_goal_send import send_goal_and_wait
 from alba_manager.mapping import *
 
@@ -37,9 +37,11 @@ emergency_exit = {
     3: (38.00, 68.00),
     }
 security_area = {
-    1: (39.00, 55.00),
-    2: (32.00, 66.00),
-    3: (47.00, 66.00),
+    #1: (39.00, 55.00),
+    1: (42.00, 63.00),
+    #2: (32.00, 66.00),
+    2: (36.00, 59.00),
+    3: (48.00, 65.00),
     }
 cleaning_area = {
     1: (27.00, 55.00), # -> 46, 55
@@ -111,9 +113,10 @@ class RobotMoverNode(Node):
             self.log_with_info("Pickup Motion Start")
             run_pickup_motion(pickup_deg)
             self.log_with_info("Pickup motion complete")
+            return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     def handle_serving_task(self, table):
         self.log_with_info(f"Serving to Table {table}")
@@ -132,9 +135,10 @@ class RobotMoverNode(Node):
             self.log_with_info("Serving Motion")
             run_serving_motion(serving_deg, table_deg, 1)
             self.log_with_info("Serving motion complete")
+            return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     def handle_birthday_task(self, table):
         self.get_logger().info(f"BIRTHDAY TO TABLE({table})")
@@ -156,9 +160,10 @@ class RobotMoverNode(Node):
             self.log_with_info("생일 축하중(모션 추가 예정)...")
                 # 추가예정
             self.log_with_info("Birthday Completed")
+            return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     def handle_emergency_task(self):
         self.get_logger().info("EMERGENCY")
@@ -179,9 +184,10 @@ class RobotMoverNode(Node):
             # 비상 동작 시작
             self.log_with_info("비상구 안내중(모션 추가 예정)...")
                 # 추가예정
+            return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     def handle_maintenance_task(self):
         self.get_logger().info(f"MAINTENANCE")
@@ -200,9 +206,10 @@ class RobotMoverNode(Node):
             self.log_with_info("정비모션중(모션 추가 예정)...")
                 # 추가예정
             self.log_with_info("Maintenance Completed")
+            return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     def handle_cleaning_task(self):
         self.get_logger().info("CLEANING")
@@ -228,22 +235,26 @@ class RobotMoverNode(Node):
             self.log_with_info("청소중(모션 추가 예정)...")
             result1 = send_goal_and_wait(goal2_x, goal2_y, cleaning2_yaw)
             if result1 != 1:
-                print("!!!")
-                return
+                print("Error: Cleaning Failed.")
+                return False
             else:
                 send_goal_and_wait(goal3_x, goal3_y, cleaning3_yaw)
-            self.log_with_info("Cleaning Completed")
+                self.log_with_info("Cleaning Completed")
+                return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     def handle_security_task(self):
         self.get_logger().info("SECURITY")
-        self.log_with_info("Move to Security Area")
+        self.log_with_info(f"Move to Security Area {security_area[self.robot_id][0]}, {security_area[self.robot_id][1]}")
         # 경비 구역 위치 설정
         map_x, map_y = security_area[self.robot_id][0], security_area[self.robot_id][1]
         goal_x, goal_y = map_to_real(map_x, map_y)
-        security_yaw = temp_deg
+        if self.robot_id == 1:
+            security_yaw = 0
+        else:
+            security_yaw = 180
         # goal(경비 구역) 전송, 이동 시작
         result = send_goal_and_wait(goal_x, goal_y, security_yaw)
         self.log_with_info("Moving to Security Area")
@@ -253,9 +264,10 @@ class RobotMoverNode(Node):
             # 경비 모드 시작
             self.log_with_info("경비 모션중...")
                 # 추가 예정
+            return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
-
+            return False
 
     #------------------------------------------------------------
     def send_response(self, command_msg):
