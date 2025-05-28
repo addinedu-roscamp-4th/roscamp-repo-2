@@ -109,6 +109,11 @@ class AlbaBotTaskManager(Node):
             62: 2,
             58: 3
         }
+        self.robot_to_domain_id = {
+            1: 74,
+            2: 62,
+            3: 58
+        }
 
         self.subscription = self.create_subscription(
                 String,
@@ -333,6 +338,31 @@ class AlbaBotTaskManager(Node):
             path = None
         return path
 
+    def publish_command(self, robot_id, domain_id, command, param1, param2, path):
+        # 메시지 딕셔너리 구성
+        msg_dict = {
+            "domain_id": domain_id,
+            "command": command,
+            "param1": param1,
+            "param2": param2,
+            "path": path.tolist() if path is not None else None
+        }
+
+        # JSON 문자열로 변환
+        msg_str = json.dumps(msg_dict)
+
+        # ROS 메시지 생성 및 데이터 설정
+        ros_msg = String()
+        ros_msg.data = msg_str
+
+        # 명령 상태 업데이트
+        self.set_command_status(robot_id, CommandStatus.SENT.value)
+        self.update_albabot_cmd(robot_id, self.robot_status[robot_id]["command_id"], command, CommandStatus.SENT.value)
+
+        # 로그 출력 및 메시지 발행
+        self.get_logger().info(f"Published: {msg_str}")
+        self.publisher_.publish(ros_msg)
+
     def get_one_work_and_publish(self, robot_ids):
         try:
             url = f"http://192.168.0.156:8000/api/robots/commands"
@@ -353,7 +383,16 @@ class AlbaBotTaskManager(Node):
                         robot_id = robot_ids[0]
                         domain_id = self.robot_status[robot_id]["domain"]
                         param1 = param2 = 0
-                        if command == "SERVING":
+                        if command == "PICKUP":
+                            self.robot_status[robot_id]["command_id"] = work_item['id']
+                            self.set_status(robot_id, work_item['command'])
+                            if self.path_planning:
+                                path = self.assign_path(robot_id, command, param1, param2)
+                            else:
+                                path = None
+                            self.publish_command(robot_id, domain_id, command, param1, param2, path)
+
+                        elif command == "SERVING":
                             robot_id = None
                             for id in robot_ids:
                                 if self.robot_status[id]["status"] == "PICKUP":
@@ -369,33 +408,55 @@ class AlbaBotTaskManager(Node):
                             domain_id = self.robot_status[robot_id]["domain"]
                             param1 = work_item.get('parameters', {}).get('table_id', 0)
                             param2 = work_item.get('parameters', {}).get('order_id', 0)
+                            self.robot_status[robot_id]["command_id"] = work_item['id']
+                            self.set_status(robot_id, work_item['command'])
+                            if self.path_planning:
+                                path = self.assign_path(robot_id, command, param1, param2)
+                            else:
+                                path = None
+                            self.publish_command(robot_id, domain_id, command, param1, param2, path)
+
                         elif command == "BIRTHDAY":
                             param1 = work_item.get('parameters', {}).get('table_id', 0)
+                            self.robot_status[robot_id]["command_id"] = work_item['id']
+                            self.set_status(robot_id, work_item['command'])
+                            if self.path_planning:
+                                path = self.assign_path(robot_id, command, param1, param2)
+                            else:
+                                path = None
+                            self.publish_command(robot_id, domain_id, command, param1, param2, path)
 
-                        self.robot_status[robot_id]["command_id"] = work_item['id']
-                        self.set_status(robot_id, work_item['command'])
+                        elif command == "MAINTENANCE":
+                            self.robot_status[robot_id]["command_id"] = work_item['id']
+                            self.set_status(robot_id, work_item['command'])
+                            if self.path_planning:
+                                path = self.assign_path(robot_id, command, param1, param2)
+                            else:
+                                path = None
+                            self.publish_command(robot_id, domain_id, command, param1, param2, path)
 
-                        if self.path_planning:
-                            path = self.assign_path(robot_id, command, param1, param2)
-                        else:
-                            path = None
+                        elif command == "CLEANING":
+                            for robot_id in self.robot_ids:
+                                self.robot_status[robot_id]["command_id"] = work_item['id']
+                                self.set_status(robot_id, work_item['command'])
+                                domain_id = self.robot_to_domain_id.get(robot_id)
+                                if self.path_planning:
+                                    path = self.assign_path(robot_id, command, param1, param2)
+                                else:
+                                    path = None
+                                self.publish_command(robot_id, domain_id, command, param1, param2, path)
 
-                        msg_dict = {
-                            "domain_id": domain_id,
-                            "command": command,
-                            "param1": param1,
-                            "param2": param2,
-                            "path" : path.tolist() if path is not None else None
-                        }
+                        elif command == "SECURITY":
+                            for robot_id in self.robot_ids:
+                                self.robot_status[robot_id]["command_id"] = work_item['id']
+                                self.set_status(robot_id, work_item['command'])
+                                domain_id = self.robot_to_domain_id.get(robot_id)
+                                if self.path_planning:
+                                    path = self.assign_path(robot_id, command, param1, param2)
+                                else:
+                                    path = None
+                                self.publish_command(robot_id, domain_id, command, param1, param2, path)
 
-                        msg_str = json.dumps(msg_dict)
-                        ros_msg = String()
-                        ros_msg.data = msg_str
-                        self.set_command_status(robot_id, CommandStatus.SENT.value)
-                        self.update_albabot_cmd(robot_id, self.robot_status[robot_id]["command_id"], command, CommandStatus.SENT.value)
-
-                        self.get_logger().info(f"Published: {msg_str}")
-                        self.publisher_.publish(ros_msg)
                         break
                 #else: self.get_logger().warn("✅ PENDING 항목이 없어 실행을 건너뜁니다.")
             else:

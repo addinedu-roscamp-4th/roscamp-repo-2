@@ -10,7 +10,7 @@ import inspect
 #from alba_manager.albabot_controller import MoveToGoal
 #from albabot_controller import *
 #from move_controller import *
-from mapping import *
+#from mapping import *
 
 from alba_manager.motion.motion_pickup import *
 from alba_manager.motion.motion_seving import *
