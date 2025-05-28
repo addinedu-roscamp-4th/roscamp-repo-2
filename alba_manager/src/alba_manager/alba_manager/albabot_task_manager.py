@@ -4,11 +4,12 @@ import math  # math 모듈을 임포트합니다.
 from alba_manager.mapping import *
 import requests
 from datetime import datetime, timezone
-#from alba_msgs.msg import AlbabotCoordinate
+from alba_msgs.msg import AlbabotCoordinate
 from std_msgs.msg import String
 import json
 from enum import Enum
 import time
+from alba_manager.path_planner import AStar
 
 class AlbaBotStatus(str, Enum):
     IDLE = "IDLE"
@@ -32,10 +33,70 @@ class CommandStatus(str, Enum):
     FAILED = "FAILED"
     COMPLETED = "COMPLETED" # only albabot internal use
 
+
+pickup_x, pickup_y = 51.70, 61.00
+serving_tables = {
+    1: (33.50, 67.00),
+    2: (33.50, 54.00),
+    3: (38.00, 67.00),
+    4: (39.50, 54.00)
+    }
+birthday_tables = {
+    1: (29.50, 67.00),
+    2: (29.50, 54.00),
+    3: (44.00, 67.00),
+    4: (44.00, 54.00)
+    }
+emergency_exit = {
+    1: (26.00, 56.00),
+    2: (38.00, 56.00),
+    3: (38.00, 68.00),
+    }
+security_area = {
+    1: (39.00, 55.00),
+    2: (32.00, 66.00),
+    3: (47.00, 66.00),
+    }
+cleaning_area = {
+    1: (27.00, 55.00), # -> 46, 55
+    2: (49.00, 61.00), # -> 26, 62
+    3: (27.00, 67.00), # -> 46, 69
+}
+cleaning_area2 = {
+    1: (49.00, 57.00),
+    2: (27.00, 62.00),
+    3: (49.00, 68.00),
+}
+cleaning_area3 = {
+    1: (27.00, 59.00),
+    2: (49.00, 63.00),
+    3: (27.00, 69.00),
+}
+cleaning_deg = {
+    1: (0.00, 180.00),
+    2: (180.00, 0.00),
+    3: (0.00, 180.00),
+}
+
+maintenance = (23.00, 64.00)
+temp_deg = 0.0
+pickup_deg = 180.0
+serving_deg = -90.0
+serving_deg2 = 90.0
+table_deg = 0.0
+
+
 class AlbaBotTaskManager(Node):
 
-    def __init__(self):
+    def __init__(self, path_planning=False):
         super().__init__('albabot_task_manager')
+
+        self.robot_ids = [1, 2, 3]
+        self.robot_pos = {robot_id: (0.0, 0.0) for robot_id in self.robot_ids}
+        self.robot_pos[1] = (47, 65)
+        self.robot_pos[2] = (36, 54)
+        self.robot_pos[3] = (24, 60)
+        self.path_planning = path_planning
 
         self.robot_status = {
             1: {"domain": 74, "command_id": 0, "status": "IDLE", "command": None, "command_status": None},
@@ -55,9 +116,28 @@ class AlbaBotTaskManager(Node):
                 self.response_callback,
                 10)
 
-        self.timer = self.create_timer(3.0, self.timer_callback)
+        self.create_subscription(
+            AlbabotCoordinate,
+            '/albabot_pos',
+            self.albabot_pos_callback,
+            10
+        )
+
+        self.timer = self.create_timer(1.0, self.timer_callback)
 
         self.publisher_ = self.create_publisher(String, '/robot_command', 10)
+
+        if self.path_planning:
+            self.path_planner = AStar(False)
+            self.path_planner.initialize_map()
+
+    def albabot_pos_callback(self, msg: AlbabotCoordinate):
+        # 입력된 값이 robot_ids에 없는 경우
+        if msg.robot_id not in self.robot_ids:
+            return
+
+        robot_id = msg.robot_id
+        self.robot_pos[robot_id] = (msg.world_pose.position.x, msg.world_pose.position.y)
 
     def timer_callback(self):
         idle_albabots = self.check_idle_albabot()
@@ -87,6 +167,8 @@ class AlbaBotTaskManager(Node):
                     self.set_command_status(robot_id, command_status)
                     command_id = self.robot_status[robot_id]["command_id"]
                     self.update_albabot_cmd(robot_id, command_id, command, command_status)
+                    if self.path_planning:
+                        self.path_planner.release_assigned_path(robot_id)
                 else:
                     self.set_command_status(robot_id, command_status)
                 #self.print_robot_status()
@@ -148,6 +230,7 @@ class AlbaBotTaskManager(Node):
             "status": status
         }
 
+        """
         ############################################
         # TEST TODO REMOVE
         if command == "SERVING":
@@ -155,6 +238,7 @@ class AlbaBotTaskManager(Node):
         elif command == "BIRTHDAY":
             payload["parameters"]["table_id"] = 2
         ############################################
+        """
 
 
         # PUT 요청 보내기
@@ -213,6 +297,42 @@ class AlbaBotTaskManager(Node):
         except requests.exceptions.RequestException as err:
             print(f"요청 중 오류가 발생했습니다: {err}")
 
+    def assign_path(self, robot_id, command, param1, parma2):
+
+        start = self.robot_pos[robot_id]
+        if start is None:
+            self.get_logger().warn(f"robot[{robot_id}] pos is None")
+            return None
+
+        if command == 'PICKUP':
+            goal = pickup_area
+        elif command == 'SERVING':
+            table = param1
+            goal = serving_tables[table]
+        elif command == 'BIRTHDAY':
+            table = param1
+            goal = birthday_tables[table]
+        elif command == 'EMERGENCY':
+            goal = emergency_exit[robot_id]
+        elif command == 'MAINTENANCE':
+            goal = mainenance_area
+        elif command == 'CLEANING':
+            goal = cleaning_area[robot_id]
+        elif command == 'SECURITY':
+            goal = security_area[robot_id]
+        else:
+            self.get_logger().warn(f"Unknown command {command}")
+            return None
+
+        start = int(start[0]), int(start[1])
+        goal = int(goal[0]), int(goal[1])
+
+        if self.path_planning:
+            path = self.path_planner.assign_path_for_robot(robot_id, start, goal)
+        else:
+            path = None
+        return path
+
     def get_one_work_and_publish(self, robot_ids):
         try:
             url = f"http://192.168.0.156:8000/api/robots/commands"
@@ -255,11 +375,17 @@ class AlbaBotTaskManager(Node):
                         self.robot_status[robot_id]["command_id"] = work_item['id']
                         self.set_status(robot_id, work_item['command'])
 
+                        if self.path_planning:
+                            path = self.assign_path(robot_id, command, param1, param2)
+                        else:
+                            path = None
+
                         msg_dict = {
                             "domain_id": domain_id,
                             "command": command,
                             "param1": param1,
-                            "param2": param2
+                            "param2": param2,
+                            "path" : path.tolist() if path is not None else None
                         }
 
                         msg_str = json.dumps(msg_dict)

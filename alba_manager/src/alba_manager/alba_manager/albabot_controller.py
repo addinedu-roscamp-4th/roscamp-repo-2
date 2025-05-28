@@ -242,6 +242,41 @@ class CentralController(Node):
         )
         self.get_logger().info('🔧 중앙 제어기 준비 완료')
 
+    def simplify_path(self, path, angle_threshold_deg=30):
+        """
+        path: [[x0, y0], [x1, y1], ..., [xn, yn]] (리스트 또는 numpy array)
+        angle_threshold_deg: 각도 임계값(도 단위)
+        """
+        if len(path) < 3:
+            return path
+
+        angle_threshold_rad = np.deg2rad(angle_threshold_deg)
+        simplified = [path[0]]
+
+        for i in range(1, len(path)-1):
+            prev = np.array(path[i-1])
+            curr = np.array(path[i])
+            next = np.array(path[i+1])
+
+            v1 = curr - prev
+            v2 = next - curr
+
+            # 벡터 정규화
+            if np.linalg.norm(v1) == 0 or np.linalg.norm(v2) == 0:
+                continue
+            v1 = v1 / np.linalg.norm(v1)
+            v2 = v2 / np.linalg.norm(v2)
+
+            # 두 벡터 사이 각도 계산
+            dot = np.clip(np.dot(v1, v2), -1.0, 1.0)
+            angle = np.arccos(dot)
+
+            if angle >= angle_threshold_rad:
+                simplified.append(path[i])
+
+        simplified.append(path[-1])
+        return np.array(simplified).tolist()
+
     def command_callback(self, msg):
         try:
             print("\n\n")
@@ -249,6 +284,13 @@ class CentralController(Node):
             data = json.loads(msg.data)
             domain_id = int(data['domain_id'])
             command = data['command']
+            path = data['path']
+
+            """
+            if path:
+                for idx, (x, y) in enumerate(path):
+                    self.get_logger().info(f'Point {idx}: x={x}, y={y}')
+            """
 
             if command == 'PICKUP':
                 param1 = None

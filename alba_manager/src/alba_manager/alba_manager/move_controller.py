@@ -92,8 +92,8 @@ class MoveToGoal(Node):
         dy = self.goal_y - y
         target_yaw = math.atan2(dy, dx)
         yaw_error = self.normalize_angle(target_yaw - yaw)
-        tx, ty = real_to_pixel_coordinates(self.goal_x, self.goal_y)
-        cx, cy = real_to_pixel_coordinates(x, y)
+        tx, ty = real_to_map(self.goal_x, self.goal_y)
+        cx, cy = real_to_map(x, y)
 
         dist = math.hypot(dx, dy)
         if dist < 0.10: # 10 cm

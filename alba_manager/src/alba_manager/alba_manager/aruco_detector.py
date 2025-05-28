@@ -9,13 +9,13 @@ from tf_transformations import quaternion_from_euler, euler_from_quaternion
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32, String
 from collections import deque
-import math
 
 import cv2
 import numpy as np
 import pickle
 import time
 import math
+import json
 
 from alba_manager.global_cam_config import *
 from alba_manager.mapping import *
@@ -26,8 +26,8 @@ import os
 pkg_path = get_package_share_directory('alba_manager')
 file_path = os.path.join(pkg_path, 'camera_calibration.pkl')
 
-#window_name = 'ArUco Marker Detection'
-#cv2.namedWindow(window_name)
+window_name = 'ArUco Marker Detection'
+cv2.namedWindow(window_name)
 
 """
 # 마우스 좌표를 저장하기 위한 전역 변수
@@ -43,11 +43,23 @@ def mouse_callback(event, x, y, flags, param):
 cv2.setMouseCallback(window_name, mouse_callback)
 """
 
+# 로봇별 색상 지정 (BGR)
+ROBOT_COLORS = {
+    1: (0, 0, 255),   # 빨강
+    2: (0, 255, 0),   # 초록
+    3: (255, 0, 0)    # 파랑
+}
 
 class SendMapPosition(Node):
     def __init__(self):
         super().__init__('send_map_position')
         self.robot_ids = [1, 2, 3]
+        self.robot_paths = {}  # {robot_id: path}
+        self.domain_to_robot_id = {
+            74: 1,
+            62: 2,
+            58: 3
+        }
 
         # 칼만 필터 초기화
         self.kalman_filter_params = {}
@@ -74,6 +86,18 @@ class SendMapPosition(Node):
                 lambda msg, robot_id=robot_id: self.pose_callback(robot_id, msg),
                 10
             )
+
+        self.subscription = self.create_subscription(
+                    String,
+                    '/robot_command',
+                    self.listener_callback,
+                    10)
+
+        self.subscription = self.create_subscription(
+                String,
+                '/command',
+                self.response_callback,
+                10)
 
         self.pub_pos = self.create_publisher(AlbabotCoordinate, '/albabot_pos', 10)
         self.initialpose_publisher = {
@@ -169,6 +193,40 @@ class SendMapPosition(Node):
         if robot_id in self.robot_ids:
             self.battery[robot_id] = msg.data
 
+    def listener_callback(self, msg):
+        self.get_logger().info(f'Received message: {msg.data}')
+        try:
+            msg_dict = json.loads(msg.data)
+            domain_id = msg_dict.get('domain_id', None)
+            robot_id = self.domain_to_robot_id.get(domain_id)
+            path = msg_dict.get('path', None)
+            if path is not None:
+                self.robot_paths[robot_id] = path
+                self.get_logger().info(f'Path received: {path}')
+            #else:
+                #self.get_logger().warn('No path found in the message')
+        except json.JSONDecodeError:
+            self.get_logger().error('Failed to decode JSON from message')
+
+    def response_callback(self, msg):
+        self.get_logger().info(f'Received message: {msg.data}')
+        try:
+            # 수신한 JSON 문자열을 파이썬 객체로 변환
+            json_data = json.loads(msg.data)
+            domain_id = json_data['domain_id']
+            command = json_data['command']
+            command_status = json_data['command_status']
+            robot_id = self.domain_to_robot_id.get(domain_id)
+            #self.get_logger().info(f'robot_id {robot_id} command_status: {command_status}')
+            if robot_id is not None:
+                if command_status == "COMPLETED" or command_status == "EXECUTED":
+                    print(self.robot_paths)
+                    if robot_id in self.robot_paths:
+                        #self.get_logger().info(f'Path{robot_id} release')
+                        del self.robot_paths[robot_id]
+        except json.JSONDecodeError:
+            self.get_logger().error('Failed to decode JSON from message')
+
     def pose_callback(self, robot_id, msg):
         pass
 
@@ -242,7 +300,7 @@ class SendMapPosition(Node):
     def timer_callback(self):
         ret, frame = self.cap.read()
         if not ret:
-            self.get_logger().warn("Failed to grab frame")
+            #self.get_logger().warn("Failed to grab frame")
             return
 
         # 이미지 왜곡 보정
@@ -491,12 +549,40 @@ class SendMapPosition(Node):
 
                     self.save_odom_topic(robot_id, odom_msg)
 
+        for rid, path in self.robot_paths.items():
+            color = ROBOT_COLORS.get(rid, (255, 255, 255))  # 미지정시 흰색
+            for i, pt in enumerate(path):
+                x, y = int(pt[0]), int(pt[1])
+                x, y = map_to_webcam(x, y)
+                x, y = int(x), int(y)
+                if i == 0:
+                    # 시작점: 삼각형 마커
+                    cv2.drawMarker(frame_undistorted, (x, y), color, markerType=cv2.MARKER_TRIANGLE_UP,
+                                   markerSize=10, thickness=2)
+                elif i == len(path) - 1:
+                    # 끝점: 별 마커
+                    cv2.drawMarker(frame_undistorted, (x, y), color, markerType=cv2.MARKER_STAR,
+                                   markerSize=10, thickness=2)
+                else:
+                    # 일반 경로점: 원
+                    cv2.circle(frame_undistorted, (int(x), int(y)), 5, color, -1)
+
+            # 로봇 번호 표기 (path의 첫 지점에)
+            if path:
+                x, y = int(path[0][0]), int(path[0][1])
+                #print(x, y)
+                x, y = map_to_webcam(x, y)
+                x_, y_ = int(x), int(y)
+                #print(x_, y_)
+                cv2.putText(frame_undistorted, f'R{rid}', (x, y-8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                #cv2.putText(frame_undistorted, f'R{rid}', (300+8, 300-8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
         # 화면 표시
-        cv2.imshow('string', frame_undistorted)
+        cv2.imshow(window_name, frame_undistorted)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
-            #self.destroy_node()
-            #rclpy.shutdown()
+            self.destroy_node()
+            rclpy.shutdown()
             pass
         elif key == ord('i'):
             for robot_id, pose_msg in self.g_initialpose_msg.items():
@@ -533,7 +619,7 @@ class SendMapPosition(Node):
 
     def destroy_node(self):
         self.cap.release()
-        #cv2.destroyAllWindows()
+        cv2.destroyAllWindows()
         super().destroy_node()
 
 
