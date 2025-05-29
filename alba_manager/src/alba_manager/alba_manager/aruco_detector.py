@@ -16,6 +16,9 @@ import pickle
 import time
 import math
 import json
+import socket
+import argparse
+import struct
 
 from alba_manager.global_cam_config import *
 from alba_manager.mapping import *
@@ -60,6 +63,18 @@ class SendMapPosition(Node):
             62: 2,
             58: 3
         }
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--host',    default='192.168.0.156', help='Destination IP')
+        parser.add_argument('--port',    type=int, default=5000, help='Destination port')
+        parser.add_argument('--width',   type=int, default=640,   help='Capture width')
+        parser.add_argument('--height',  type=int, default=480,   help='Capture height')
+        parser.add_argument('--fps',     type=int, default=20,    help='Frames per second')
+        parser.add_argument('--quality', type=int, default=80,    help='JPEG quality (0-100)')
+        self.args, unknown = parser.parse_known_args()
+
+
+        # UDP 소켓 초기화
+        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # 칼만 필터 초기화
         self.kalman_filter_params = {}
@@ -230,6 +245,28 @@ class SendMapPosition(Node):
     def pose_callback(self, robot_id, msg):
         pass
 
+    def send_frame_via_udp(self, frame):
+        interval = 1.0 / self.args.fps
+        t0 = time.time()
+        # 지정된 해상도로 리사이즈
+        frame = cv2.resize(frame, (self.args.width, self.args.height))
+        # JPEG로 인코딩
+        ok, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.args.quality])
+        if not ok:
+            self.get_logger().warn("! JPEG encode failed")
+            return
+        ts = time.time()
+        # 바이트로 변환
+        #pkt = buf.tobytes()
+        pkt = struct.pack('d', ts) + buf.tobytes()
+        self.udp_socket.sendto(pkt, (self.args.host, self.args.port))
+        """
+        # FPS 유지
+        elapsed = time.time() - t0
+        if elapsed < interval:
+            time.sleep(interval - elapsed)
+        """
+
     def normalize_angle(self, angle):
         return math.atan2(math.sin(angle), math.cos(angle))
 
@@ -307,6 +344,9 @@ class SendMapPosition(Node):
         frame_undistorted = cv2.undistort(frame, self.camera_matrix, self.dist_coeffs)
         # 마커 검출
         corners, ids, rejected = self.detector.detectMarkers(frame_undistorted)
+
+        # UDP로 프레임 전송
+        self.send_frame_via_udp(frame_undistorted)
 
         # 마커가 검출되면 표시 및 포즈 추정
         if ids is not None:
@@ -619,6 +659,7 @@ class SendMapPosition(Node):
 
     def destroy_node(self):
         self.cap.release()
+        self.udp_socket.close()
         cv2.destroyAllWindows()
         super().destroy_node()
 
