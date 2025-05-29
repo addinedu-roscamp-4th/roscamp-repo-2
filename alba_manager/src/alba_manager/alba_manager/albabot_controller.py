@@ -7,6 +7,8 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 import json
 import inspect
+import time
+
 #from alba_manager.albabot_controller import MoveToGoal
 #from albabot_controller import *
 #from move_controller import *
@@ -16,6 +18,7 @@ from alba_manager.motion.motion_pickup import *
 from alba_manager.motion.motion_serving import *
 from alba_manager.motion.move.nav2_goal_send import send_goal_and_wait
 from alba_manager.mapping import *
+from pinky_interfaces.srv import Emotion
 
 
 pickup_x, pickup_y = 51.70, 61.00
@@ -171,10 +174,12 @@ class RobotMoverNode(Node):
         # 비상시 이동 위치 설정
         map_x, map_y = emergency_exit[self.robot_id][0], emergency_exit[self.robot_id][1]
         goal_x, goal_y = map_to_real(map_x, map_y)
-        if self.robot_id == 3:
-            rotate_yaw = temp_deg
+        if self.robot_id == 1:
+            rotate_yaw = 0
+        elif self.robot_id == 2:
+            rotate_yaw = -90
         else:
-            rotate_yaw = temp_deg
+            rotate_yaw = 90
         # goal(비상시 위치) 전송, 이동 시작
         result = send_goal_and_wait(goal_x, goal_y, rotate_yaw)
         self.log_with_info(f"Moving to Emergency Exit {self.robot_id}")
@@ -182,8 +187,15 @@ class RobotMoverNode(Node):
         if result == 1:
             self.log_with_info(f"Reached to Emergency Exit {self.robot_id}")
             # 비상 동작 시작
-            self.log_with_info("비상구 안내중(모션 추가 예정)...")
-                # 추가예정
+            """
+            self.cli = self.create_client(Emotion, '/set_emotion')
+            while not self.cli.wait_for_service(timeout_sec=1.0):
+                self.get_logger().info('서비스 대기 중... /set_emotion')
+            self.req = Emotion.Request()
+            self.req.emotion = 'emergency'
+            future = self.cli.call_async(self.req)
+            rclpy.spin_until_future_complete(self, future)
+            """
             return True
         else:
             self.log_with_info("Move Failed or Goal Send Rejected")
@@ -269,6 +281,13 @@ class RobotMoverNode(Node):
             self.log_with_info("Move Failed or Goal Send Rejected")
             return False
 
+    def handle_waiting_task(self):
+        self.get_logger().info(f"MOVE TO WAITING LOCATION")
+        self.get_logger().info("복귀 시작")
+        time.sleep(3)
+        self.get_logger().info("복귀 완료")
+        return True
+
     #------------------------------------------------------------
     def send_response(self, command_msg):
         status_msg = String()
@@ -342,7 +361,7 @@ class RobotMoverNode(Node):
                 if command_msg['command_status'] == "EXECUTED" and command != 'PICKUP':
                     # PICKUP은 음식을 실은 상태에서 SERVING해야 하므로 완료 처리 되어 새 TASK 받으면 안됨
                     # 그 외의 명령은 완료 후 대기 위치로 이동
-                    self.handle_return_task()
+                    self.handle_waiting_task()
                     command_msg['command_status'] = "COMPLETED"
                     self.send_response(command_msg)
 
