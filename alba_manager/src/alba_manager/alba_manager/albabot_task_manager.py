@@ -457,6 +457,17 @@ class AlbaBotTaskManager(Node):
                                     path = None
                                 self.publish_command(robot_id, domain_id, command, param1, param2, path)
 
+                        elif command == "EMERGENCY":
+                            for robot_id in self.robot_ids:
+                                self.robot_status[robot_id]["command_id"] = work_item['id']
+                                self.set_status(robot_id, work_item['command'])
+                                domain_id = self.robot_to_domain_id.get(robot_id)
+                                if self.path_planning:
+                                    path = self.assign_path(robot_id, command, param1, param2)
+                                else:
+                                    path = None
+                                self.publish_command(robot_id, domain_id, command, param1, param2, path)
+
                         break
                 #else: self.get_logger().warn("✅ PENDING 항목이 없어 실행을 건너뜁니다.")
             else:
