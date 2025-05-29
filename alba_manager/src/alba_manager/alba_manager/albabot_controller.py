@@ -21,9 +21,9 @@ from alba_manager.mapping import *
 from pinky_interfaces.srv import Emotion
 
 
-pickup_x, pickup_y = 51.70, 61.00
+pickup_x, pickup_y = 50.00, 62.00
 serving_tables = {
-    1: (33.50, 67.00),
+    1: (33.50, 65.00),
     2: (33.50, 54.00),
     3: (38.00, 67.00),
     4: (39.50, 54.00)
