@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<launch>
+    <node
+        pkg="domain_bridge"
+        exec="domain_bridge"
+        name="albabot1_from_domain_bridge"
+        args="$(find-pkg-share alba_manager)/domain_bridge/albabot1_from_bridge_config.yaml" />
+
+    <node
+        pkg="domain_bridge"
+        exec="domain_bridge"
+        name="albabot2_from_domain_bridge"
+        args="$(find-pkg-share alba_manager)/domain_bridge/albabot2_from_bridge_config.yaml" />
+
+    <node
+        pkg="domain_bridge"
+        exec="domain_bridge"
+        name="albabot3_from_domain_bridge"
+        args="$(find-pkg-share alba_manager)/domain_bridge/albabot3_from_bridge_config.yaml" />
+
+    <node
+        pkg="domain_bridge"
+        exec="domain_bridge"
+        name="albabot1_to_domain_bridge"
+        args="$(find-pkg-share alba_manager)/domain_bridge/albabot1_to_bridge_config.yaml" />
+
+    <node
+        pkg="domain_bridge"
+        exec="domain_bridge"
+        name="albabot2_to_domain_bridge"
+        args="$(find-pkg-share alba_manager)/domain_bridge/albabot2_to_bridge_config.yaml" />
+
+    <node
+        pkg="domain_bridge"
+        exec="domain_bridge"
+        name="albabot3_to_domain_bridge"
+        args="$(find-pkg-share alba_manager)/domain_bridge/albabot3_to_bridge_config.yaml" />
+</launch>
+

@@ -1,0 +1,13 @@
+import os
+import sys
+
+CAM_DEVICE = "/dev/video2"
+#CAM_W = 1920
+#CAM_H = 1080
+CAM_W = 1280
+CAM_H = 720
+#CAM_W = 640
+#CAM_H = 480
+CHECKER_BLOCK_SIZE_MM = 0.02
+#MARKER_SIZE_MM = 0.042
+MARKER_SIZE_MM = 0.050
