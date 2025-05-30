@@ -18,7 +18,7 @@ graph TB
     end
     
     subgraph "로봇 제어 시스템"
-        H[Alba Planner<br>서빙 로봇 제어] <--> I["서빙 로봇(Pinky)<br>ROS2"]
+        H[Alba Manager<br>서빙 로봇 제어] <--> I["서빙 로봇(Pinky)<br>ROS2"]
         J[Cook Planner<br>조리 로봇 제어] <--> K["조리 로봇(jetCobot280)<br>ROS2"]
     end
     
@@ -64,7 +64,7 @@ graph TB
 로봇의 움직임과 작업을 제어하는 서브시스템입니다.
 
 **주요 구성 요소:**
-- **Alba Planner**: 서빙 로봇(Pinky) 제어 및 고객 응대 로직
+- **Alba Manager**: 서빙 로봇(Pinky) 제어 및 고객 응대 로직
 - **Cook Planner**: 조리 로봇(myCobot280) 제어 및 조리 작업 관리
 - **ROS2 인터페이스**: 로봇 운영 체제와의 통신 관리
 
@@ -100,7 +100,7 @@ graph TB
 
 | 연결 지점 | 프로토콜 | 포트 | 용도 |
 |----------|---------|------|------|
-| RoboDine Service ↔ Alba Planner | TCP | 8001 | 서빙 로봇 명령 및 상태 |
+| RoboDine Service ↔ Alba Manager | TCP | 8001 | 서빙 로봇 명령 및 상태 |
 | RoboDine Service ↔ Cook Planner | TCP | 8002 | 조리 로봇 명령 및 상태 |
 | Cook Planner ↔ CookGPT | UDP | 8003 | 비전 데이터 및 AI 결과 |
 | Frontend ↔ RoboDine Service | WebSocket | 3000 | 실시간 UI 업데이트 |
@@ -122,9 +122,9 @@ graph TB
 
 3. **서빙 처리**
    - 조리 완료 시 Cook Planner가 RoboDine Service에 알림
-   - RoboDine Service가 TCP를 통해 Alba Planner에 서빙 명령 전송
-   - Alba Planner가 ROS2를 통해 서빙 로봇에 명령 전송
-   - 서빙 완료 시 Alba Planner가 RoboDine Service에 알림
+   - RoboDine Service가 TCP를 통해 Alba Manager에 서빙 명령 전송
+   - Alba Manager가 ROS2를 통해 서빙 로봇에 명령 전송
+   - 서빙 완료 시 Alba Manager가 RoboDine Service에 알림
 
 4. **실시간 모니터링**
    - 전체 과정은 WebSocket을 통해 운영자 대시보드에 실시간 업데이트

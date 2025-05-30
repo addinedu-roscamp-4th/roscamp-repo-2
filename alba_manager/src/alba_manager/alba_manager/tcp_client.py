@@ -1,4 +1,4 @@
-# File: alba_planner/alba_manager/tcp_client.py
+# File: alba_manager/alba_manager/tcp_client.py
 
 import socket
 import json
