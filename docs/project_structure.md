@@ -9,7 +9,7 @@ RoboDine은 로봇 기반 자동화 레스토랑 솔루션으로, 서빙 로봇(
 | 모듈명 | 역할 |
 |-------|------|
 | **robodine_service** | 중앙 서버 및 프론트엔드 UI 시스템 |
-| **alba_planner** | 서빙 로봇(핑키) 관리 시스템 |
+| **alba_manager** | 서빙 로봇(핑키) 관리 시스템 |
 | **cook_planner** | 조리 로봇(myCobot280) 관리 시스템 |
 | **cook_gpt** | AI 기반 조리 지원 및 비전 처리 서비스 |
 | **docs** | 프로젝트 문서 |
@@ -42,10 +42,10 @@ robodine_service/
         └── pages/          # 페이지 컴포넌트
 ```
 
-### 2. alba_planner (서빙 로봇 관리)
+### 2. alba_manager (서빙 로봇 관리)
 
 ```
-alba_planner/
+alba_manager/
 └── alba_manager/
     ├── ros2_interface.py   # ROS2 통신 인터페이스
     ├── tcp_client.py       # 중앙 서버 통신
@@ -101,7 +101,7 @@ graph TD
     B -->|API 요청| C[RoboDine Service]
     C -->|상태 반환| B
     C -->|TCP 명령| D[Cook Planner]
-    C -->|TCP 명령| E[Alba Planner]
+    C -->|TCP 명령| E[Alba Manager]
     D <-->|UDP 통신| F[CookGPT]
     F -->|이미지 처리| F
     D -->|ROS2 명령| G[조리 로봇]
@@ -118,7 +118,7 @@ graph TD
 
 | 연결 경로 | 프로토콜 | 포트 | 용도 |
 |----------|---------|------|------|
-| RoboDine Service ↔ Alba Planner | TCP | 8001 | 로봇 명령 및 상태 전송 |
+| RoboDine Service ↔ Alba Manager | TCP | 8001 | 로봇 명령 및 상태 전송 |
 | RoboDine Service ↔ Cook Planner | TCP | 8002 | 조리 명령 및 상태 전송 |
 | CookGPT ↔ Cook Planner | UDP | 8003 | 비전 데이터 및 AI 추론 결과 |
 | Frontend ↔ RoboDine Service | WebSocket | 3000 | 실시간 상태 업데이트 |

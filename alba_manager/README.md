@@ -1,10 +1,10 @@
-# 🤖 Alba Planner - 서빙 로봇 제어 시스템
+# 🤖 Alba Manager - 서빙 로봇 제어 시스템
 
 ![](https://img.shields.io/badge/Python-3.8+-blue) ![](https://img.shields.io/badge/ROS2-Jazzy-orange) ![](https://img.shields.io/badge/TCP-Socket-green) ![](https://img.shields.io/badge/PyRobot-1.0-red)
 
 ## 📌 개요
 
-Alba Planner는 RoboDine 자동화 레스토랑의 서빙 로봇(Pinky)을 제어하는 핵심 시스템입니다. 고객 인식, 테이블 안내, 음식 서빙, 이동 경로 계획, 장애물 회피 등 서빙 로봇의 모든 기능을 담당하며 중앙 서버(RoboDine Service)와 TCP 통신을 통해 연동됩니다.
+Alba Manager는 RoboDine 자동화 레스토랑의 서빙 로봇(Pinky)을 제어하는 핵심 시스템입니다. 고객 인식, 테이블 안내, 음식 서빙, 이동 경로 계획, 장애물 회피 등 서빙 로봇의 모든 기능을 담당하며 중앙 서버(RoboDine Service)와 TCP 통신을 통해 연동됩니다.
 
 <div align="center">
   <img src="../docs/images/pinky_robot.jpg" alt="Pinky 서빙 로봇" width="400"/>
@@ -36,11 +36,11 @@ Alba Planner는 RoboDine 자동화 레스토랑의 서빙 로봇(Pinky)을 제�
 
 ## 🏗️ 시스템 아키텍처
 
-Alba Planner는 ROS2(Robot Operating System 2) 기반으로 구축되어 있으며, 다음과 같은 구성 요소로 이루어져 있습니다:
+Alba Manager는 ROS2(Robot Operating System 2) 기반으로 구축되어 있으며, 다음과 같은 구성 요소로 이루어져 있습니다:
 
 ```mermaid
 graph TB
-    A[Alba Planner 코어] --> B[ROS2 인터페이스]
+    A[Alba Manager 코어] --> B[ROS2 인터페이스]
     A --> C[TCP 클라이언트]
     A --> D[경로 계획기]
     A --> E[상태 관리자]
@@ -72,7 +72,7 @@ graph TB
 ## 📁 디렉토리 구조
 
 ```
-alba_planner/
+alba_manager/
 ├── alba_manager/
 │   ├── __init__.py
 │   ├── main.py              # 메인 실행 파일
@@ -85,7 +85,7 @@ alba_planner/
 │   ├── customer_detector.py # 고객 감지 모듈
 │   └── battery_monitor.py   # 배터리 모니터링
 ├── launch/
-│   └── alba_planner.launch.py  # ROS2 실행 파일
+│   └── alba_manager_launch.py  # ROS2 실행 파일
 ├── msg/
 │   ├── RobotState.msg       # 로봇 상태 메시지 정의
 │   └── NavigationGoal.msg   # 네비게이션 목표 메시지 정의
@@ -111,7 +111,7 @@ alba_planner/
 
 ## 🔄 통신 프로토콜
 
-Alba Planner는 다음과 같은 통신 방식으로 다른 시스템과 연동됩니다:
+Alba Manager는 다음과 같은 통신 방식으로 다른 시스템과 연동됩니다:
 
 | 연결 대상 | 프로토콜 | 포트 | 내용 |
 |---------|---------|-----|------|
@@ -142,7 +142,7 @@ Alba Planner는 다음과 같은 통신 방식으로 다른 시스템과 연동�
 
 ### 설치 및 실행
 
-1. ROS2 워크스페이스에 Alba Planner 클론:
+1. ROS2 워크스페이스에 Alba Manager 클론:
 
 ```bash
 cd ~/ros2_ws/src/
@@ -159,14 +159,14 @@ rosdep install --from-paths src --ignore-src -r -y
 3. 빌드:
 
 ```bash
-colcon build --packages-select alba_planner
+colcon build --packages-select alba_manager
 ```
 
 4. 실행:
 
 ```bash
 source ~/ros2_ws/install/setup.bash
-ros2 launch alba_planner alba_planner.launch.py
+ros2 launch alba_manager alba_manager_launch.py
 ```
 
 ## 📊 성능 및 제한사항
@@ -180,7 +180,7 @@ ros2 launch alba_planner alba_planner.launch.py
 
 ## 🧪 테스트
 
-Alba Planner는 다양한 테스트를 통해 안정성을 검증합니다:
+Alba Manager는 다양한 테스트를 통해 안정성을 검증합니다:
 
 - **단위 테스트**: 개별 모듈 기능 테스트
 - **통합 테스트**: ROS2 인터페이스 및 TCP 통신 테스트
@@ -191,7 +191,7 @@ Alba Planner는 다양한 테스트를 통해 안정성을 검증합니다:
 
 ```bash
 cd ~/ros2_ws
-colcon test --packages-select alba_planner
+colcon test --packages-select alba_manager
 ```
 
 ## 🔧 문제 해결
