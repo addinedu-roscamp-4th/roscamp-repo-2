@@ -198,10 +198,19 @@ def interpolate_quintic_with_timing(coords_list, sampling_time=0.05, segment_dur
 
 # === Main Script ===
 package_name = 'cookmanager'
-trajectory_names = ['grip_dish_L', 'grip_dish_R']
+trajectory_names = ['grip_pickup_L', 'grip_pickup_R']
 
 pkg_path = get_package_share_directory(package_name)
 yaml_path = os.path.join(pkg_path, 'trajectories.yaml')
+
+color_map = {
+    (trajectory_names[0], 'rx'): '#e6194b',  # 빨강
+    (trajectory_names[0], 'ry'): '#3cb44b',  # 초록
+    (trajectory_names[0], 'rz'): '#4363d8',  # 파랑
+    (trajectory_names[1], 'rx'): '#f58231',  # 주황
+    (trajectory_names[1], 'ry'): '#911eb4',  # 보라
+    (trajectory_names[1], 'rz'): '#46f0f0',  # 시안
+}
 
 with open(yaml_path, 'r') as f:
     traj_dict = yaml.safe_load(f)
@@ -240,11 +249,11 @@ for name in trajectory_names:
         ax3d.set_zlabel("Z")
         ax3d.legend()
 
-        # RPY Overlay Plot (각 보간 방식별 1개 subplot)
+        # RPY Overlay Plot
         axrpy = axs_rpy_matrix[i]
-        axrpy.plot([p.rx for p in path], label=f"{name}-rx", color='r')
-        axrpy.plot([p.ry for p in path], label=f"{name}-ry", color='g')
-        axrpy.plot([p.rz for p in path], label=f"{name}-rz", color='b')
+        axrpy.plot([p.rx for p in path], label=f"{name}-rx", color=color_map[(name, 'rx')])
+        axrpy.plot([p.ry for p in path], label=f"{name}-ry", color=color_map[(name, 'ry')])
+        axrpy.plot([p.rz for p in path], label=f"{name}-rz", color=color_map[(name, 'rz')])
         axrpy.set_title(f"{fig_titles[i]} RPY")
         axrpy.set_ylabel("Angle (deg)")
         axrpy.set_ylim([-180, 180])

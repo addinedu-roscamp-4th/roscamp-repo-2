@@ -6,25 +6,25 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='cookmanager',
-            executable='unit_test',
+            executable='unit_test_JH',
             name='unit_test',
-            output='screen',
-            emulate_tty=True
-        ),
-        Node(
-            package='cookmanager',
-            executable='tcp_interface',
-            name='tcp_interface',
             output='screen',
             emulate_tty=True
         ),
         # Node(
         #     package='cookmanager',
-        #     executable='cookgpt',
-        #     name='cookgpt_service_node',
+        #     executable='tcp_interface',
+        #     name='tcp_interface',
         #     output='screen',
         #     emulate_tty=True
         # ),
+        Node(
+            package='cookmanager',
+            executable='cookgpt_JH',
+            name='cookgpt_service_node',
+            output='screen',
+            emulate_tty=True
+        ),
         # Node(
         #     package='cookmanager',
         #     executable='pose_broadcaster',

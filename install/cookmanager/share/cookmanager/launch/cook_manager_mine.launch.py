@@ -18,13 +18,13 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True
         ),
-        Node(
-            package='cookmanager',
-            executable='cookgpt',
-            name='cookgpt_service_node',
-            output='screen',
-            emulate_tty=True
-        ),
+        # Node(
+        #     package='cookmanager',
+        #     executable='cookgpt',
+        #     name='cookgpt_service_node',
+        #     output='screen',
+        #     emulate_tty=True
+        # ),
         # Node(
         #     package='cookmanager',
         #     executable='pose_broadcaster',

@@ -31,10 +31,10 @@ class TCPInterface(Node):
             
         self.create_subscription(CookState, '/cook_state', self.cook_state_callback, 10)
         self.menu_command_pub = self.create_publisher(String, '/menu_item', 10)
-        # self.create_timer(0.1, self.publish_next_menu_item)  # 0.1초마다 처리
+        self.create_timer(0.1, self.publish_next_menu_item)  # 0.1초마다 처리
         # 주기적으로 TCP 전송 (1초 간격)
-        self.timer = self.create_timer(1.0, lambda: self.send_data_to_server(self.cookbot_state))
-        self.create_timer(300.0, self.get_menu)
+        # self.timer = self.create_timer(1.0, lambda: self.send_data_to_server(self.cookbot_state))
+        self.create_timer(15.0, self.get_menu)
 
         #일단 한 번 요청
         self.get_menu()
@@ -58,6 +58,8 @@ class TCPInterface(Node):
         self.get_logger().info(f"🍳 상태 수신: {state}, 주문 ID: {order_id}")
         if state == "COOKING":
             self.put_menu_status(order_id, "PREPARING")
+        elif state == "PICKUP":
+            self.put_menu_status(order_id, "COMPLETED")
 
     def send_payload(self, host, port, payload: dict):
         raw = json.dumps(payload).encode('utf-8')
@@ -159,8 +161,8 @@ class TCPInterface(Node):
                 msg.data = ';'.join([f"{item['order_id']},{item['item_name']}" for item in self.menu_items])
                 self.menu_command_pub.publish(msg)
 
-            else:
-                self.get_logger().warn(f"❌ 메뉴 요청 실패 - 상태 코드 {response.status_code}")
+            # else:
+                # self.get_logger().warn(f"❌ 메뉴 요청 실패 - 상태 코드 {response.status_code}")
         except requests.exceptions.RequestException as e:
             self.get_logger().warn(f"⚠️ REST API 통신 실패: {e}")
 
