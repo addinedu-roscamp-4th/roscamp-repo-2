@@ -44,7 +44,7 @@ class RotateToYawPID(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         # 완료 플래그
         self.reached = False
-        self.tolerance_rad = math.radians(3)  # 허용 오차
+        self.tolerance_rad = math.radians(1)  # 허용 오차
     def pose_callback(self, msg):
         if self.reached:
             return  # 이미 완료된 경우 무시
@@ -132,7 +132,7 @@ def main(args=None):
     rclpy.init(args=args)
     # 픽업 지점 근처에 왔다고 가정. 이후 픽업 지점까지 이동
     # 1. 방향 회전
-    rotate_node = RotateToYawPID(0.0)
+    rotate_node = RotateToYawPID(3.141592)
     # 2. 방향 정렬 완료까지 spin
     while rclpy.ok() and not rotate_node.reached:
         rclpy.spin_once(rotate_node, timeout_sec=0.1)

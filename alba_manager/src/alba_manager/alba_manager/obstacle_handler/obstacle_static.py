@@ -9,6 +9,8 @@ from rclpy.action import ActionClient
 import math
 import numpy as np
 import atexit
+import signal
+import sys
 
 
 class StaticObstacleAvoidance(Node):
@@ -31,6 +33,8 @@ class StaticObstacleAvoidance(Node):
 
         # 종료 시 무조건 정지
         atexit.register(self._on_exit)
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
     def goal_callback(self, msg: PoseStamped):
         self.get_logger().info('New goal received')
@@ -85,6 +89,12 @@ class StaticObstacleAvoidance(Node):
         except Exception:
             pass
 
+    def _signal_handler(self, signum, frame):
+        self.get_logger().warn(f"🔴 Signal {signum} received. Stopping robot and shutting down...")
+        self.stop_robot()
+        rclpy.shutdown()
+        sys.exit(0)
+
     def backup(self, obstacle_angles=None, duration_sec=0.5):
         if obstacle_angles is None:
             obstacle_angles = []
@@ -137,6 +147,14 @@ class StaticObstacleAvoidance(Node):
 
         self.recent_ranges.clear()
         self.get_logger().info('Filter cleared after backup.')
+
+def run_static_obstacle_handler(stop_event):
+    rclpy.init()
+    node = StaticObstacleAvoidance()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
 
 def main(args=None):
     rclpy.init(args=args)

@@ -95,6 +95,13 @@ class DynamicObstacleAvoidance(Node):
         self.recent_ranges.clear()
         self.get_logger().info('Filter cleared after waiting.')
 
+def run_dynamic_obstacle_handler():
+    rclpy.init()
+    node = DynamicObstacleAvoidance()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
 
 def main(args=None):
     try:
