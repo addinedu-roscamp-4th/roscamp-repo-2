@@ -9,7 +9,6 @@ import { NotificationsProvider } from './contexts/NotificationsContext';
 import { HealthCheckProvider } from './contexts/HealthCheckContext';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <WebSocketProvider>
@@ -21,5 +20,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </WebSocketProvider>
       </AuthProvider>
     </BrowserRouter>
-  </React.StrictMode>
 ); 

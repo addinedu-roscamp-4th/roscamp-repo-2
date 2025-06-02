@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NotificationOverlay from '../Notifications/NotificationOverlay';
+import { useLanguage } from '../../context/LanguageContext';
 
 // 미니 장바구니 아이템 컴포넌트
 const MiniCartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
+  const { t } = useLanguage();
+  
   // 가격 포맷
   const formattedPrice = new Intl.NumberFormat('ko-KR', {
     style: 'currency',
@@ -62,6 +65,7 @@ const MiniCartItem = ({ item, onIncrease, onDecrease, onRemove }) => {
 const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease }) => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
+  const { t } = useLanguage();
 
   // 가격 포맷
   const formattedTotalAmount = new Intl.NumberFormat('ko-KR', {
@@ -75,7 +79,7 @@ const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease 
     if (cartItems.length > 0) {
       navigate('/checkout');
     } else {
-      addNotification("장바구니가 비어 있습니다. 메뉴를 선택해주세요.");
+      addNotification(t('cart.empty'));
     }
   };
 
@@ -102,12 +106,12 @@ const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease 
         onClose={handleCloseNotification} 
       />
       <div className="p-6 border-b border-gray-200 bg-[#F7F3EE]">
-        <h2 className="text-3xl font-bold">장바구니</h2>
+        <h2 className="text-3xl font-bold">{t('cart.title')}</h2>
       </div>
 
       {cartItems.length === 0 ? (
         <div className="flex-grow flex flex-col items-center justify-center p-6 text-gray-500">
-          <p className="text-2xl">장바구니가 비어 있습니다</p>
+          <p className="text-2xl">{t('cart.empty')}</p>
         </div>
       ) : (
         <>
@@ -138,14 +142,14 @@ const CartSidebar = ({ cartItems, totalAmount, onRemove, onIncrease, onDecrease 
           {/* 합계 및 결제 버튼 */}
           <div className="p-6 border-t border-gray-200">
             <div className="flex justify-between items-center mb-6">
-              <span className="font-bold text-2xl">합계</span>
+              <span className="font-bold text-2xl">{t('cart.totalPrice')}</span>
               <span className="font-bold text-3xl">{formattedTotalAmount}</span>
             </div>
             <button
               className="w-full py-5 bg-[#C49E69] text-white rounded-md font-semibold text-2xl"
               onClick={handleCheckout}
             >
-              결제하기
+              {t('cart.checkout')}
             </button>
           </div>
         </>

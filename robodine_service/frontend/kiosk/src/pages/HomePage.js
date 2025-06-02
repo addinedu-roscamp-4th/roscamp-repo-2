@@ -3,17 +3,32 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useUnifiedWebSockets } from '../context/UnifiedWebSocketProvider';
+import { useLanguage } from '../context/LanguageContext';
 import CartSidebar from '../components/Cart/CartSidebar';
 import MenuGrid from '../components/Menu/MenuGrid';
 import Sidebar from '../components/Layout/Sidebar';
 import NotificationOverlay from '../components/Notifications/NotificationOverlay';
 
 // 카테고리 섹션 헤더 컴포넌트
-const CategoryHeader = ({ category, id }) => (
-  <div id={`category-${id}`} className="pt-6 pb-4 px-8 border-b-4 border-[#C49E69] bg-[#F7F3EE] mb-4">
-    <h2 className="text-3xl font-bold">{category}</h2>
-  </div>
-);
+const CategoryHeader = ({ category, id }) => {
+  const { t } = useLanguage();
+  
+  // 카테고리 ID별 번역 키 매핑
+  const getCategoryTranslationKey = (categoryId) => {
+    switch(categoryId) {
+      case '추천': return 'categories.recommended';
+      case '음식': return 'categories.food';
+      case '음료': return 'categories.beverage';
+      default: return categoryId;
+    }
+  };
+
+  return (
+    <div id={`category-${id}`} className="pt-6 pb-4 px-8 border-b-4 border-[#C49E69] bg-[#F7F3EE] mb-4">
+      <h2 className="text-3xl font-bold">{t(getCategoryTranslationKey(category))}</h2>
+    </div>
+  );
+};
 
 const HomePage = () => {
   // 웹소켓 컨텍스트 사용
@@ -21,6 +36,9 @@ const HomePage = () => {
   
   // 장바구니 컨텍스트
   const { addToCart, cartItems, getTotalAmount, removeFromCart, increaseQuantity, decreaseQuantity } = useCart();
+  
+  // 언어 컨텍스트
+  const { t, language } = useLanguage();
   
   // 상태 관리
   const [menuItems, setMenuItems] = useState([]);
@@ -255,36 +273,29 @@ const HomePage = () => {
     // });
 
     // 로딩 상태 업데이트
-    if ((connected.menu && data.menu) || (connected.orders && data.orders?.menuitems)) {
+    if (connected.menu && data.menu) {
       setIsLoading(false);
     }
 
     // 메뉴 데이터 추출 및 처리
     const processMenuData = () => {
       try {
-        // 메뉴 데이터 소스 결정
+        // 메뉴 데이터 소스 결정 - 오직 menu 토픽만 사용
         let menuItemsData = [];
         let categoryItems = [];
 
         // menu 토픽에서 데이터 확인
-        if (data.menu && data.menu.items && Array.isArray(data.menu.items)) {
+        if (connected.menu && 
+            data.menu && 
+            Array.isArray(data.menu.items) && 
+            data.menu.items.length > 0) {
           menuItemsData = data.menu.items;
           
           if (data.menu.categories && Array.isArray(data.menu.categories)) {
             categoryItems = data.menu.categories;
           }
-        } 
-        // orders 토픽에서 데이터 확인
-        else if (data.orders && data.orders.menuitems && Array.isArray(data.orders.menuitems)) {
-          menuItemsData = data.orders.menuitems;
-          
-          if (data.orders.categories && Array.isArray(data.orders.categories)) {
-            categoryItems = data.orders.categories;
-          }
-        }
-
-        if (menuItemsData.length === 0) {
-          // console.log('메뉴 데이터를 찾을 수 없음');
+        } else {
+          // menu 토픽 데이터가 없거나 비어있으면 더 이상 처리하지 않음
           return;
         }
 
@@ -348,13 +359,10 @@ const HomePage = () => {
     };
 
     // 메뉴 데이터가 있는 경우 처리
-    if (
-      (data.menu && (data.menu.items || data.menu.menuitems)) || 
-      (data.orders && data.orders.menuitems)
-    ) {
+    if (connected.menu && data.menu) {
       processMenuData();
     }
-  }, [data.menu, data.orders, connected.menu, connected.orders, refreshTopic]);
+  }, [data.menu, connected.menu, refreshTopic]);
 
   // 초기 마운트 시 카테고리 초기화
   useEffect(() => {
@@ -381,10 +389,37 @@ const HomePage = () => {
   };
 
   // 장바구니에 아이템 추가
-  const handleAddToCart = (item) => {
-    addToCart(item);
+  const handleAddToCart = (item, quantity = 1) => {
+    if (!item || !item.id) {
+      console.error('장바구니에 추가할 아이템이 유효하지 않습니다:', item);
+      return;
+    }
+    
+    // 유효한 수량 확인
+    const validQuantity = Math.max(1, parseInt(quantity) || 1);
+    
+    // 필요한 정보만 포함한 객체 생성
+    const itemToAdd = {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      image_url: item.image_url || item.image,
+      description: item.description || '',
+      prepare_time: item.prepare_time || 0
+    };
+    
+    // 장바구니에 추가
+    addToCart(itemToAdd, validQuantity);
+    
     // 성공 알림 추가
-    addNotification(`${item.name}이(가) 장바구니에 추가되었습니다.`);
+    // 언어에 따라 메시지 출력
+    if (language === 'en') {
+      addNotification(`${itemToAdd.name} has been added to cart.`);
+    } else if (language === 'ja') {
+      addNotification(`${itemToAdd.name}がカートに追加されました。`);
+    } else {
+      addNotification(`${itemToAdd.name}이(가) 장바구니에 추가되었습니다.`);
+    }
   };
 
   // 카테고리 선택 처리
@@ -439,7 +474,7 @@ const HomePage = () => {
           {/* 로딩 상태 */}
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C49E69]"></div>
-            <p className="text-gray-500 text-xl ml-4">메뉴를 불러오는 중입니다...</p>
+            <p className="text-gray-500 text-xl ml-4">{t('common.loading')}</p>
           </div>
         </div>
         
@@ -471,7 +506,7 @@ const HomePage = () => {
           className="flex-grow overflow-auto"
         >
           <div className="bg-red-100 border border-red-400 text-red-700 p-4 rounded-md">
-            <p className="text-xl">{error}</p>
+            <p className="text-xl">{t('common.error')}</p>
             <button
               className="mt-4 bg-[#E53E3E] text-white px-6 py-3 rounded-md text-lg"
               onClick={() => {
@@ -485,7 +520,7 @@ const HomePage = () => {
                 }
               }}
             >
-              다시 시도
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -519,13 +554,13 @@ const HomePage = () => {
         >
           <div className="flex flex-col items-center justify-center p-6 h-64">
             <div className="bg-yellow-100 text-yellow-800 p-4 rounded-md text-center w-full max-w-md">
-              <p className="text-xl mb-4">메뉴 정보 없음</p>
-              <p className="mb-4">현재 사용 가능한 메뉴 정보가 없습니다.</p>
+              <p className="text-xl mb-4">{t('common.noMenuInfo')}</p>
+              <p className="mb-4">{t('common.noAvailableMenuInfo')}</p>
               <button
                 onClick={handleRefresh}
                 className="bg-[#C49E69] text-white px-4 py-2 rounded-md"
               >
-                다시 불러오기
+                {t('common.refresh')}
               </button>
             </div>
           </div>
@@ -543,54 +578,71 @@ const HomePage = () => {
   }
 
   return (
-    <div className="flex h-screen">
-      <NotificationOverlay 
-        notifications={notifications} 
-        onClose={handleCloseNotification} 
-      />
+    <div className="flex h-screen bg-gray-100">
       <Sidebar 
-        selectedCategory={selectedCategory}
-        onSelectCategory={handleCategorySelect}
+        selectedCategory={selectedCategory} 
+        onSelectCategory={handleCategorySelect} 
       />
-      <div 
-        ref={contentRef} 
-        className="flex-grow overflow-auto"
-        onScroll={() => {
-          if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-          scrollTimerRef.current = setTimeout(() => {
-            handleScroll();
-            scrollTimerRef.current = null;
-          }, 50);
-        }}
-      >
-        {/* 메뉴 섹션 */}
-        <div className="pb-20 pt-1">
-          {categories.map((cat, index) => (
-            <div 
-              key={cat} 
-              ref={el => categoryRefs.current[cat] = el}
-              className={`${index === 0 ? 'pt-4 pb-12' : index === categories.length - 1 ? 'pb-80' : 'pb-20'}`}
-              style={{ minHeight: index === 0 ? '50px' : '300px' }}
-            >
-              <CategoryHeader category={cat} id={cat} />
-              <MenuGrid 
-                items={menuByCategory[cat] || []} 
-                onAddToCart={handleAddToCart} 
-                category={cat}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
       
-      {/* 장바구니 사이드바 */}
-      <CartSidebar 
-        cartItems={cartItems}
-        totalAmount={getTotalAmount()}
-        onRemove={removeFromCart}
-        onIncrease={increaseQuantity}
-        onDecrease={decreaseQuantity}
-      />
+      <div className="flex-grow flex overflow-hidden">
+        {/* 메인 컨텐츠 영역 */}
+        <div className="flex-grow overflow-auto" ref={contentRef}>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C49E69] mx-auto"></div>
+                <p className="mt-4 text-lg text-gray-600">{t('common.loading')}</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-red-600">
+                <p className="text-xl">{t('common.error')}</p>
+                <button 
+                  onClick={handleRefresh}
+                  className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                >
+                  {t('common.retry')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4">
+              <NotificationOverlay 
+                notifications={notifications} 
+                onClose={handleCloseNotification} 
+              />
+              
+              {/* 각 카테고리별 메뉴 표시 */}
+              {categories.map(category => (
+                <div key={category}>
+                  <div ref={el => categoryRefs.current[category] = el}>
+                    <CategoryHeader 
+                      category={category} 
+                      id={category} 
+                    />
+                  </div>
+                  
+                  <MenuGrid 
+                    menuItems={menuByCategory[category] || []} 
+                    onAddToCart={handleAddToCart}
+                    language={language}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* 장바구니 사이드바 */}
+        <CartSidebar 
+          cartItems={cartItems} 
+          totalAmount={getTotalAmount()} 
+          onRemove={removeFromCart}
+          onIncrease={increaseQuantity}
+          onDecrease={decreaseQuantity}
+        />
+      </div>
     </div>
   );
 };

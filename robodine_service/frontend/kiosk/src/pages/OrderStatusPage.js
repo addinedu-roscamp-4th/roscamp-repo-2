@@ -1,15 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUnifiedWebSockets } from '../context/UnifiedWebSocketProvider';
 import Sidebar from '../components/Layout/Sidebar';
 import NotificationOverlay from '../components/Notifications/NotificationOverlay';
+import { useLanguage } from '../context/LanguageContext';
 import axios from 'axios';
+import styled from 'styled-components';
+import translations from '../locale/translations';
+import LiveStreamComponent from '../components/LiveStreamComponent';
+// import { useWebSocket } from '../context/WebSocketContext';
 
 const Base_API_URL = process.env.REACT_APP_BASE_URL
 
 // 메뉴 아이템 카드 컴포넌트
 const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
   const timerRef = useRef(null);
+  const { t, language } = useLanguage();
 
   // 상태에 따른 배경색 설정
   const getBgColor = (status) => {
@@ -21,39 +27,71 @@ const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
   };
 
   // 상태 텍스트 변환
-  const getStatusText = (status, time) => {
+  const getStatusText = (status) => {
     switch (status) {
-      case 'cooking': return '조리중';
-      case 'ready': return '완료';
-      default: return '대기중';
+      case 'cooking': return t('orderStatus.cooking');
+      case 'ready': return t('orderStatus.ready');
+      default: return t('orderStatus.waiting');
     }
   };
 
   const formattedPrice = new Intl.NumberFormat('ko-KR').format(item.price);
 
   // waiting, cooking 상태일 때만 취소 버튼 활성화
-  const canCancel = item.status === 'waiting' || item.status === 'cooking';
+  const canCancel = item.status === 'waiting';
 
   // 시간을 정수로 표시
   const formattedTime = Math.max(0, remainingTime).toFixed(0);
 
+  // 메뉴 아이템 이름 다국어 지원
+  const getMenuName = (name) => {
+    if (language === 'ko') return name;
+    
+    // translations.js의 menuData에서 해당 메뉴의 번역된 이름 찾기
+    const menuKeys = Object.keys(translations[language].menuData || {});
+    const menuKey = menuKeys.find(key => key === name);
+    
+    if (menuKey) {
+      return translations[language].menuData[menuKey].name;
+    }
+    
+    return name;
+  };
+  
+  // 가격 포맷
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat(
+      language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'ko-KR', 
+      { 
+        style: 'currency', 
+        // 무조건 원화
+        currency: 'KRW',
+        // currency: language === 'en' ? 'USD' : language === 'ja' ? 'JPY' : 'KRW',
+        minimumFractionDigits: 0 
+      }
+    ).format(price);
+  };
+  
+  const statusText = getStatusText(item.status);
+  const statusBgColor = getBgColor(item.status);
+
   return (
-    <div className={`w-56 rounded-lg shadow-md border-l-4 flex-shrink-0 ${getBgColor(item.status)}`}>
+    <div className={`w-56 rounded-lg shadow-md border-l-4 flex-shrink-0 ${statusBgColor}`}>
       <div className="p-4 relative">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="text-xl font-bold truncate">{item.name}</h3>
+          <h3 className="text-xl font-bold truncate">{getMenuName(item.name)}</h3>
           <span className={`text-sm font-medium px-2 py-1 rounded-full whitespace-nowrap
             ${item.status === 'ready' ? 'text-green-800 bg-green-100' : 
               item.status === 'cooking' ? 'text-yellow-800 bg-yellow-100' : 
               'text-gray-600 bg-gray-200'}`}>
-            {getStatusText(item.status, formattedTime)}
+            {statusText}
           </span>
         </div>
         <div className="h-36 w-full mb-3 rounded overflow-hidden">
           <div className="w-full h-full relative">
             <img 
               src={item.image_url || `http://192.168.0.156:8000/images/menu/${item.name.toLowerCase()}.png`} 
-              alt={item.name} 
+              alt={getMenuName(item.name)} 
               className="w-full h-full object-contain bg-gray-100"
               onError={(e) => {
                 e.target.src = 'http://192.168.0.156:8000/images/menu/default.png';
@@ -62,9 +100,9 @@ const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
           </div>
         </div>
         <div className="flex justify-between items-center mb-2">
-          <span className="text-lg">{formattedPrice}원</span>
+          <span className="text-lg">{formatPrice(item.price)}</span>
           <span className="text-sm font-medium bg-white px-2 py-1 rounded-full">
-            {item.qty}개
+            {item.qty}{t('orderStatus.items')}
           </span>
         </div>
         
@@ -73,7 +111,7 @@ const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
             onClick={() => onCancelItem(item.menuItemId, item.orderId)}
             className="w-full bg-red-100 text-red-700 py-2 rounded-md font-medium hover:bg-red-200 transition-colors"
           >
-            취소
+            {t('orderStatus.cancel')}
           </button>
         )}
       </div>
@@ -83,6 +121,8 @@ const MenuItemCard = ({ item, onCancelItem, remainingTime }) => {
 
 // 취소 확인 모달 컴포넌트
 const CancelConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isProcessing }) => {
+  const { t } = useLanguage();
+  
   if (!isOpen) return null;
 
   return (
@@ -96,7 +136,7 @@ const CancelConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isProc
             disabled={isProcessing}
             className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
           >
-            취소
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -105,7 +145,7 @@ const CancelConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isProc
               isProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
             }`}
           >
-            {isProcessing ? '처리 중...' : '확인'}
+            {isProcessing ? t('common.loading') : t('common.confirm')}
           </button>
         </div>
       </div>
@@ -117,6 +157,7 @@ const OrderStatusPage = () => {
   const navigate = useNavigate();
   // 통합 WebSocket 컨텍스트 사용
   const { data, connected, errors, currentCustomer, customerOrders, refreshTopic, orderItemsRemainingTime } = useUnifiedWebSockets();
+  const { t, language } = useLanguage();
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -133,6 +174,12 @@ const OrderStatusPage = () => {
     itemId: null,
     orderId: null,
     isFullOrder: false
+  });
+
+  // 실시간 조리 라이브 모달 상태 추가
+  const [liveStreamModal, setLiveStreamModal] = useState({
+    isOpen: false,
+    streamError: false
   });
   
   // 테이블 ID는 localStorage에서 가져오기
@@ -196,14 +243,63 @@ const OrderStatusPage = () => {
     });
   };
 
+  // 실시간 조리 라이브 모달 열기
+  const openLiveStreamModal = () => {
+    setLiveStreamModal({
+      isOpen: true,
+      streamError: false
+    });
+  };
+
+  // 실시간 조리 라이브 모달 닫기
+  const closeLiveStreamModal = () => {
+    setLiveStreamModal({
+      isOpen: false,
+      streamError: false
+    });
+  };
+
+  // 스트림 에러 핸들러
+  const handleStreamError = (error) => {
+    console.error('조리 영상 스트림 에러:', error);
+    setLiveStreamModal(prev => ({
+      ...prev,
+      streamError: true
+    }));
+  };
+
+  // 스트림 연결 성공 핸들러
+  const handleStreamConnected = () => {
+    console.log('조리 영상 스트림 연결 성공');
+    setLiveStreamModal(prev => ({
+      ...prev,
+      streamError: false
+    }));
+  };
+
   // 주문 취소 확인 처리
   const confirmCancelOrder = async () => {
-    if (cancelOrderModal.isFullOrder) {
-      await handleFullOrderCancel();
-    } else {
-      await handleOrderItemCancel(cancelOrderModal.itemId, cancelOrderModal.orderId);
+    const { isFullOrder, itemId, orderId } = cancelOrderModal;
+    
+    try {
+      setIsCancellingOrder(true);
+      
+      if (isFullOrder) {
+        // 전체 주문 취소 처리
+        await handleFullOrderCancel();
+      } else if (itemId && orderId) {
+        // 개별 항목 취소 처리
+        await handleOrderItemCancel(itemId, orderId);
+      }
+      
+      closeCancelModal();
+      refreshTopic('orders');
+    } catch (error) {
+      console.error(t('orderStatus.error.cancel'), error);
+      addNotification(t('common.error'));
+    } finally {
+      setIsCancellingOrder(false);
     }
-    closeCancelModal();
   };
 
   // 전체 주문 취소 처리
@@ -228,7 +324,7 @@ const OrderStatusPage = () => {
       }
       
       // 성공 알림
-      addNotification('주문이 성공적으로 취소되었습니다.');
+      addNotification(t('orderStatus.success.itemCancelled'));
       
       // 백엔드에서 웹소켓으로 자동 업데이트가 전송되므로
       // 일정 시간 후 로딩 상태만 해제 (2초로 단축)
@@ -260,7 +356,7 @@ const OrderStatusPage = () => {
       );
       
       // 성공 알림
-      addNotification('선택한 메뉴가 취소되었습니다.');
+      addNotification(t('orderStatus.success.itemCancelled'));
       
       // 백엔드에서 웹소켓으로 자동 업데이트가 전송되므로
       // 일정 시간 후 로딩 상태만 해제 (2초로 단축)
@@ -313,7 +409,6 @@ const OrderStatusPage = () => {
     }
 
     try {
-      // console.log('주문 데이터 처리 시작:', customerOrders);
       
       // 현재 고객의 모든 주문을 시간순으로 정렬 (최신 순)
       const sortedOrders = [...customerOrders].sort((a, b) => {
@@ -339,13 +434,20 @@ const OrderStatusPage = () => {
         order => (order['Order.status'] || order.status) === 'PREPARING'
       );
       
+      // 준비중인 상태가 없고 대기 중인 주문이 있다면 PLACED 상태로 설정
+      const hasPlacedOrder = sortedOrders.some(
+        order => (order['Order.status'] || order.status) === 'PLACED'
+      );
+
+      
       // 최종 주문 상태 결정
       let orderStatus;
       if (hasPreparingOrder) {
         orderStatus = 'PREPARING';
-      } else {
-        // 취소 상태는 무시하고, 대기 중(PLACED) 상태만 표시
+      } else if (hasPlacedOrder) {
         orderStatus = 'PLACED';
+      } else {
+        orderStatus = 'COMPLETED'; // 모든 주문이 완료된 상태
       }
       
       // 주문 시간 가져오기 (가장 최근 주문의 시간)
@@ -484,21 +586,24 @@ const OrderStatusPage = () => {
   const formatDateTime = (dateStr) => {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    return date.toLocaleString(
+      language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'ko-KR', 
+      {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: language === 'en' ? true : false
+      }
+    );
   };
 
   // 새로고침 처리
   const handleRefresh = () => {
     refreshTopic('orders');
     refreshTopic('tables');
-    addNotification('주문 정보를 새로고침했습니다.');
+    addNotification(t('orderStatus.refreshed'));
   };
 
   // 주문 상태 변경 감지 및 알림
@@ -511,21 +616,24 @@ const OrderStatusPage = () => {
     }
     
     const prevOrderData = prevOrderDataRef.current;
+    // console.log('이전 주문 데이터:', prevOrderData);
+    // console.log('현재 주문 데이터:', orderData);
     
     if (orderData && prevOrderData) {
       // 주문 상태 변경 확인
       if (orderData.status !== prevOrderData.status) {
+        console.log('주문 상태 변경 감지:', orderData.status);
         const statusText = {
-          'PENDING': '대기중',
-          'PLACED': '접수됨',
-          'PREPARING': '준비중',
-          'SERVING': '서빙중',
-          'SERVED': '완료',
-          'COMPLETED': '완료',
-          'CANCELLED': '취소됨'
+          'PENDING': t('orderStatus.waiting'),
+          'PLACED': t('orderStatus.waiting'),
+          'PREPARING': t('orderStatus.cooking'),
+          'SERVING': t('orderStatus.cooking'),
+          'SERVED': t('orderStatus.ready'),
+          'COMPLETED': t('orderStatus.ready'),
+          'CANCELLED': t('common.cancel')
         }[orderData.status] || orderData.status;
         
-        addNotification(`주문 상태가 ${statusText}(으)로 변경되었습니다.`);
+        addNotification(`주문 상태가 ${statusText}로 변경되었습니다.`);
       }
       
       // 각 메뉴 아이템 상태 변경 확인 (상태 변경된 항목만 1회 알림)
@@ -754,22 +862,66 @@ const OrderStatusPage = () => {
         isOpen={cancelOrderModal.isOpen}
         onClose={closeCancelModal}
         onConfirm={confirmCancelOrder}
-        title={cancelOrderModal.isFullOrder ? "전체 주문 취소" : "메뉴 취소"}
+        title={cancelOrderModal.isFullOrder ? t('orderStatus.fullOrderCancel') : t('orderStatus.cancel')}
         message={cancelOrderModal.isFullOrder 
-          ? "정말로 전체 주문을 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다." 
-          : "선택한 메뉴를 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다."}
+          ? t('orderStatus.confirmCancelAll') 
+          : t('orderStatus.confirmCancelItem')}
         isProcessing={isCancellingOrder}
       />
+      
+      {/* 실시간 조리 라이브 모달 */}
+      {liveStreamModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                <span className="mr-2">📹</span>
+                {t('orderStatus.liveStream.title')}
+              </h2>
+              <button 
+                onClick={closeLiveStreamModal}
+                className="text-gray-400 hover:text-gray-500 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-4 flex-grow overflow-auto">
+              {liveStreamModal.streamError && (
+                <div className="mb-4 p-3 bg-yellow-50 rounded border border-yellow-200 flex items-center">
+                  <span className="mr-2 text-yellow-600">⚠️</span>
+                  <span className="text-sm text-yellow-800">
+                    {t('orderStatus.liveStream.error')}
+                  </span>
+                </div>
+              )}
+
+              <div className="aspect-video bg-black relative rounded overflow-hidden">
+                <LiveStreamComponent 
+                  onError={handleStreamError}
+                  onConnected={handleStreamConnected}
+                />
+              </div>
+
+              <div className="mt-4 text-center">
+                <p className="text-gray-600 text-sm">
+                  {t('orderStatus.liveStream.description')}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="flex-grow overflow-auto p-6">
         {/* 페이지 헤더 */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">주문 현황</h1>
+          <h1 className="text-3xl font-bold">{t('orderStatus.title')}</h1>
           <button 
             onClick={handleRefresh}
             className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md"
           >
-            새로고침
+            {t('common.refresh')}
           </button>
         </div>
 
@@ -778,13 +930,13 @@ const OrderStatusPage = () => {
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex-1 min-w-[200px]">
               <p className="text-xl mb-2">
-                <strong>주문 ID:</strong> #{orderData.id.startsWith('#') ? orderData.id.substring(1) : orderData.id}
+                <strong>{t('orderStatus.orderNumber')}:</strong> #{orderData.id.startsWith('#') ? orderData.id.substring(1) : orderData.id}
               </p>
-              <p className="text-xl mb-2"><strong>테이블:</strong> {orderData.tableName}</p>
-              <p className="text-xl mb-2"><strong>고객 ID:</strong> {currentCustomer}</p>
+              <p className="text-xl mb-2"><strong>{t('orderStatus.table')}:</strong> {t('orderStatus.table')} {tableId}</p>
+              <p className="text-xl mb-2"><strong>{t('orderStatus.customerId')}:</strong> {currentCustomer}</p>
             </div>
             <div className="flex-1 min-w-[200px]">
-              <p className="text-xl mb-2"><strong>주문 상태:</strong> 
+              <p className="text-xl mb-2"><strong>{t('orderStatus.title')}:</strong> 
                 <span className={`ml-2 px-3 py-1 rounded-full text-base font-medium ${
                   orderData.status === 'SERVED' || orderData.status === 'COMPLETED' 
                     ? 'bg-green-100 text-green-800' 
@@ -794,24 +946,34 @@ const OrderStatusPage = () => {
                 }`}>
                   {
                     {
-                      'PENDING': '대기중',
-                      'PLACED': '접수됨',
-                      'PREPARING': '준비중',
-                      'SERVING': '서빙중',
-                      'SERVED': '완료',
-                      'COMPLETED': '완료',
-                      'CANCELLED': '취소됨'
+                      'PENDING': t('orderStatus.waiting'),
+                      'PLACED': t('orderStatus.waiting'),
+                      'PREPARING': t('orderStatus.cooking'),
+                      'SERVING': t('orderStatus.cooking'),
+                      'SERVED': t('orderStatus.ready'),
+                      'COMPLETED': t('orderStatus.ready'),
+                      'CANCELLED': t('common.cancel')
                     }[orderData.status] || orderData.status
                   }
                 </span>
               </p>
-              <p className="text-xl mb-2 text-blue-600"><strong>메뉴 총 개수:</strong> {orderData.orderCount}개</p>
-              <p className="text-lg text-gray-500"><strong>주문 시각:</strong> {orderData.createdAt}</p>
+              <p className="text-xl mb-2 text-blue-600"><strong>{t('orderStatus.menuTotalCount')}:</strong> {orderData.orderCount}{t('orderStatus.items')}</p>
+              <p className="text-lg text-gray-500"><strong>{t('orderStatus.orderTime')}:</strong> {orderData.createdAt}</p>
             </div>
             
-            {/* 주문 취소 버튼 (취소 가능한 상태일 때만 표시) */}
-            {(orderData.status === 'PLACED' || orderData.status === 'PREPARING') && (
-              <div className="flex items-center ml-4">
+            {/* 액션 버튼들 */}
+            <div className="flex items-center ml-4 space-x-3">
+              {/* 실시간 조리 라이브 버튼 */}
+              <button
+                onClick={openLiveStreamModal}
+                className="px-5 py-3 rounded-lg bg-[#C49E69] hover:bg-[#B18B5A] text-white text-lg font-bold flex items-center space-x-2"
+              >
+                <span>📹</span>
+                <span>{t('orderStatus.liveStream.button')}</span>
+              </button>
+              
+              {/* 주문 취소 버튼 (취소 가능한 상태일 때만 표시) */}
+              {(orderData.status === 'PLACED') && (
                 <button
                   onClick={openCancelOrderModal}
                   disabled={isCancellingOrder}
@@ -819,16 +981,16 @@ const OrderStatusPage = () => {
                     isCancellingOrder ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
                   }`}
                 >
-                  {isCancellingOrder ? '취소 중...' : '전체 주문 취소'}
+                  {isCancellingOrder ? t('common.loading') : t('orderStatus.fullOrderCancel')}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
         {/* 메뉴별 준비 상태 (카드 형식) - 높이 최적화 */}
         <div className="bg-white rounded-lg shadow p-4 mb-4">
-          <h2 className="text-xl font-medium mb-3">메뉴 준비 상태</h2>
+          <h2 className="text-xl font-medium mb-3">{t('orderStatus.menuPreparationStatus')}</h2>
           {sortedMenuItems.length > 0 ? (
             <div className="overflow-x-auto pb-2">
               <div className="flex space-x-3 min-w-max">
@@ -843,17 +1005,29 @@ const OrderStatusPage = () => {
               </div>
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-4">주문한 메뉴가 없습니다.</p>
+            <p className="text-gray-500 text-center py-4">{t('cart.empty')}</p>
           )}
         </div>
 
         {/* 결제 내역 */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-medium mb-4">결제 내역</h2>
+          <h2 className="text-2xl font-medium mb-4">{t('orderStatus.paymentDetails')}</h2>
           <div className="space-y-3 text-xl">
-            <p><strong>결제 수단:</strong> {orderData.paymentMethod}</p>
-            <p><strong>총 금액:</strong> {orderData.total.toLocaleString()}원</p>
-            <p className="text-lg text-gray-500"><strong>결제 시각:</strong> {orderData.paidAt || '-'}</p>
+            <p><strong>{t('orderStatus.paymentMethod')}:</strong> {
+              orderData.paymentMethod === '신용카드' ? t('orderStatus.creditCard') :
+              orderData.paymentMethod === '현금' ? t('orderStatus.cash') :
+              t('orderStatus.mobilePayment')
+            }</p>
+            <p><strong>{t('orderStatus.totalAmount')}:</strong> {new Intl.NumberFormat(
+              language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'ko-KR', 
+              { 
+                style: 'currency', 
+                // currency: language === 'en' ? 'USD' : language === 'ja' ? 'JPY' : 'KRW',
+                currency: 'KRW',
+                minimumFractionDigits: 0 
+              }
+            ).format(orderData.total)}</p>
+            <p className="text-lg text-gray-500"><strong>{t('orderStatus.paymentTime')}:</strong> {orderData.paidAt || '-'}</p>
           </div>
         </div>
       </div>

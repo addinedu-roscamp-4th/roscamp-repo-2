@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from pydantic import BaseModel, Field as PydanticField
 
@@ -15,22 +15,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "robot.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 # --- Robot Models ---
 class RobotRegisterRequest(BaseModel):
@@ -72,7 +73,7 @@ class CommandStatusResponse(BaseModel):
 
 class CommandListResponse(BaseModel):
     id: int
-    robot_id: int
+    robot_id: Optional[int]
     command: str
     parameters: dict
     status: str
@@ -85,7 +86,7 @@ def get_all_commands(db: Session = Depends(get_db)):
     # Get all commands
     commands = (
         db.query(RobotCommand)
-        .order_by(RobotCommand.id.desc())
+        .order_by(RobotCommand.id.asc())
         .all()
     )
     if not commands:
@@ -215,42 +216,49 @@ def delete_robot(robot_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/command", response_model=CommandResponse)
-def send_command(command_data: CommandRequest, db: Session = Depends(get_db)):
-    """로봇에 명령 전송"""
 
-    parameters = command_data.parameters or {}
+@router.post("/command", response_model=CommandResponse)
+def send_command(
+    command_data: Union[CommandRequest, dict],  # dict 도 받도록
+    db: Session = Depends(get_db)
+):
+    # command_data가 dict면 get, 아니면 attr
+    if isinstance(command_data, dict):
+        parameters = command_data.get("parameters", {}) or {}
+        robot_id = command_data.get("robot_id", None)
+        command_str = command_data.get("command")
+        status_val = command_data.get("status", CommandStatus.PENDING)
+    else:
+        parameters = command_data.parameters or {}
+        robot_id = command_data.robot_id
+        command_str = command_data.command
+        status_val = command_data.status
 
     # 로봇 존재 여부 확인
-    if not command_data.robot_id:
+    if robot_id is None:
         db_robot_id = None
     else:
-        robot = db.query(Robot).filter(Robot.robot_id == int(command_data.robot_id)).first()
+        robot = db.query(Robot).filter(Robot.robot_id == int(robot_id)).first()
         if not robot:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Robot with ID {command_data.robot_id} not found"
+                detail=f"Robot with ID {robot_id} not found"
             )
         db_robot_id = robot.id
-    
-        # 명령 파라미터 처리
-        
+
     # 새 명령 생성
     new_command = RobotCommand(
         robot_id=db_robot_id,
-        command=command_data.command,
+        command=command_str,
         parameters=parameters,
-        status=CommandStatus.PENDING,
+        status=status_val,
         timestamp=datetime.utcnow()
     )
-    
     db.add(new_command)
     db.commit()
     db.refresh(new_command)
-    
-    return CommandResponse(
-        id=new_command.id
-    )
+
+    return CommandResponse(id=new_command.id)
 
 @router.put("/commands/{command_id}/status", response_model=CommandStatusResponse)
 def update_command_status(command_id: int, status_data: CommandStatusRequest, db: Session = Depends(get_db)):
@@ -292,9 +300,11 @@ def get_commands(robot_id: int, db: Session = Depends(get_db)):
     return [
         CommandListResponse(
             id=cmd.id,
+            robot_id=cmd.robot_id,
             command=cmd.command,
             parameters=cmd.parameters,
-            status=cmd.status
+            status=cmd.status,
+            timestamp=cmd.timestamp,
         ) for cmd in commands
     ]
 

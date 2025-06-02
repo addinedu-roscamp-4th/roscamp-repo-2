@@ -132,6 +132,7 @@ export function WebSocketProvider({ children }) {
       logToStorage(topic, 'connecting', { attempt: reconnectAttempts.current[topic] });
       
       console.log(`WebSocket: ${topic} 연결 중... (시도 ${reconnectAttempts.current[topic]}/${MAX_RECONNECT_ATTEMPTS})`);
+      console.log(`WebSocket: ${topic} 연결 URL: ${WS_BASE_URL}/${topic}`);
       
       const ws = new WebSocket(`${WS_BASE_URL}/${topic}`);
       

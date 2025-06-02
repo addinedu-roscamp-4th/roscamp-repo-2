@@ -13,22 +13,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "albabot.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 class AlbabotStatusResponse(BaseModel):
     robot_id: int
@@ -38,29 +39,27 @@ class AlbabotStatusResponse(BaseModel):
 
 @router.get("", response_model=List[AlbabotStatusResponse])
 def get_all_albabot_status(db: Session = Depends(get_db)):
-    # robot_id가 겹치지 않는 Albabot 레코드들 가져오기
     albabot_records = (
         db.query(Albabot)
-        .order_by(Albabot.robot_id, Albabot.id.desc())
-        .distinct(Albabot.robot_id)
-        .all()
+          .filter(Albabot.robot_id.isnot(None))     # ← skip NULLs
+          .distinct(Albabot.robot_id)
+          .order_by(Albabot.robot_id, Albabot.timestamp.desc())
+          .all()
     )
     if not albabot_records:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No Albabot records found"
         )
-    albabot_statuses = []
-    for albabot in albabot_records:
-        albabot_statuses.append(
-            AlbabotStatusResponse(
-                robot_id=int(albabot.robot_id),
-                status=albabot.status,
-                battery_level=int(albabot.battery_level),
-                timestamp=albabot.timestamp
-            )
+    return [
+        AlbabotStatusResponse(
+            robot_id=int(a.robot_id),
+            status=a.status,
+            battery_level=int(a.battery_level),
+            timestamp=a.timestamp
         )
-    return albabot_statuses
+        for a in albabot_records
+    ]
 
 
 @router.get("/status/{robot_id}", response_model=AlbabotStatusResponse)

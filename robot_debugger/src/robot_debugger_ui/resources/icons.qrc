@@ -1,0 +1,14 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/icons">
+        <!-- 실제 아이콘 파일이 없으므로 주석 처리 -->
+        <!-- <file>emergency.png</file> -->
+        <!-- <file>reconnect.png</file> -->
+        <!-- <file>dashboard.png</file> -->
+        <!-- <file>jetcobot.png</file> -->
+        <!-- <file>pinky.png</file> -->
+        <!-- <file>log.png</file> -->
+        <!-- <file>battery.png</file> -->
+        <!-- <file>settings.png</file> -->
+    </qresource>
+</RCC> 

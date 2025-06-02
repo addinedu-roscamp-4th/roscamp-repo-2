@@ -14,24 +14,27 @@ from app.routes.auth import get_current_user
 from app.routes.events import log_info, log_warning, log_error
 
 router = APIRouter()
+
+
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "order.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 # --- Pydantic Schemas ---
 class OrderItemRequest(BaseModel):
@@ -89,11 +92,12 @@ class TodoOrderResponse(BaseModel):
 def get_todo_order(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)):
-    # 1) 대기 중인 주문중에 가장 먼저 생성된 주문을 조회합니다.
-    order = db.query(Order).order_by(Order.id).filter(Order.status == OrderStatus.PLACED).first()
+    # 1) 대기 중인 주문중에 가장 먼저 생성된 주문 중에 COMPLETED,SERVED,CANCELLED가 아닌 주문을 조회합니다.
+    order = db.query(Order).order_by(Order.id).filter(Order.status != OrderStatus.CANCELLED).filter(
+        Order.status != OrderStatus.SERVED).filter(Order.status != OrderStatus.COMPLETED).first()
     if not order:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            detail="대기 중인 주문이 없습니다.")
+                            detail="대기중인 주문이 없습니다.")
     # 2) 주문 항목을 조회합니다.
     items = db.query(OrderItem).filter(OrderItem.order_id == order.id).filter(OrderItem.status == OrderStatus.PLACED).all()
     if not items:
@@ -312,6 +316,60 @@ def update_order_status(
             f"주문 항목 {order_id} 취소됨",
             background_tasks
         )
+
+    # 주문이 서빙완료일시 전체 주문 항목도 서빙완료로 변경
+    if new_status == "SERVED":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.SERVED
+            db.add(item)
+            db.commit()
+        # Log order item serving
+        log_info(db,
+            f"주문 항목 {order_id} 서빙완료됨",
+            background_tasks
+        )
+    
+    if new_status == "COMPLETED":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.COMPLETED
+            db.add(item)
+            db.commit()
+        # Log order item completion
+        log_info(db,
+            f"주문 항목 {order_id} 완료됨",
+            background_tasks
+        )
+
+    # 주문이 준비중일시 전체 주문 항목도 준비중으로 변경 및 핑키에게 서빙 요청 명령
+    if new_status == "PREPARING":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.PREPARING
+            db.add(item)
+            db.commit()
+        # Log order item preparing
+        log_info(db,
+            f"주문 항목 {order_id} 준비중됨",
+            background_tasks
+        )
+        command = {
+            "robot_id": None,             # 필요에 맞게 설정
+            "command": "SERVING",
+            "parameters": {
+                "order_id": order_id,
+                "table_id": order.table_id,
+            },
+            "status": "PENDING"
+        }
+        from app.routes.robot import send_command
+        send_command(command, db)
+    # Log order status change
+    log_info(db,
+        f"주문 {order_id} 상태 변경: {old_status} → {new_status}",
+        background_tasks
+    )
 
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거

@@ -21,10 +21,10 @@ from sqlalchemy.orm import joinedload
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.routes import (
-    poses, websockets, streaming, inventories,
+    poses, websockets, inventories,
     robot, albabot, cookbot, auth, users, settings, customers,
     tables, kiosks, orders, menu, events, emergencies, 
-    video_streams, face_recognitions, chat
+    video_streams, face_recognitions, chat, live_streaming,
 )
 from app.routes.websockets import router as websocket_router
 from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update, broadcast_systemlogs_update, broadcast_customers_update
@@ -52,14 +52,15 @@ main_loop = None
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # 로그 디렉터리 생성
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
+LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # 로거 인스턴스
 logger = logging.getLogger("robodine.run")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
+
 
 # 포맷터
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -485,20 +486,20 @@ async def broadcast_entity_update(entity_type, entity_id):
                     # 상세 상태 조회 (albabot, cookbot, pose6d)
                     albabots = session.exec(
                         select(Albabot)
-                        .order_by(Albabot.robot_id, Albabot.id.desc())
                         .distinct(Albabot.robot_id)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
                     ).all()
                     cookbots = session.exec(
                         select(Cookbot)
-                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                         .distinct(Cookbot.robot_id)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                     ).all()
                     required_pose_entity_types = ["WORLD", "COOKBOT", "INVENTORY"]
                     poses = session.exec(
                         select(Pose6D)
                         .where(Pose6D.entity_type.in_(required_pose_entity_types))
-                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                     ).all()
                     out['albabots'] = albabots
                     out['cookbots'] = cookbots
@@ -581,8 +582,8 @@ async def broadcast_entity_update(entity_type, entity_id):
                     poses = session.exec(
                         select(Pose6D)
                         .where(Pose6D.entity_type == "WORLD")
-                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                     ).all()
                     out['poses'] = poses
                 # albabot or cookbot triggers full status
@@ -594,19 +595,19 @@ async def broadcast_entity_update(entity_type, entity_id):
                         ).all()
                     out['albabots'] = session.exec(
                         select(Albabot)
-                        .order_by(Albabot.robot_id, Albabot.id.desc())
                         .distinct(Albabot.robot_id)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
                     ).all()
                     out['cookbots'] = session.exec(
                         select(Cookbot)
-                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                         .distinct(Cookbot.robot_id)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                     ).all()
                     out['poses'] = session.exec(
                         select(Pose6D)
                         .where(Pose6D.entity_type=="WORLD")
-                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                     ).all()
                 # systemlog
                 elif entity_type == "systemlog":
@@ -1013,6 +1014,7 @@ async def health_check():
     return {"status": "healthy","database": "healthy"}
 
 # Include websocket and streaming routers (these don't need the API prefix)
+app.include_router(live_streaming.router, tags=["live_stream"])
 app.include_router(websocket_router, tags=["websocket"])
 
 # Include API routers

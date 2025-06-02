@@ -17,9 +17,9 @@ class JointAngle(SQLModel, table=True):
     timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
     # Joint angles
-    joint1: float
-    joint2: float
-    joint3: float
-    joint4: float
-    joint5: float
-    joint6: float
+    joint_1: float
+    joint_2: float
+    joint_3: float
+    joint_4: float
+    joint_5: float
+    joint_6: float

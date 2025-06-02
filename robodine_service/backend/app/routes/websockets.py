@@ -8,17 +8,25 @@ from typing import Dict, List, Optional, Any, Literal, Union
 from pydantic import BaseModel
 import asyncio
 
+# 로거 설정 및 저장
+import logging
+import os
+
 logger = logging.getLogger(__name__)
-# 로그 파일 저장
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-log_file_path = os.path.join(LOG_DIR, 'websocket.log')
-file_handler = logging.FileHandler(log_file_path)
-file_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "websocket.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
 logger.addHandler(file_handler)
-logger.setLevel(logging.INFO)
+# —————————————
 
 
 router = APIRouter()
