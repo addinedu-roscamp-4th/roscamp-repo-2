@@ -83,7 +83,15 @@ alba_manager/
 │   ├── robot_state.py       # 로봇 상태 관리
 │   ├── speech_manager.py    # 음성 안내 관리
 │   ├── customer_detector.py # 고객 감지 모듈
-│   └── battery_monitor.py   # 배터리 모니터링
+│   ├── battery_monitor.py   # 배터리 모니터링
+|   └── motion/
+│       ├── motion_cleaning.py  # 청소 모션
+│       ├── motion_pickup.py    # 픽업 모션
+│       ├── motion_serving.py   # 서빙 모션
+│       ├── move
+│       │   └── nav2_goal_send.py # nav2 goal 전달
+│       └── rotate
+│           └── rotate_pid.py # PID 회전
 ├── launch/
 │   └── alba_manager_launch.py  # ROS2 실행 파일
 ├── msg/
