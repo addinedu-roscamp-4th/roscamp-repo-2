@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const CartSummary = ({ totalAmount, itemCount }) => {
+const TotalSummary = ({ subtotal, className, proceedButtonClass, onProceed }) => {
   const navigate = useNavigate();
 
   // 가격을 원화 형식으로 포맷팅
@@ -9,36 +9,37 @@ const CartSummary = ({ totalAmount, itemCount }) => {
     style: 'currency',
     currency: 'KRW',
     minimumFractionDigits: 0
-  }).format(totalAmount);
+  }).format(subtotal);
 
   // 결제 페이지로 이동
   const handleProceedToCheckout = () => {
-    navigate('/checkout');
+    if (typeof onProceed === 'function') {
+      onProceed();
+    } else {
+      navigate('/checkout');
+    }
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <div className="mb-4 pb-4 border-b">
-        <div className="flex justify-between mb-2">
-          <span className="text-gray-600">총 {itemCount}개 메뉴</span>
-          <span>{formattedTotalAmount}</span>
-        </div>
-        <div className="flex justify-between font-bold text-lg">
+    <div className={`bg-white p-8 rounded-lg shadow-md ${className || ''}`}>
+      <div className="mb-6 pb-4 border-b">
+        <div className="flex justify-between font-bold text-2xl">
           <span>최종 결제 금액</span>
-          <span className="text-indigo-600">{formattedTotalAmount}</span>
+          <span>{formattedTotalAmount}</span>
         </div>
       </div>
       
       <button
-        className="w-full py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors duration-200 font-semibold"
+        className={`w-full py-4 rounded-md font-semibold text-xl ${proceedButtonClass || 'bg-[#C49E69] text-white'}`}
         onClick={handleProceedToCheckout}
-        disabled={itemCount === 0}
+        disabled={subtotal === 0}
+        aria-label="결제 진행하기"
       >
         결제하기
       </button>
       
-      {itemCount === 0 && (
-        <p className="text-red-500 text-center mt-2 text-sm">
+      {subtotal === 0 && (
+        <p className="text-[#E53E3E] text-center mt-3 text-lg">
           장바구니에 상품을 담아주세요
         </p>
       )}
@@ -46,4 +47,4 @@ const CartSummary = ({ totalAmount, itemCount }) => {
   );
 };
 
-export default CartSummary; 
+export default TotalSummary; 

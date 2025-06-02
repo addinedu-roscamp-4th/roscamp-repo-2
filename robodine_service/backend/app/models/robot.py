@@ -15,7 +15,7 @@ class Robot(SQLModel, table=True):
     __tablename__ = "robot"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    robot_id: Optional[str] = Field(default=None, index=True)
+    robot_id: Optional[int] = Field(default=None, index=True)
     type: Optional[EntityType] = Field(
         sa_column=Column(SQLEnum(EntityType, name="entity_type"))
     )

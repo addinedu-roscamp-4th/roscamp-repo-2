@@ -35,15 +35,21 @@ export default function DashboardPage() {
 
   // 로봇 데이터 처리
   const processedRobots = useMemo(() => {
-    // status.robots 배열이 있으면 이걸 쓰고, 없으면 fallback
+    // WebSocket으로부터 받은 로봇 상태 배열 우선 사용
     const base = Array.isArray(status.robots)
       ? status.robots
       : Array.isArray(robots)
         ? robots
         : [];
   
+    // 4번, 5번 로봇의 고정 위치
+    const FIXED_POS = {
+      4: { x: 58, y: 57, z: 0, roll: 0, pitch: 0, yaw: 0 },
+      5: { x: 58, y: 67, z: 0, roll: 0, pitch: 0, yaw: 0 },
+    };
+  
     return base.map(r => {
-      // 1) 기본 필드
+      // 1) 기본 필드 설정
       const robot = {
         id: r['Robot.id'],
         robot_id: r['Robot.robot_id'],
@@ -53,14 +59,18 @@ export default function DashboardPage() {
         lastActive: r['Robot.timestamp'],
       };
   
-      // 2) albabot/cookbot 상태
-      const alb = (status.albabots || []).find(a => a['Albabot.robot_id'] === r['Robot.robot_id']);
+      // 2) albabot / cookbot 상태 설정
+      const alb = (status.albabots || []).find(
+        a => a['Albabot.robot_id'] === r['Robot.robot_id']
+      );
       if (alb) {
         robot.status = alb['Albabot.status'];
         const lvl = alb['Albabot.battery_level'];
         robot.battery = lvl <= 1 ? Math.round(lvl * 100) : Math.round(lvl);
       } else {
-        const cook = (status.cookbots || []).find(c => c['Cookbot.robot_id'] === r['Robot.robot_id']);
+        const cook = (status.cookbots || []).find(
+          c => c['Cookbot.robot_id'] === r['Robot.robot_id']
+        );
         if (cook) {
           robot.status = cook['Cookbot.status'];
           robot.battery = 100;
@@ -70,23 +80,35 @@ export default function DashboardPage() {
         }
       }
   
-      // 3) 위치 (poses)
-      const pose = (status.poses || []).find(p => p['Pose6D.entity_id'] === r['Robot.id']);
-      if (pose) {
-        robot.position = {
-          x: pose['Pose6D.x'],
-          y: pose['Pose6D.y'],
-          z: pose['Pose6D.z']
-        };
-        // optional: latency 계산
-        const ts = new Date(pose['Pose6D.timestamp']).getTime();
-        setPoseLatencies(lat => ({ ...lat, [robot.id]: Date.now() - ts }));
+      // 3) 위치 설정: 4번·5번은 고정, 나머지는 WebSocket pose
+      const id = r['Robot.id'];
+      if (FIXED_POS[id]) {
+        robot.position = FIXED_POS[id];
+      } else {
+        const pose = (status.poses || []).find(
+          p => p['Pose6D.entity_id'] === id
+        );
+        if (pose) {
+          robot.position = {
+            x: pose['Pose6D.x'],
+            y: pose['Pose6D.y'],
+            z: pose['Pose6D.z'],
+            roll: pose['Pose6D.roll'],
+            pitch: pose['Pose6D.pitch'],
+            yaw: pose['Pose6D.yaw'],
+          };
+          // 지연(latency) 계산
+          const ts = new Date(pose['Pose6D.timestamp']).getTime();
+          setPoseLatencies(lat => ({ ...lat, [robot.id]: Date.now() - ts }));
+        }
       }
   
-      robot.name = `${robot.type.replace(/_/g,' ')} #${robot.id}`;
+      // 4) 표시용 이름
+      robot.name = `${robot.type.replace(/_/g, ' ')} #${robot.id}`;
       return robot;
     });
   }, [status, robots]);
+  
 
   // 테이블 배정 정보 처리 (CustomerPage와 동일한 방식)
   const processedAssignmentsData = useMemo(() => {

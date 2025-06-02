@@ -1,45 +1,83 @@
 import React from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 
-const MenuItem = ({ item, onAddToCart }) => {
-
-  console.log('MenuItem:', item);
-  // 가격을 원화 형식으로 포맷팅
+const MenuCard = ({ item, onTap, onAdd }) => {
+  const { t, language } = useLanguage();
+  
+  // 가격 포맷
   const formattedPrice = new Intl.NumberFormat('ko-KR', {
     style: 'currency',
     currency: 'KRW',
-    minimumFractionDigits: 0
+    minimumFractionDigits: 0,
   }).format(item.price);
 
-  // 준비 시간 표시
-  const preparationTime = `${item.prepare_time}분`;
+  // 메뉴 준비 시간 표시
+  const prepareTime = item.prepare_time || '?';
+
+  // 담기 버튼 클릭 처리
+  const handleAddToCart = (e) => {
+    e.stopPropagation(); // 상위 요소의 클릭 이벤트 전파 방지
+    
+    // 메뉴 아이템 객체와 고정 수량(1)을 전달
+    const itemToAdd = {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      image_url: item.image_url || item.image,
+      description: item.description,
+      prepare_time: item.prepare_time
+    };
+    
+    onAdd(itemToAdd, 1);
+  };
+
+  // 언어에 따른 조리시간 텍스트
+  const getCookingTimeText = () => {
+    switch(language) {
+      case 'en': return 'Estimated cooking time: ';
+      case 'ja': return '予想調理時間: ';
+      default: return '예상 조리시간: ';
+    }
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
-      <div className="h-48 bg-gray-200 flex items-center justify-center">
-        {/* 실제 이미지가 있다면 사용하고, 없으면 기본 이미지 표시 */}
+    <div 
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200"
+      onClick={onTap}
+      role="button"
+      tabIndex={0}
+      aria-label={`${item.name} ${t('menu.viewDetails')}`}
+    >
+      <div className="h-56 w-full flex items-center justify-center bg-gray-50">
         <img
-          src={item.image_url || `http://192.168.0.156:8000/images/menu/300x200?text=${encodeURIComponent(item.name)}.png`}
+          src={item.image_url || item.image}
           alt={item.name}
-          className="w-full h-full object-cover"
+          className="h-full object-cover"
         />
       </div>
-      
-      <div className="p-4">
-        <h3 className="text-lg font-semibold mb-1">{item.name}</h3>
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-indigo-600 font-bold">{formattedPrice}</span>
-          <span className="text-gray-500 text-sm">준비: {preparationTime}</span>
+
+      <div className="p-5">
+        <h3 className="text-2xl font-bold">{item.name}</h3>
+        <p className="text-sm text-gray-500 mt-1">
+          {getCookingTimeText()}{prepareTime}
+          {language === 'en' ? ' min' : language === 'ja' ? '分' : '분'}
+        </p>
+        <div className="flex justify-between items-center mt-4">
+          <span className="text-xl font-medium">
+            {formattedPrice}
+            {language === 'en' ? '' : language === 'ja' ? '円' : '원'}
+          </span>
+          <button
+            className="bg-[#C49E69] text-white px-7 py-4 rounded-md text-xl font-bold hover:brightness-95"
+            onClick={handleAddToCart}
+            aria-label={`${item.name} ${t('menu.addToCart')}`}
+          >
+            {t('cart.addItem')}
+          </button>
         </div>
-        
-        <button
-          className="w-full py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors duration-200"
-          onClick={onAddToCart}
-        >
-          장바구니 담기
-        </button>
       </div>
     </div>
   );
 };
 
-export default MenuItem; 
+export default MenuCard;

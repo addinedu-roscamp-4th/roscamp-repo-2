@@ -100,7 +100,7 @@ const InventoryPage = () => {
         menu_item_id: ing["MenuIngredient.menu_item_id"] ?? ing.menu_item_id,
         quantity_required: ing["MenuIngredient.quantity_required"] ?? ing.quantity_required
       }));
-      console.log('Normalized Menu Ingredients:', normalized);
+      // console.log('Normalized Menu Ingredients:', normalized);
       setMenuIngredients(normalized);   
       
       // 모든 재료 목록 생성 (중복 제거)

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Form, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
+import uuid
 
 from app.core.db_config import get_db
 from app.models import MenuItem, MenuIngredient, User, Inventory
@@ -16,22 +17,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "menu.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 # 메뉴 데이터 브로드캐스팅을 위한 유틸리티 함수
 async def broadcast_menu_data(db: Session):
@@ -52,6 +54,7 @@ async def broadcast_menu_data(db: Session):
                 "MenuItem.price": item.price, 
                 "MenuItem.prepare_time": item.prepare_time,
                 "MenuItem.image_url": item.image_url,
+                "MenuItem.description": item.description,
             } 
             for item in menu_items
         ]
@@ -90,6 +93,7 @@ class MenuItemResponse(BaseModel):
     price: float
     prepare_time: int
     image_url: Optional[str] = None
+    description: Optional[str] = None
 
 class MenuItemDetailResponse(BaseModel):
     id: int
@@ -97,18 +101,22 @@ class MenuItemDetailResponse(BaseModel):
     price: float
     prepare_time: int
     menu_ingredients: List[dict]
+    image_url: Optional[str] = None
+    description: Optional[str] = None
 
 class MenuItemCreateRequest(BaseModel):
     name: str
     price: float
     prepare_time: int
     image_url: Optional[str] = None
+    description: Optional[str] = None
 
 class MenuItemUpdateRequest(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = None
     prepare_time: Optional[int] = None
     image_url: Optional[str] = None
+    description: Optional[str] = None
 
 class IngredientResponse(BaseModel):
     id: int
@@ -135,7 +143,8 @@ def get_menu_items(db: Session = Depends(get_db)):
             name=item.name,
             price=item.price,
             prepare_time=item.prepare_time,
-            image_url=item.image_url
+            image_url=item.image_url,
+            description=item.description
         ) for item in menu_items
     ]
 
@@ -157,6 +166,7 @@ def get_menu_item(item_id: int, db: Session = Depends(get_db)):
         price=menu_item.price,
         prepare_time=menu_item.prepare_time,
         image_url=menu_item.image_url,
+        description=menu_item.description,
         menu_ingredients=[
             {
                 "ingredient_id": ingredient.id,
@@ -165,46 +175,74 @@ def get_menu_item(item_id: int, db: Session = Depends(get_db)):
         ]
     )
 
+# 업로드된 파일을 저장할 디렉토리
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'images', 'menu')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 @router.post("/items", response_model=dict)
 async def create_menu_item(
-    item_data: MenuItemCreateRequest, 
+    # form-data 로 받을 텍스트 필드들
+    name: str = Form(...),
+    price: float = Form(...),
+    prepare_time: int = Form(...),
+    description: str = Form(None),
+    # 이미지 파일 (없어도 됨)
+    image: UploadFile = File(None),
+    image_url: str = Form(None),
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    # Only admins can create menu items
+    # 권한 체크
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to create menu items"
-        )
-    
-    # Create new menu item
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="권한이 없습니다")
+
+    image_url = None
+    if image:
+        # 1) 고유 파일명 생성
+        ext = os.path.splitext(image.filename)[1]
+        filename = f"{uuid.uuid4().hex}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+
+        # 2) 디스크에 저장
+        with open(filepath, "wb") as f:
+            content = await image.read()
+            f.write(content)
+
+        # 3) 정적 경로로 쓸 URL 생성 (백엔드가 /static 을 serve 한다고 가정)
+        image_url = f"http://192.168.0.156:8000/images/menu/{filename}"
+
+    # DB에 저장
     new_item = MenuItem(
-        name=item_data.name,
-        price=item_data.price,
-        prepare_time=item_data.prepare_time,
-        image_url=item_data.image_url
+        name=name,
+        price=price,
+        prepare_time=prepare_time,
+        description=description,
+        image_url=image_url,
     )
-    
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
-    
-    # 데이터 변경 후 웹소켓으로 브로드캐스트
-    asyncio.create_task(broadcast_menu_data(db))
-    
+
     return {
-        "id": new_item.id,
         "status": "success",
-        "message": "메뉴 항목이 생성되었습니다."
+        "message": "메뉴 항목이 추가되었습니다."
     }
 
 @router.put("/items/{item_id}", response_model=dict)
 async def update_menu_item(
+    # form-data 로 받을 텍스트 필드들
     item_id: int,
-    item_data: MenuItemUpdateRequest,
+    name: str = Form(...),
+    price: float = Form(...),
+    prepare_time: int = Form(...),
+    description: str = Form(None),
+    # 이미지 파일 (없어도 됨)
+    image: UploadFile = File(None),
+    image_url: str = Form(None),
+
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     # Only admins can update menu items
     if current_user.role != UserRole.ADMIN:
@@ -221,18 +259,36 @@ async def update_menu_item(
             detail=f"Menu item with ID {item_id} not found"
         )
     
-    # Update fields
-    if item_data.name is not None:
-        menu_item.name = item_data.name
-    
-    if item_data.price is not None:
-        menu_item.price = item_data.price
-    
-    if item_data.prepare_time is not None:
-        menu_item.prepare_time = item_data.prepare_time
+    image_url = None
+    if image:
+        # 1) 고유 파일명 생성
+        ext = os.path.splitext(image.filename)[1]
+        filename = f"{uuid.uuid4().hex}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
 
-    if item_data.image_url is not None:
-        menu_item.image_url = item_data.image_url
+        # 2) 디스크에 저장
+        with open(filepath, "wb") as f:
+            content = await image.read()
+            f.write(content)
+
+        # 3) 정적 경로로 쓸 URL 생성 (백엔드가 /static 을 serve 한다고 가정)
+        image_url = f"http://192.168.0.156:8000/images/menu/{filename}"
+    
+    # Update fields
+    if name is not None:
+        menu_item.name = name
+    
+    if price is not None:
+        menu_item.price = price
+    
+    if prepare_time is not None:
+        menu_item.prepare_time = prepare_time
+
+    if image_url is not None:
+        menu_item.image_url = image_url
+
+    if description is not None:
+        menu_item.description = description
     
     db.add(menu_item)
     db.commit()

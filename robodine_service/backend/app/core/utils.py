@@ -48,7 +48,10 @@ def _handle_albabot(session: Session, data: Dict[str, Any]):
     # # 1) 기존 status를 그대로 가져오기
     # last_status = _get_last_status(session, robot_id, Albabot)
     # # 2) Robot 테이블에 status만 이전 값 그대로 추가해서 행 추가
-    # 
+    
+    # status와 battery_level이 있다면 상태 업데이트
+    
+
     session.add(Albabot(
         robot_id=robot_id,
         # status=last_status,
@@ -165,7 +168,7 @@ def _chatbot(session: Session, data: Dict[str, Any]):
         # -- 이미지 저장 --
         img_bytes = base64.b64decode(data["response_image"])
         fname     = f"{uuid.uuid4().hex}.png"
-        out_path  = os.path.join(IMAGES_DIR, fname)
+        out_path  = os.path.join(IMAGES_DIR, "chatbot", fname)
         with open(out_path, "wb") as wf:
             wf.write(img_bytes)
 

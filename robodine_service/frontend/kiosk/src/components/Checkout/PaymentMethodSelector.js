@@ -9,20 +9,20 @@ const PaymentMethodSelector = ({ selectedMethod, onSelectMethod }) => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-      <h2 className="text-xl font-semibold mb-4">결제 수단 선택</h2>
+      <h2 className="text-2xl font-semibold mb-4">결제 수단 선택</h2>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-6">
         {paymentMethods.map(method => (
           <button
             key={method.id}
-            className={`p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-colors duration-200
+            className={`p-6 rounded-lg border-3 flex flex-col items-center justify-center transition-colors duration-200
               ${selectedMethod === method.id 
                 ? 'border-indigo-600 bg-indigo-50' 
                 : 'border-gray-200 hover:border-indigo-200'}`}
             onClick={() => onSelectMethod(method.id)}
           >
-            <span className="text-3xl mb-2">{method.icon}</span>
-            <span className="font-medium">{method.name}</span>
+            <span className="text-5xl mb-3">{method.icon}</span>
+            <span className="text-xl font-medium">{method.name}</span>
           </button>
         ))}
       </div>

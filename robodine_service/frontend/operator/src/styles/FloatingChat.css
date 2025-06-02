@@ -64,7 +64,6 @@
   flex-direction: column;
   min-width: 300px;
   min-height: 400px;
-  resize: both;
   overflow: hidden;
 }
 
@@ -523,20 +522,25 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   cursor: nwse-resize;
+  z-index: 10;
 }
 
 .resize-handle::after {
   content: '';
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--border-color);
-  border-bottom: 2px solid var(--border-color);
+  right: 6px;
+  bottom: 6px;
+  width: 14px;
+  height: 14px;
+  border-right: 3px solid var(--primary-color);
+  border-bottom: 3px solid var(--primary-color);
+}
+
+.resize-handle:hover::after {
+  border-color: var(--primary-color);
 }
 
 /* 로딩 상태 */

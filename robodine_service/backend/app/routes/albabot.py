@@ -13,22 +13,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "albabot.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 class AlbabotStatusResponse(BaseModel):
     robot_id: int
@@ -38,35 +39,33 @@ class AlbabotStatusResponse(BaseModel):
 
 @router.get("", response_model=List[AlbabotStatusResponse])
 def get_all_albabot_status(db: Session = Depends(get_db)):
-    # robot_id가 겹치지 않는 Albabot 레코드들 가져오기
     albabot_records = (
         db.query(Albabot)
-        .order_by(Albabot.robot_id, Albabot.id.desc())
-        .distinct(Albabot.robot_id)
-        .all()
+          .filter(Albabot.robot_id.isnot(None))     # ← skip NULLs
+          .distinct(Albabot.robot_id)
+          .order_by(Albabot.robot_id, Albabot.timestamp.desc())
+          .all()
     )
     if not albabot_records:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No Albabot records found"
         )
-    albabot_statuses = []
-    for albabot in albabot_records:
-        albabot_statuses.append(
-            AlbabotStatusResponse(
-                robot_id=int(albabot.robot_id),
-                status=albabot.status,
-                battery_level=int(albabot.battery_level),
-                timestamp=albabot.timestamp
-            )
+    return [
+        AlbabotStatusResponse(
+            robot_id=int(a.robot_id),
+            status=a.status,
+            battery_level=int(a.battery_level),
+            timestamp=a.timestamp
         )
-    return albabot_statuses
+        for a in albabot_records
+    ]
 
 
 @router.get("/status/{robot_id}", response_model=AlbabotStatusResponse)
 def get_albabot_status(robot_id: int, db: Session = Depends(get_db)):
     # Find Albabot record
-    albabot = db.query(Albabot).filter(Albabot.robot_id == str(robot_id)).first()
+    albabot = db.query(Albabot).filter(Albabot.robot_id == int(robot_id)).first()
     
     if not albabot:
         raise HTTPException(
@@ -90,14 +89,14 @@ def create_albabot_status(
     # 이전 상태 조회
     prev_status = None
     prev_battery = None
-    existing_albabot = db.query(Albabot).filter(Albabot.robot_id == str(albabot.robot_id)).order_by(Albabot.id.desc()).first()
+    existing_albabot = db.query(Albabot).filter(Albabot.robot_id == int(albabot.robot_id)).order_by(Albabot.id.desc()).first()
     if existing_albabot:
         prev_status = existing_albabot.status
         prev_battery = existing_albabot.battery_level
     
     # Create new Albabot record
     new_albabot = Albabot(
-        robot_id=str(albabot.robot_id),
+        robot_id=int(albabot.robot_id),
         status=albabot.status,
         battery_level=albabot.battery_level,
         timestamp=albabot.timestamp
@@ -135,7 +134,23 @@ def create_albabot_status(
             log_message = f"알바봇 #{albabot.robot_id}의 상태가 '{albabot.status}'로 변경되었습니다."
         
         # 이전 상태 정보 추가
-        log_message += f" (이전 상태: {prev_status})"
+        if prev_status == RobotStatus.IDLE:
+            log_message += f" (이전 상태: 대기)"
+        elif prev_status == RobotStatus.SERVING:
+            log_message += f" (이전 상태: 서빙 중)"
+        elif prev_status == RobotStatus.CLEANING:
+            log_message += f" (이전 상태: 청소 중)"
+        elif prev_status == RobotStatus.EMERGENCY:
+            log_message += f" (이전 상태: 비상)"
+        elif prev_status == RobotStatus.SECURITY:
+            log_message += f" (이전 상태: 보안 모드)"
+        elif prev_status == RobotStatus.CHARGING:
+            log_message += f" (이전 상태: 충전 중)"
+        elif prev_status == RobotStatus.ERROR:
+            log_message += f" (이전 상태: 오류)"
+        else:
+            log_message += f" (이전 상태: {prev_status})"
+
     # 배터리 변경에 따른 로그 메시지
     elif battery_changed:
         # 배터리 퍼센트로 변환 (0-1 범위이면 100 곱함)
@@ -157,13 +172,20 @@ def create_albabot_status(
         log_message = f"알바봇 #{albabot.robot_id}의 상태가 업데이트되었습니다. (상태: {albabot.status})"
     
     # 시스템 로그 저장
-    log_info(db, log_message, background_tasks)
+    if log_level == LogLevel.INFO:
+        log_info(db, log_message, background_tasks)
+    elif log_level == LogLevel.WARNING:
+        log_warning(db, log_message, background_tasks)
+    elif log_level == LogLevel.ERROR:
+        log_error(db, log_message, background_tasks)
+    else:
+        log_info(db, log_message, background_tasks)
     
     from run import broadcast_entity_update
     # REST API 호출 시 웹소켓 브로드캐스트 트리거
     background_tasks.add_task(
         broadcast_entity_update,
-        "albabot",
+        "robot",
         None
     )
     # 시스템 로그 브로드캐스트 예약
@@ -182,7 +204,7 @@ def create_albabot_status(
 
 @router.post("/{robot_id}/command", response_model=dict)
 def send_command_to_albabot(
-    robot_id: str, 
+    robot_id: int, 
     command_data: dict, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -244,6 +266,16 @@ def send_command_to_albabot(
     db.add(new_albabot)
     db.commit()
     db.refresh(new_albabot)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "robot",
+        None
+    )
+
+    
     
     # Log this action
     log_info(db, f"알바봇 {robot_id}에 {command_type} 명령 전송, 상태 변경: {albabot.status} → {new_status}", background_tasks)

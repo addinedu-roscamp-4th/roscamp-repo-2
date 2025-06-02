@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw } from 'react-feather';
 
-const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
+const TableMap = ({ tables, assignments, onTableClick }) => {
   // 식당 영역 좌표
   const restaurantArea = {
     topLeft: { x: 21, y: 51 },
@@ -127,19 +127,6 @@ const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
     }
     return 'AVAILABLE';
   };
-  
-  // 테이블 할당 가능 여부 확인 (선택된 고객이 있는 경우)
-  const isAssignable = (tableId) => {
-    // 선택된 고객이 없으면 할당 불가
-    if (!selectedCustomer) return false;
-    
-    // 해당 테이블에 이미 할당된 고객이 있으면 할당 불가
-    const assignment = assignments.find(a => a.table_id === tableId);
-    if (assignment) return false;
-    
-    // 그 외의 경우 할당 가능
-    return true;
-  };
 
   // 테이블 상태에 따른 색상 클래스
   const getTableColor = (status) => {
@@ -148,7 +135,7 @@ const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
         return 'bg-red-200 border-red-500';
       case 'AVAILABLE':
         return 'bg-green-200 border-green-500';
-      case 'RESERVED':
+      case 'CLEANING':
         return 'bg-yellow-200 border-yellow-500';
       default:
         return 'bg-gray-200 border-gray-500';
@@ -230,14 +217,6 @@ const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
       </div>
       
       <div className="p-4">
-        {selectedCustomer && (
-          <div className="mb-4 bg-blue-50 p-3 rounded-lg flex items-center">
-            <span>
-              <strong>{selectedCustomer.count}명</strong> 손님을 배정할 테이블을 선택하세요
-            </span>
-          </div>
-        )}
-        
         <div
           ref={mapContainerRef}
           className="relative border border-gray-300 rounded-lg overflow-hidden bg-gray-50"
@@ -282,17 +261,21 @@ const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
             {tables.map((table, index) => {
               // 테이블 상태 확인 (웹소켓이나 할당 정보 기반)
               const status = table.status || getTableStatus(table.id);
-              // 할당 가능 여부
-              const assignable = isAssignable(table.id);
               
               // 테이블 색상 결정
               let bgColorClass = getTableColor(status);
-              if (assignable) {
-                bgColorClass = 'bg-yellow-200 border-yellow-500'; // 할당 가능: 연한 노랑
-              }
               
               // 테이블 위치 및 크기 정보
               const position = getTablePosition(table, index);
+              
+              let title = '';
+              if (status === 'OCCUPIED') {
+                title = `테이블 ${table.id} - 사용 중 (클릭 시 해제)`;
+              } else if (status === 'CLEANING') {
+                title = `테이블 ${table.id} - 청소 중 (클릭 시 이용 가능으로 변경)`;
+              } else {
+                title = `테이블 ${table.id} - 이용 가능`;
+              }
               
               return (
                 <div
@@ -306,7 +289,7 @@ const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
                     transform: 'translate(-50%, -50%)',
                   }}
                   onClick={() => handleTableClick(table.id)}
-                  title={`테이블 ${table.id} - ${status === 'OCCUPIED' ? '사용 중 (클릭 시 해제)' : '사용 가능'}`}
+                  title={title}
                 >
                   <span className="absolute font-semibold text-[3px] text-gray-900 text-center" style={{ lineHeight: '1px' }}>{table.id}</span>
                 </div>
@@ -332,7 +315,7 @@ const TableMap = ({ tables, assignments, onTableClick, selectedCustomer }) => {
             </div>
             <div className="flex items-center">
               <div className="w-3 h-3 mr-1 bg-yellow-200 border border-yellow-500"></div>
-              <span>선택된 고객 배정 가능</span>
+              <span>청소 중 (클릭 시 이용 가능으로 변경)</span>
             </div>
           </div>
         </div>

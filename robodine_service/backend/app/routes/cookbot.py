@@ -13,22 +13,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "coobot.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 class CookbotStatusResponse(BaseModel):
     robot_id: int
@@ -40,8 +41,9 @@ def get_all_albabot_status(db: Session = Depends(get_db)):
     # robot_id가 겹치지 않는 Albabot 레코드들 가져오기
     cookbot_records = (
         db.query(Cookbot)
-        .order_by(Cookbot.robot_id, Cookbot.id.desc())
+        .filter(Cookbot.robot_id.isnot(None))     # ← skip NULLs
         .distinct(Cookbot.robot_id)
+        .order_by(Cookbot.robot_id, Cookbot.id.desc())
         .all()
     )
     if not cookbot_records:
@@ -64,7 +66,7 @@ def get_all_albabot_status(db: Session = Depends(get_db)):
 @router.get("/status/{robot_id}", response_model=CookbotStatusResponse)
 def get_cookbot_status(robot_id: int, db: Session = Depends(get_db)):
     # Find Cookbot record
-    cookbot = db.query(Cookbot).filter(Cookbot.robot_id == str(robot_id)).first()
+    cookbot = db.query(Cookbot).filter(Cookbot.robot_id == int(robot_id)).first()
     
     if not cookbot:
         raise HTTPException(
@@ -86,13 +88,13 @@ def create_cookbot_status(
 ):
     # 이전 상태 조회
     prev_status = None
-    prev_cookbot = db.query(Cookbot).filter(Cookbot.robot_id == str(cookbot_in.robot_id)).order_by(Cookbot.id.desc()).first()
+    prev_cookbot = db.query(Cookbot).filter(Cookbot.robot_id == int(cookbot_in.robot_id)).order_by(Cookbot.id.desc()).first()
     if prev_cookbot:
         prev_status = prev_cookbot.status
 
     # 새로운 Cookbot 상태 기록 생성
     new_cookbot = Cookbot(
-        robot_id=str(cookbot_in.robot_id),
+        robot_id=int(cookbot_in.robot_id),
         status=cookbot_in.status,
         timestamp=cookbot_in.timestamp
     )

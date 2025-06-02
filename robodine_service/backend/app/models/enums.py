@@ -40,14 +40,17 @@ class EntityType(str, Enum):
 
 class RobotStatus(str, Enum):
     IDLE = "IDLE"
+    SETTING = "SETTING"
     COOKING = "COOKING"
+    PICKUP = "PICKUP"
     SERVING = "SERVING"
     CLEANING = "CLEANING"
     EMERGENCY = "EMERGENCY"
-    SECURITY = "SECURITY"
-    CHARGING = "CHARGING"
-    ERROR = "ERROR"
     MAINTENANCE = "MAINTENANCE"
+    SECURITY = "SECURITY"
+    BIRTHDAY = "BIRTHDAY"
+    CALLING = "CALLING"
+    ERROR = "ERROR"
 
 class CommandStatus(str, Enum):
     PENDING = "PENDING"
@@ -65,10 +68,12 @@ class InventoryStatus(str, Enum):
 class TableStatus(str, Enum):
     AVAILABLE = "AVAILABLE"
     OCCUPIED = "OCCUPIED"
+    CLEANING = "CLEANING"
 
 class OrderStatus(str, Enum):
     PLACED = "PLACED"
     PREPARING = "PREPARING"
+    COMPLETED = "COMPLETED"
     SERVED = "SERVED"
     CANCELLED = "CANCELLED"
 
@@ -83,6 +88,7 @@ class StreamSourceType(str, Enum):
     PINKY = "PINKY"
     COOKBOT = "COOKBOT"
     GLOBAL_CAM = "GLOBAL_CAM"
+    WEBCAM = "WEBCAM"
 
 class StreamStatus(str, Enum):
     ACTIVE = "ACTIVE"

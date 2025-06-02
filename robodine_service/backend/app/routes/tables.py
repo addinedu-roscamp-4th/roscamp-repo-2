@@ -13,22 +13,23 @@ router = APIRouter()
 
 # 로거 설정 및 저장
 import logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler('inventory.log')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-# Create a directory for logs if it doesn't exist
 import os
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
-if not os.path.exists(LOG_FILE):
-    with open(LOG_FILE, 'w') as f:
-        f.write("Inventory log file created.\n")
-    f.write("Log entries will be appended here.\n")
-    f.close()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# —————————————
+# 로그 파일 핸들러 설정
+# —————————————
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, "table.log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+))
+logger.addHandler(file_handler)
+# —————————————
 
 # --- Table Models ---
 class TableResponse(BaseModel):
@@ -90,6 +91,14 @@ def create_table(
     
     # Log this action
     log_info(db, f"새 테이블 생성: {new_table.id}, 최대 인원 {new_table.max_customer}명", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "",
+        None
+    )
     
     return {
         "id": new_table.id,
@@ -196,6 +205,14 @@ def release_table(
     # Log this action
     customer_str = ", ".join([str(cid) for cid in customer_ids])
     log_info(db, f"테이블 {table_id} 해제됨, 고객 그룹: {customer_str}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "table",
+        None
+    )
     
     return {
         "status": "success",
@@ -213,7 +230,7 @@ def update_table_status(
         raise HTTPException(status_code=400, detail="Status is required")
         
     new_status = status_data["status"].upper()
-    if new_status not in ["AVAILABLE", "OCCUPIED"]:
+    if new_status not in ["AVAILABLE", "OCCUPIED", "CLEANING"]:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
     
     # Find table
@@ -242,10 +259,18 @@ def update_table_status(
                 assignment.released_at = datetime.utcnow()
                 db.add(assignment)
             db.commit()
-            log_warning(db, f"테이블 {table_id} 상태를 AVAILABLE로 변경하여 {len(active_assignments)}개의 배정이 자동으로 해제됨", background_tasks)
+            log_warning(db, f"테이블 {table_id} 상태를 AVAILABLE로 변경되었습니다.", background_tasks)
     
     # Log status change
     log_info(db, f"테이블 {table_id} 상태 변경: {old_status} → {new_status}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "table",
+        None
+    )
     
     return {
         "status": "success",

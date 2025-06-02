@@ -120,7 +120,7 @@ const StoreMap = ({ tables = [], robots = [], assignments = [], isLoading, robot
         return 'bg-red-200 border-red-500';
       case 'AVAILABLE':
         return 'bg-green-200 border-green-500';
-      case 'RESERVED':
+      case 'CLEANING':
         return 'bg-yellow-200 border-yellow-500';
       default:
         return 'bg-gray-200 border-gray-500';
@@ -138,19 +138,19 @@ const StoreMap = ({ tables = [], robots = [], assignments = [], isLoading, robot
         return 'bg-blue-400';
       case 'CLEANING':
         return 'bg-purple-400';
-      case 'EMERGENCY':
-        return 'bg-red-400';
-      case 'MAINTENANCE':
-        return 'bg-orange-400';
-      case 'SECURITY':
-        return 'bg-gray-400';
-      case 'OFFLINE':
-      case 'NOT_CONNECTED':
-        return 'bg-black-400';
-      case 'ERROR':
-        return 'bg-black';
+      // case 'EMERGENCY':
+      //   return 'bg-red-400';
+      // case 'MAINTENANCE':
+      //   return 'bg-orange-400';
+      // case 'SECURITY':
+      //   return 'bg-gray-400';
+      // case 'OFFLINE':
+      // case 'NOT_CONNECTED':
+      //   return 'bg-black-400';
+      // case 'ERROR':
+      //   return 'bg-black';
       default:
-        return 'bg-gray-400';
+        return 'bg-red-400';
     }
   };
 
@@ -444,47 +444,46 @@ const StoreMap = ({ tables = [], robots = [], assignments = [], isLoading, robot
         </div>
       )}
       
-      <div className="mt-3 text-sm text-gray-500">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 bg-green-200 border border-green-500"></div>
-            <span>사용 가능</span>
+      <div className="mt-3 text-sm text-gray-500 flex justify-between">
+        {/* 테이블 상태 (왼쪽) */}
+        <div className="flex flex-col">
+          <div className="flex items-center gap-4">
+          <span>테이블 상태</span>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 bg-green-200 border border-green-500"></div>
+              <span>사용 가능</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 bg-red-200 border border-red-500"></div>
+              <span>사용 중</span>
+            </div>
           </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 bg-red-200 border border-red-500"></div>
-            <span>사용 중</span>
-          </div>
-          <div className="flex items-center ml-4">
-            <div className="w-3 h-3 mr-1 rounded-full bg-green-400"></div>
-            <span>대기</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-full bg-yellow-400"></div>
-            <span>요리중</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-full bg-blue-400"></div>
-            <span>서빙중</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-full bg-purple-400"></div>
-            <span>청소중</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-full bg-red-400"></div>
-            <span>비상</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-full bg-orange-400"></div>
-            <span>정비중</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 mr-1 rounded-full bg-gray-400"></div>
-            <span>보안</span>
-          </div>
-          <div className="flex items-center">
-          <div className="w-3 h-3 mr-1 rounded-full bg-black"></div>
-          <span>오류</span>
+        </div>
+
+        {/* 로봇 상태 (오른쪽) */}
+        <div className="flex flex-col">
+          <div className="flex items-center gap-4">
+          <span>로봇 상태</span>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 rounded-full bg-green-400"></div>
+              <span>대기</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 rounded-full bg-yellow-400"></div>
+              <span>요리중</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 rounded-full bg-blue-400"></div>
+              <span>서빙중</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 rounded-full bg-purple-400"></div>
+              <span>청소중</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 mr-1 rounded-full bg-red-400"></div>
+              <span>오류</span>
+            </div>
           </div>
         </div>
       </div>

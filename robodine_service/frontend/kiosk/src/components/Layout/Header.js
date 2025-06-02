@@ -1,11 +1,15 @@
 // Header.js
 import React, { useState, useEffect } from 'react';
 
-const Header = () => {
+// 로고 컴포넌트
+const Logo = () => (
+  <div className="text-2xl font-bold">로보다인</div>
+);
+
+// 시간 표시 컴포넌트
+const TimeDisplay = ({ format = "HH:mm" }) => {
   // 현재 시간 상태 관리
   const [currentTime, setCurrentTime] = useState(new Date());
-  // 언어 선택 상태 관리 (기본값: 한국어)
-  const [language, setLanguage] = useState('ko');
 
   // 1초마다 시간 업데이트
   useEffect(() => {
@@ -24,6 +28,14 @@ const Header = () => {
     hour12: false
   });
 
+  return <div className="text-xl font-medium">{formattedTime}</div>;
+};
+
+// 언어 선택기 컴포넌트
+const LanguageSelector = () => {
+  // 언어 선택 상태 관리 (기본값: 한국어)
+  const [language, setLanguage] = useState('ko');
+
   // 언어 변경 핸들러
   const handleLanguageChange = (lang) => {
     setLanguage(lang);
@@ -31,31 +43,32 @@ const Header = () => {
   };
 
   return (
-    <header className="bg-indigo-600 text-white p-4 shadow-md">
-      <div className="container mx-auto flex justify-between items-center">
-        {/* 로고 */}
-        <div className="text-xl font-bold">로보다인 키오스크</div>
-        
-        {/* 현재 시간 */}
-        <div className="text-lg font-semibold">{formattedTime}</div>
-        
-        {/* 언어 선택 */}
-        <div className="flex space-x-2">
-          <button
-            className={`px-2 py-1 rounded ${language === 'ko' ? 'bg-white text-indigo-600' : 'bg-indigo-500'}`}
-            onClick={() => handleLanguageChange('ko')}
-          >
-            한국어
-          </button>
-          <button
-            className={`px-2 py-1 rounded ${language === 'en' ? 'bg-white text-indigo-600' : 'bg-indigo-500'}`}
-            onClick={() => handleLanguageChange('en')}
-          >
-            English
-          </button>
-        </div>
-      </div>
-    </header>
+    <div className="flex space-x-4">
+      <button
+        className={`px-4 py-2 rounded text-lg ${language === 'ko' ? 'bg-[#C49E69] text-white' : 'bg-white text-gray-700 border border-gray-300'}`}
+        onClick={() => handleLanguageChange('ko')}
+        aria-label="한국어"
+      >
+        한국어
+      </button>
+      <button
+        className={`px-4 py-2 rounded text-lg ${language === 'en' ? 'bg-[#C49E69] text-white' : 'bg-white text-gray-700 border border-gray-300'}`}
+        onClick={() => handleLanguageChange('en')}
+        aria-label="영어"
+      >
+        English
+      </button>
+    </div>
+  );
+};
+
+const Header = () => {
+  return (
+    <footer className="flex items-center justify-between px-6 py-4 bg-white shadow-inner border-t border-gray-200 h-20">
+      <Logo />
+      <TimeDisplay format="HH:mm" />
+      <LanguageSelector />
+    </footer>
   );
 };
 

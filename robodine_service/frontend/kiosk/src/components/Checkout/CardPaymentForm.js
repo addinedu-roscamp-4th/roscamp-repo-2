@@ -56,16 +56,16 @@ const CardPaymentForm = () => {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-xl font-semibold mb-4">카드 정보 입력</h2>
+      <h2 className="text-2xl font-semibold mb-4">카드 정보 입력</h2>
       
-      <div className="space-y-4">
+      <div className="space-y-6">
         {/* 카드 번호 입력 */}
         <div>
-          <label htmlFor="cardNumber" className="block text-gray-700 mb-2">카드 번호</label>
+          <label htmlFor="cardNumber" className="block text-xl text-gray-700 mb-2">카드 번호</label>
           <input
             id="cardNumber"
             type="text"
-            className="w-full p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full p-4 text-xl border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             placeholder="1234 5678 9012 3456"
             value={cardNumber}
             onChange={handleCardNumberChange}
@@ -75,11 +75,11 @@ const CardPaymentForm = () => {
         
         {/* 카드 소유자명 */}
         <div>
-          <label htmlFor="cardHolder" className="block text-gray-700 mb-2">카드 소유자명</label>
+          <label htmlFor="cardHolder" className="block text-xl text-gray-700 mb-2">카드 소유자명</label>
           <input
             id="cardHolder"
             type="text"
-            className="w-full p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full p-4 text-xl border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             placeholder="홍길동"
             value={cardHolder}
             onChange={(e) => setCardHolder(e.target.value)}
@@ -89,11 +89,11 @@ const CardPaymentForm = () => {
         {/* 유효기간 및 CVC */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="expiryDate" className="block text-gray-700 mb-2">유효기간 (MM/YY)</label>
+            <label htmlFor="expiryDate" className="block text-xl text-gray-700 mb-2">유효기간 (MM/YY)</label>
             <input
               id="expiryDate"
               type="text"
-              className="w-full p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full p-4 text-xl border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               placeholder="MM/YY"
               value={expiryDate}
               onChange={handleExpiryDateChange}
@@ -101,11 +101,11 @@ const CardPaymentForm = () => {
             />
           </div>
           <div>
-            <label htmlFor="cvc" className="block text-gray-700 mb-2">보안코드 (CVC)</label>
+            <label htmlFor="cvc" className="block text-xl text-gray-700 mb-2">보안코드 (CVC)</label>
             <input
               id="cvc"
               type="text"
-              className="w-full p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full p-4 text-xl border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               placeholder="123"
               value={cvc}
               onChange={handleCvcChange}

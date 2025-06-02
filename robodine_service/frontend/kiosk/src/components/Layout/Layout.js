@@ -1,24 +1,44 @@
-import React from 'react';
-import Header from './Header';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import Footer from './Footer';
+import NotificationOverlay from '../Notifications/NotificationOverlay';
 
-const Layout = ({ children, category, setCategory }) => {
+const Layout = () => {
+  const [selectedCategory, setSelectedCategory] = useState('추천');
+  const [notifications, setNotifications] = useState([]);
+  const location = useLocation();
+
+  // 페이지 변경 시 알림 초기화
+  useEffect(() => {
+    setNotifications([]);
+  }, [location.pathname]);
+
+  // 알림 닫기 핸들러
+  const handleCloseNotification = (id) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+  };
+  
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
-      <Header />
+    <div className="flex h-screen bg-gray-100">
+      <Sidebar 
+        selectedCategory={selectedCategory} 
+        onSelectCategory={setSelectedCategory} 
+      />
       
-      <div className="flex flex-grow">
-        <Sidebar 
-          selectedCategory={category} 
-          onSelectCategory={setCategory} 
+      <main className="flex-grow flex flex-col relative">
+        {/* 알림 오버레이 */}
+        <NotificationOverlay 
+          notifications={notifications} 
+          onClose={handleCloseNotification} 
         />
-        <main className="flex-grow p-4 overflow-y-auto">
-          {children}
-        </main>
-      </div>
-      
-      <Footer />
+        
+        {/* 메인 컨텐츠 */}
+        <Outlet context={{ 
+          selectedCategory, 
+          onSelectCategory: setSelectedCategory,
+          setNotifications
+        }} />
+      </main>
     </div>
   );
 };

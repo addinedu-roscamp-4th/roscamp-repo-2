@@ -3,6 +3,7 @@
 import logging
 import threading
 import socketserver
+import socket
 import json
 import asyncio
 from datetime import datetime
@@ -20,10 +21,10 @@ from sqlalchemy.orm import joinedload
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.routes import (
-    poses, websockets, streaming, inventories,
+    poses, websockets, inventories,
     robot, albabot, cookbot, auth, users, settings, customers,
     tables, kiosks, orders, menu, events, emergencies, 
-    video_streams, face_recognitions, chat
+    video_streams, face_recognitions, chat, live_streaming,
 )
 from app.routes.websockets import router as websocket_router
 from app.routes.websockets import broadcast_robots_update, broadcast_tables_update, broadcast_events_update, broadcast_orders_update, broadcast_systemlogs_update, broadcast_customers_update
@@ -51,14 +52,15 @@ main_loop = None
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # 로그 디렉터리 생성
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
+LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # 로거 인스턴스
 logger = logging.getLogger("robodine.run")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
+
 
 # 포맷터
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -247,7 +249,8 @@ def serialize_orderitem(orderitem):
     return {
         "OrderItem.order_id": orderitem.order_id,
         "OrderItem.menu_item_id": orderitem.menu_item_id,
-        "OrderItem.quantity": orderitem.quantity
+        "OrderItem.quantity": orderitem.quantity,
+        "OrderItem.status": str(orderitem.status).replace('OrderStatus.', '') if orderitem.status else None,
     }
 
 def serialize_menuitem(menuitem):
@@ -256,7 +259,9 @@ def serialize_menuitem(menuitem):
         "MenuItem.id": menuitem.id,
         "MenuItem.name": menuitem.name,
         "MenuItem.price": menuitem.price,
-        "MenuItem.prepare_time": menuitem.prepare_time
+        "MenuItem.prepare_time": menuitem.prepare_time,
+        "MenuItem.image_url": menuitem.image_url,
+        "MenuItem.description": menuitem.description,
     }
 
 def serialize_menu_ingredient(ingredient):
@@ -481,19 +486,20 @@ async def broadcast_entity_update(entity_type, entity_id):
                     # 상세 상태 조회 (albabot, cookbot, pose6d)
                     albabots = session.exec(
                         select(Albabot)
-                        .order_by(Albabot.robot_id, Albabot.id.desc())
                         .distinct(Albabot.robot_id)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
                     ).all()
                     cookbots = session.exec(
                         select(Cookbot)
-                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                         .distinct(Cookbot.robot_id)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                     ).all()
+                    required_pose_entity_types = ["WORLD", "COOKBOT", "INVENTORY"]
                     poses = session.exec(
                         select(Pose6D)
-                        .where(Pose6D.entity_type == "WORLD")
-                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
+                        .where(Pose6D.entity_type.in_(required_pose_entity_types))
                         .distinct(Pose6D.entity_id)
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                     ).all()
                     out['albabots'] = albabots
                     out['cookbots'] = cookbots
@@ -551,14 +557,14 @@ async def broadcast_entity_update(entity_type, entity_id):
                                     else_=1
                                 ),
                                 Order.id.desc())
-                            .limit(20)
+                            # .limit(20)
                         ).all()
                         out['data'] = [serialize_order(order) for order in orders]
                     # # 주문 아이템 및 키오스크 단말기 정보 추가
                     orderitems = session.exec(
                         select(OrderItem)
                         .order_by(OrderItem.order_id.desc())
-                        .distinct(OrderItem.order_id)
+                        # .distinct(OrderItem.order_id)
                     ).all()
                     out['orderitems'] = orderitems
                     kioskterminals = session.exec(
@@ -576,8 +582,8 @@ async def broadcast_entity_update(entity_type, entity_id):
                     poses = session.exec(
                         select(Pose6D)
                         .where(Pose6D.entity_type == "WORLD")
-                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                     ).all()
                     out['poses'] = poses
                 # albabot or cookbot triggers full status
@@ -589,19 +595,19 @@ async def broadcast_entity_update(entity_type, entity_id):
                         ).all()
                     out['albabots'] = session.exec(
                         select(Albabot)
-                        .order_by(Albabot.robot_id, Albabot.id.desc())
                         .distinct(Albabot.robot_id)
+                        .order_by(Albabot.robot_id, Albabot.id.desc())
                     ).all()
                     out['cookbots'] = session.exec(
                         select(Cookbot)
-                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                         .distinct(Cookbot.robot_id)
+                        .order_by(Cookbot.robot_id, Cookbot.id.desc())
                     ).all()
                     out['poses'] = session.exec(
                         select(Pose6D)
                         .where(Pose6D.entity_type=="WORLD")
-                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
+                        .order_by(Pose6D.entity_id, Pose6D.id.desc())
                     ).all()
                 # systemlog
                 elif entity_type == "systemlog":
@@ -916,45 +922,74 @@ def recv_all(sock, count: int) -> bytes:
 
 # TCP 핸들러에서 웹소켓 브로드캐스트 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
+    def send_json(self, sock, obj: dict) -> None:
+        """4바이트 빅엔디안 헤더 + JSON 바디 프레이밍하여 전송"""
+        data = json.dumps(obj).encode('utf-8')
+        header = len(data).to_bytes(4, 'big')
+        sock.sendall(header + data)
+
     def handle(self):
+        # 1) 타임아웃 설정 (5초)
+        self.request.settimeout(5)
+
         try:
-            # 1) 헤더(4바이트) 읽어서 전체 길이 계산
+            # 2) 헤더(4바이트) 읽어서 전체 길이 계산
             raw_len = recv_all(self.request, 4)
             total_len = int.from_bytes(raw_len, byteorder='big')
-            logger.info(f"[TCP] Incoming payload length: {total_len} bytes")
-
-            # 2) 실제 페이로드(바디)만 읽기
+            
+            # 3) 실제 페이로드(바디)만 읽기
             body = recv_all(self.request, total_len)
-
-            # 3) JSON 파싱
             data = json.loads(body.decode('utf-8'))
-            logger.info(f"[TCP] Received JSON: {data}")
-
-            # 4) dispatch & DB 저장
+            
+            # 4) 내부 처리 및 DB 저장
             with Session(engine) as session:
                 result = dispatch_payload(session, data)
                 session.commit()
-                # 필요시 브로드캐스트
+                # 필요 시 이벤트 브로드캐스트
                 if isinstance(result, dict) and 'affected_entity' in result:
                     et = result['affected_entity']['type']
                     eid = result['affected_entity']['id']
-                    # main_loop는 run.py 에서 전역으로 설정된 asyncio loop
+                    # 메인 루프에 업데이트 호출 (전역 main_loop 사용)
                     main_loop.call_soon_threadsafe(
                         lambda: asyncio.create_task(broadcast_entity_update(et, eid))
                     )
-
-            response = "OK_JSON"
+            
+            # 5) 성공 응답
+            response_obj = {
+                "status": "success",
+                "message": "정보가 성공적으로 등록되었습니다."
+            }
+            self.send_json(self.request, response_obj)
 
         except json.JSONDecodeError as e:
-            logger.error(f"[TCP] JSON 디코딩 실패: {e}")
-            response = "ERROR_JSON"
+            # JSON 파싱 실패
+            error_obj = {
+                "status": "error",
+                "message": "JSON 디코딩 실패",
+                "error_code": "INVALID_PAYLOAD",
+                "details": str(e)
+            }
+            self.send_json(self.request, error_obj)
+
+        except socket.timeout as e:
+            # 타임아웃 발생
+            error_obj = {
+                "status": "error",
+                "message": "요청 처리 타임아웃",
+                "error_code": "TIMEOUT",
+                "details": "5초 동안 응답이 없어 타임아웃되었습니다."
+            }
+            self.send_json(self.request, error_obj)
 
         except Exception as e:
-            logger.error(f"[TCP] 처리 오류: {e}")
-            response = "ERROR"
-
-        # 5) 클라이언트에 응답
-        self.request.sendall(response.encode('utf-8'))
+            # 기타 서버 오류
+            error_obj = {
+                "status": "error",
+                "message": "서버 처리 중 오류 발생",
+                "error_code": "SERVER_ERROR",
+                "details": str(e)
+            }
+            self.send_json(self.request, error_obj)
 
 # Include routers - API path prefix for all endpoints
 API_PREFIX = "/api"
@@ -979,6 +1014,7 @@ async def health_check():
     return {"status": "healthy","database": "healthy"}
 
 # Include websocket and streaming routers (these don't need the API prefix)
+app.include_router(live_streaming.router, tags=["live_stream"])
 app.include_router(websocket_router, tags=["websocket"])
 
 # Include API routers
