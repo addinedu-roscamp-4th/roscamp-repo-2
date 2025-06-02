@@ -19,7 +19,7 @@ class DynamicObstacleAvoidance(Node):
         self.obstacle_distance_threshold = self.get_parameter('obstacle_distance_threshold').value
 
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel_obstacle_dynamic', 10)
         self.goal_sub = self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback, 10)
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
 
@@ -89,7 +89,7 @@ class DynamicObstacleAvoidance(Node):
 
         while self.get_clock().now() - start_time < duration:
             self.cmd_pub.publish(twist)
-
+            time.sleep(0.01) ##################################3
         self.stop_robot()
         # 필터 초기화 → 장애물 거리 초기화
         self.recent_ranges.clear()
