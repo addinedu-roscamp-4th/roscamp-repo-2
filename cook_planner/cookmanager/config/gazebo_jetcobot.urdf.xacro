@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="jetcobot">
+  <xacro:arg name="prefix" default=""/>
+
+  <link name="${prefix}dummy"/>
+  <joint name="${prefix}dummy_joint" type="fixed">
+    <parent link="${prefix}dummy"/>
+    <child link="${prefix}base_link"/>
+  </joint>
+
+  <link name="${prefix}base_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/base_link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="${prefix}1_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/1_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}1_Joint" type="revolute">
+    <parent link="${prefix}base_link"/>
+    <child link="${prefix}1_Link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.87" upper="2.87" effort="1.0" velocity="1.5"/>
+  </joint>
+
+  <link name="${prefix}2_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/2_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}2_Joint" type="revolute">
+    <parent link="${prefix}1_Link"/>
+    <child link="${prefix}2_Link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.87" upper="2.87" effort="1.0" velocity="1.5"/>
+  </joint>
+
+  <link name="${prefix}3_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/3_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}3_Joint" type="revolute">
+    <parent link="${prefix}2_Link"/>
+    <child link="${prefix}3_Link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.87" upper="2.87" effort="1.0" velocity="1.5"/>
+  </joint>
+
+  <link name="${prefix}4_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/4_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}4_Joint" type="revolute">
+    <parent link="${prefix}3_Link"/>
+    <child link="${prefix}4_Link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.87" upper="2.87" effort="1.0" velocity="1.5"/>
+  </joint>
+
+  <link name="${prefix}5_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/5_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}5_Joint" type="revolute">
+    <parent link="${prefix}4_Link"/>
+    <child link="${prefix}5_Link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.87" upper="2.87" effort="1.0" velocity="1.5"/>
+  </joint>
+
+  <link name="${prefix}6_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/6_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}6_Joint" type="revolute">
+    <parent link="${prefix}5_Link"/>
+    <child link="${prefix}6_Link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.05" upper="3.05" effort="1.0" velocity="1.5"/>
+  </joint>
+
+  <link name="${prefix}jiazhua_Link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/jiazhua_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}jiazhua_Joint" type="fixed">
+    <parent link="${prefix}6_Link"/>
+    <child link="${prefix}jiazhua_Link"/>
+  </joint>
+
+  <link name="${prefix}camera_link">
+    <visual>
+      <geometry>
+        <mesh filename="package://cookM/meshes/camera_Link.STL"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="${prefix}camera_Joint" type="fixed">
+    <parent link="${prefix}6_Link"/>
+    <child link="${prefix}camera_link"/>
+  </joint>
+</robot>

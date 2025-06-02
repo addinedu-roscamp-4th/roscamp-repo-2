@@ -1,0 +1,18 @@
+# Name of the domain bridge, used for node naming and logging
+name: albabot2_to
+from_domain: 112
+to_domain: 62
+topics:
+  albabot2/odom:
+    type: nav_msgs/msg/Odometry
+    #remap: /albabot2/odom
+
+  albabot2/initialpose:
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+    remap: /initialpose
+
+  tf:
+    type: tf2_msgs/msg/TFMessage
+
+  tf_static:
+    type: tf2_msgs/msg/TFMessage

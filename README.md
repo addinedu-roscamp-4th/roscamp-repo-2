@@ -41,7 +41,7 @@ RoboDine은 로봇 기술과 인공지능을 결합한 완전 자동화된 레�
   - **[운영자 대시보드](/robodine_service/frontend/operator)**: 매장 운영 모니터링 및 관리
   - **[키오스크 시스템](/robodine_service/frontend/kiosk)**: 고객 주문 인터페이스
 
-### 2. [Alba Planner](/alba_planner)
+### 2. [Alba Manager](/alba_manager)
 서빙 로봇(ALBABOT)을 제어하는 시스템으로, 다음 기능을 제공합니다:
 - **로봇 경로 계획**: 테이블까지의 최적 경로 계산
 - **위치 추적**: 6D 좌표계 기반 로봇 위치 추적
