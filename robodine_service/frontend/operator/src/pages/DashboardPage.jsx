@@ -73,6 +73,7 @@ export default function DashboardPage() {
       // 3) 위치 (poses)
       const pose = (status.poses || []).find(p => p['Pose6D.entity_id'] === r['Robot.id']);
       if (pose) {
+        // console.log('pose', pose);
         robot.position = {
           x: pose['Pose6D.x'],
           y: pose['Pose6D.y'],

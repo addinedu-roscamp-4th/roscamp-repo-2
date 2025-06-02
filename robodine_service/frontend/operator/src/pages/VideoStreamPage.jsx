@@ -17,7 +17,10 @@ import {
   AlertTriangle,
   Wifi,
   WifiOff,
-  RotateCw
+  RotateCw,
+  Search,
+  CalendarDays,
+  ChevronDown
 } from 'lucide-react';
 
 const VideoStreamPage = () => {
@@ -32,6 +35,14 @@ const VideoStreamPage = () => {
   const refreshAttempts = useRef(0);
   const maxRefreshAttempts = 3;
   const refreshTimeoutRef = useRef(null);
+  
+  // 검색 및 필터링을 위한 상태 추가
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateFilter, setDateFilter] = useState({
+    type: 'none', // none, year, month, day, hour
+    value: null
+  });
   
   // WebSocket 연결 상태를 로그에서 확인
   useEffect(() => {
@@ -212,14 +223,99 @@ const VideoStreamPage = () => {
     return ['ALL', ...Array.from(types)];
   }, [videoStreams]);
 
-  // 활성 탭에 따라 필터링된 스트림
+  // 고유한 연도, 월, 일, 시간 목록 추출
+  const dateOptions = useMemo(() => {
+    if (!videoStreams.length) return { years: [], months: [], days: [], hours: [] };
+    
+    const years = new Set();
+    const months = new Set();
+    const days = new Set();
+    const hours = new Set();
+    
+    videoStreams.forEach(stream => {
+      if (stream.recording_started_at) {
+        const date = new Date(stream.recording_started_at);
+        
+        years.add(date.getFullYear());
+        
+        // 월은 1~12로 표시
+        const month = date.getMonth() + 1;
+        months.add(month < 10 ? `0${month}` : `${month}`);
+        
+        // 일은 1~31로 표시
+        const day = date.getDate();
+        days.add(day < 10 ? `0${day}` : `${day}`);
+        
+        // 시간은 0~23으로 표시
+        const hour = date.getHours();
+        hours.add(hour < 10 ? `0${hour}` : `${hour}`);
+      }
+    });
+    
+    return {
+      years: Array.from(years).sort((a, b) => b - a), // 내림차순 정렬
+      months: Array.from(months).sort(),
+      days: Array.from(days).sort(),
+      hours: Array.from(hours).sort()
+    };
+  }, [videoStreams]);
+
+  // 활성 탭 및 필터에 따라 필터링된 스트림
   const filteredStreams = useMemo(() => {
     if (!videoStreams.length) return [];
     
-    return activeTab === 'ALL' 
+    // 타입 필터링
+    let filtered = activeTab === 'ALL' 
       ? videoStreams 
       : videoStreams.filter(stream => stream.source_type === activeTab);
-  }, [videoStreams, activeTab]);
+    
+    // 검색어 필터링 (source_id로 검색)
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(stream => 
+        stream.source_id && stream.source_id.toString().includes(searchTerm.trim())
+      );
+    }
+    
+    // 날짜 필터링
+    if (dateFilter.type !== 'none' && dateFilter.value) {
+      filtered = filtered.filter(stream => {
+        if (!stream.recording_started_at) return false;
+        
+        const date = new Date(stream.recording_started_at);
+        
+        switch (dateFilter.type) {
+          case 'year':
+            return date.getFullYear() === parseInt(dateFilter.value);
+          case 'month':
+            return (date.getMonth() + 1) === parseInt(dateFilter.value);
+          case 'day':
+            return date.getDate() === parseInt(dateFilter.value);
+          case 'hour':
+            return date.getHours() === parseInt(dateFilter.value);
+          default:
+            return true;
+        }
+      });
+    }
+    
+    return filtered;
+  }, [videoStreams, activeTab, searchTerm, dateFilter]);
+
+  // 필터 초기화
+  const resetFilters = () => {
+    setSearchTerm('');
+    setDateFilter({ type: 'none', value: null });
+  };
+
+  // 필터 토글
+  const toggleFilters = () => {
+    setShowFilters(prev => !prev);
+  };
+
+  // 날짜 필터 변경 핸들러
+  const handleDateFilterChange = (type, value) => {
+    setDateFilter({ type, value });
+  };
 
   // 비디오 선택 핸들러
   const handleVideoSelect = (video) => {
@@ -336,6 +432,162 @@ const VideoStreamPage = () => {
           </div>
         )}
 
+        {/* 검색 및 필터링 컨트롤 */}
+        <div className="mb-6 bg-white rounded-lg shadow p-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+            {/* Source ID 검색 */}
+            <div className="flex-1">
+              <div className="relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 pr-12 sm:text-sm border-gray-300 rounded-md py-2"
+                  placeholder="Source ID로 검색"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            {/* 필터 토글 버튼 */}
+            <div>
+              <button
+                onClick={toggleFilters}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                녹화 기간 필터
+                <ChevronDown className={`ml-2 h-4 w-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+            
+            {/* 필터 초기화 버튼 */}
+            {(searchTerm || dateFilter.type !== 'none') && (
+              <button
+                onClick={resetFilters}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-red-600 bg-white hover:bg-red-50"
+              >
+                필터 초기화
+              </button>
+            )}
+          </div>
+          
+          {/* 날짜 필터링 컨트롤 */}
+          {showFilters && (
+            <div className="bg-gray-50 p-4 rounded-md border border-gray-200 mt-2">
+              <div className="flex items-center mb-3">
+                <CalendarDays className="h-5 w-5 text-gray-500 mr-2" />
+                <span className="text-gray-700 font-medium">녹화 기간 필터링</span>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* 연도 필터 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">연도</label>
+                  <select
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                    value={dateFilter.type === 'year' ? dateFilter.value : ''}
+                    onChange={(e) => handleDateFilterChange('year', e.target.value || null)}
+                  >
+                    <option value="">선택 안함</option>
+                    {dateOptions.years.map(year => (
+                      <option key={year} value={year}>{year}년</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* 월 필터 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">월</label>
+                  <select
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                    value={dateFilter.type === 'month' ? dateFilter.value : ''}
+                    onChange={(e) => handleDateFilterChange('month', e.target.value || null)}
+                  >
+                    <option value="">선택 안함</option>
+                    {dateOptions.months.map(month => (
+                      <option key={month} value={month}>{month}월</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* 일 필터 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">일</label>
+                  <select
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                    value={dateFilter.type === 'day' ? dateFilter.value : ''}
+                    onChange={(e) => handleDateFilterChange('day', e.target.value || null)}
+                  >
+                    <option value="">선택 안함</option>
+                    {dateOptions.days.map(day => (
+                      <option key={day} value={day}>{day}일</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* 시간 필터 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">시간</label>
+                  <select
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                    value={dateFilter.type === 'hour' ? dateFilter.value : ''}
+                    onChange={(e) => handleDateFilterChange('hour', e.target.value || null)}
+                  >
+                    <option value="">선택 안함</option>
+                    {dateOptions.hours.map(hour => (
+                      <option key={hour} value={hour}>{hour}시</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div className="mt-3 text-sm text-gray-500">
+                <p>* 녹화 시작 시간을 기준으로 필터링됩니다.</p>
+              </div>
+            </div>
+          )}
+          
+          {/* 현재 적용된 필터 표시 */}
+          {(searchTerm || dateFilter.type !== 'none') && (
+            <div className="mt-3 flex items-center flex-wrap gap-2">
+              <span className="text-sm text-gray-500">적용된 필터:</span>
+              
+              {searchTerm && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Source ID: {searchTerm}
+                </span>
+              )}
+              
+              {dateFilter.type === 'year' && dateFilter.value && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {dateFilter.value}년
+                </span>
+              )}
+              
+              {dateFilter.type === 'month' && dateFilter.value && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {dateFilter.value}월
+                </span>
+              )}
+              
+              {dateFilter.type === 'day' && dateFilter.value && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {dateFilter.value}일
+                </span>
+              )}
+              
+              {dateFilter.type === 'hour' && dateFilter.value && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {dateFilter.value}시
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* 탭 네비게이션 */}
         <div className="mb-6 overflow-x-auto">
           <div className="flex space-x-1 border-b border-gray-200">
@@ -377,12 +629,23 @@ const VideoStreamPage = () => {
         ) : filteredStreams.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <Video className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">영상 스트림이 없습니다</h3>
+            <h3 className="text-lg font-medium text-gray-900">검색 결과가 없습니다</h3>
             <p className="mt-2 text-gray-500">
-              {activeTab !== 'ALL' 
-                ? `${activeTab} 타입의 스트림이 없습니다.` 
-                : '등록된 영상 스트림이 없습니다.'}
+              {searchTerm || dateFilter.type !== 'none' 
+                ? '검색 조건에 맞는 영상 스트림이 없습니다.' 
+                : activeTab !== 'ALL' 
+                  ? `${activeTab} 타입의 스트림이 없습니다.` 
+                  : '등록된 영상 스트림이 없습니다.'}
             </p>
+            {(searchTerm || dateFilter.type !== 'none') && (
+              <button
+                onClick={resetFilters}
+                className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded flex items-center gap-2 mx-auto"
+              >
+                <Filter size={16} />
+                필터 초기화
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

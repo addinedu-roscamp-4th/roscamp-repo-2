@@ -145,10 +145,10 @@ const RobotTable = ({ robots, onEditRobot, onDeleteRobot, onSendCommand, onChang
                       onChangeStatus(robot);
                     }}
                     className="ml-2 flex items-center justify-center px-2 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100"
-                    title="상태 변경"
+                    title="대기중으로 변경"
                   >
                     <Activity size={14} className="mr-1" />
-                    <span className="text-xs">상태 변경</span>
+                    <span className="text-xs">대기중으로 변경</span>
                   </button>
                 </div>
               </td>
@@ -303,11 +303,7 @@ const CommandList = ({ commands, onEditCommand }) => {
 // 명령어 템플릿 정의
 const COMMAND_TEMPLATES = {
   'MOVE': { x: 100, y: 200 },
-  'CHARGE': { duration: 30 },
-  'STOP': {},
-  'PICKUP': { item_id: 1 },
-  'PUTDOWN': { position: { x: 100, y: 100 } },
-  'RESET': {}
+  'BIRTHDAY': { table_id: 1 }
 };
 
 const RobotAdminPage = () => {
@@ -502,7 +498,7 @@ const RobotAdminPage = () => {
         parameters: parsedParams
       });
       
-      await apiCall(`/api/robots/commands/${currentRobot.id}/command`, 'POST', {
+      await apiCall(`/api/robots/command`, 'POST', {
         robot_id: currentRobot.id,
         command: currentCommand.command,
         parameters: parsedParams
@@ -574,17 +570,12 @@ const RobotAdminPage = () => {
   // 로봇 상태 변경 모달 열기
   const handleChangeStatus = (robot) => {
     setCurrentRobot(robot);
-    setSelectedStatus(robot.status || 'IDLE');
+    setSelectedStatus('IDLE');
     setIsStatusModalOpen(true);
   };
 
   // 로봇 상태 변경 처리
   const handleSubmitStatusChange = async () => {
-    if (!selectedStatus) {
-      setError('상태를 선택해주세요');
-      return;
-    }
-
     try {
       setIsLoading(true);
       console.log('현재 로봇:', currentRobot);
@@ -592,27 +583,27 @@ const RobotAdminPage = () => {
       if (currentRobot.type === 'ALBABOT') {
         console.log('알바봇 상태 변경 요청:', {
           robot_id: parseInt(currentRobot.id),
-          status: selectedStatus,
+          status: 'IDLE',
           battery_level: currentRobot.battery / 100,
           timestamp: new Date().toISOString()
         });
         
         await apiCall('/api/albabot/status', 'POST', {
           robot_id: parseInt(currentRobot.id),
-          status: selectedStatus,
+          status: 'IDLE',
           battery_level: currentRobot.battery,
           timestamp: new Date().toISOString()
         });
       } else if (currentRobot.type === 'COOKBOT') {
         console.log('쿡봇 상태 변경 요청:', {
           robot_id: parseInt(currentRobot.id),
-          status: selectedStatus,
+          status: 'IDLE',
           timestamp: new Date().toISOString()
         });
         
         await apiCall('/api/cookbot/status', 'POST', {
           robot_id: parseInt(currentRobot.id),
-          status: selectedStatus,
+          status: 'IDLE',
           timestamp: new Date().toISOString()
         });
       }
@@ -1017,11 +1008,7 @@ const RobotAdminPage = () => {
               >
                 <option value="">명령 선택</option>
                 <option value="MOVE">이동</option>
-                <option value="CHARGE">충전</option>
-                <option value="STOP">정지</option>
-                <option value="PICKUP">물품 집기</option>
-                <option value="PUTDOWN">물품 놓기</option>
-                <option value="RESET">리셋</option>
+                <option value="BIRTHDAY">생일축하</option>
               </select>
             </div>
             
@@ -1043,10 +1030,7 @@ const RobotAdminPage = () => {
                 <p className="font-semibold mb-1">명령어 파라미터 설명:</p>
                 <ul className="space-y-1 list-disc pl-5">
                   <li><span className="font-medium">이동(MOVE)</span>: 이동할 좌표 (x, y)</li>
-                  <li><span className="font-medium">충전(CHARGE)</span>: 충전 시간(분)</li>
-                  <li><span className="font-medium">정지(STOP)</span>: 파라미터 없음</li>
-                  <li><span className="font-medium">물품 집기(PICKUP)</span>: 집을 물품 ID</li>
-                  <li><span className="font-medium">물품 놓기(PUTDOWN)</span>: 놓을 위치</li>
+                  <li><span className="font-medium">생일축하(BIRTHDAY)</span>: 테이블 ID(table_id)</li>
                 </ul>
               </div>
             </div>
@@ -1082,7 +1066,7 @@ const RobotAdminPage = () => {
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">
-                로봇 #{currentRobot.id} 상태 변경
+                로봇 #{currentRobot.id} 대기중 상태로 변경 중
               </h3>
               <button
                 onClick={() => setIsStatusModalOpen(false)}
@@ -1093,34 +1077,7 @@ const RobotAdminPage = () => {
             </div>
             
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                현재 상태:
-              </label>
-              <span className={`inline-block px-2 py-1 text-sm rounded-full ${getStatusColor(currentRobot.status)}`}>
-                {getStatusLabel(currentRobot.status)}
-              </span>
-            </div>
-            
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                새 상태: <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {ROBOT_STATUSES.map(status => (
-                  <button
-                    key={status.value}
-                    onClick={() => setSelectedStatus(status.value)}
-                    className={`px-3 py-2 border rounded-md text-sm ${
-                      selectedStatus === status.value
-                        ? 'border-blue-500 bg-blue-50 text-blue-800'
-                        : 'border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className={`inline-block w-3 h-3 rounded-full mr-2 ${status.color.split(' ')[0]}`}></span>
-                    {status.label}
-                  </button>
-                ))}
-              </div>
+              <p className="text-sm text-gray-700">로봇을 대기중(IDLE) 상태로 변경합니다.</p>
             </div>
             
             <div className="flex justify-end">
@@ -1134,7 +1091,7 @@ const RobotAdminPage = () => {
               <button
                 onClick={handleSubmitStatusChange}
                 className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 flex items-center"
-                disabled={!selectedStatus || isLoading}
+                disabled={isLoading}
               >
                 {isLoading ? (
                   <RefreshCw size={16} className="animate-spin mr-2" />
@@ -1238,11 +1195,7 @@ const CommandEditModal = ({ command, isOpen, onClose, onSave, isLoading }) => {
             onChange={(e) => handleCommandSelect(e.target.value)}
           >
             <option value="MOVE">이동</option>
-            <option value="CHARGE">충전</option>
-            <option value="STOP">정지</option>
-            <option value="PICKUP">물품 집기</option>
-            <option value="PUTDOWN">물품 놓기</option>
-            <option value="RESET">리셋</option>
+            <option value="BIRTHDAY">생일축하</option>
           </select>
         </div>
         
@@ -1292,11 +1245,7 @@ const CommandEditModal = ({ command, isOpen, onClose, onSave, isLoading }) => {
             <p className="font-semibold mb-1">명령어 파라미터 설명:</p>
             <ul className="space-y-1 list-disc pl-5">
               <li><span className="font-medium">이동(MOVE)</span>: 이동할 좌표 (x, y)</li>
-              <li><span className="font-medium">충전(CHARGE)</span>: 충전 시간(분)</li>
-              <li><span className="font-medium">정지(STOP)</span>: 파라미터 없음</li>
-              <li><span className="font-medium">물품 집기(PICKUP)</span>: 집을 물품 ID</li>
-              <li><span className="font-medium">물품 놓기(PUTDOWN)</span>: 놓을 위치</li>
-              <li><span className="font-medium">리셋(RESET)</span>: 파라미터 없음</li>
+              <li><span className="font-medium">생일축하(BIRTHDAY)</span>: 테이블 ID(table_id)</li>
             </ul>
           </div>
         </div>

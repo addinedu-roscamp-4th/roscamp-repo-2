@@ -1,7 +1,7 @@
 // src/contexts/WebSocketContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 const WS_BASE_URL = process.env.REACT_APP_WS_URL || 'ws://192.168.0.156:8000/ws';
-const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams', 'notifications', 'commands', 'chat'];
+const TOPICS = ['robots', 'tables', 'events', 'orders', 'status', 'systemlogs', 'customers', 'inventory', 'video_streams', 'notifications', 'commands', 'chat', 'menu'];
 
 // 재연결 관련 상수
 const INITIAL_RECONNECT_DELAY = 3000; // 초기 재연결 지연 시간 (3초)
@@ -32,14 +32,23 @@ export function WebSocketProvider({ children }) {
     tables: [], 
     events: [], 
     orders: {}, 
-    status: {}, 
+    status: {
+      robots: [],
+      albabots: [],
+      cookbots: [],
+      poses: []
+    }, 
     systemlogs: [], 
     customers: {}, 
     inventory: [], 
     video_streams: [],
     notifications: [], // 서버로부터 전송될 알림 데이터를 담을 배열
     commands: [], // 명령어 로그 데이터를 담을 배열
-    chat: [] // 채팅 메시지 데이터를 담을 배열
+    chat: [], // 채팅 메시지 데이터를 담을 배열
+    menu: {
+      items: [],
+      ingredients: []
+    } // 메뉴 관련 데이터 추가
   });
   const [errors, setErrors] = useState({});
   const [connected, setConnected] = useState({});
@@ -204,20 +213,48 @@ export function WebSocketProvider({ children }) {
             
             // 채팅 데이터인 경우 처리
             if (topic === 'chat' && msg.data) {
-              // console.log('채팅 메시지 수신:', msg.data);
-              
-              // 데이터가 배열인지 확인
-              if (!Array.isArray(msg.data)) {
-                // 단일 메시지인 경우 배열로 변환
-                if (msg.data && typeof msg.data === 'object') {
-                  const newMessages = [msg.data];
-                  processChatMessages(newMessages);
-                }
-                return;
+              try {
+                // 형식에 상관없이 메시지 처리 함수로 전달
+                processChatMessages(msg.data);
+              } catch (error) {
+                console.error('채팅 메시지 처리 오류:', error);
               }
-              
-              // 배열인 경우 처리
-              processChatMessages(msg.data);
+              return;
+            }
+            
+            // 메뉴 데이터인 경우 처리
+            if (topic === 'menu' && msg.data) {
+              try {
+                // 데이터가 올바른 형식인지 확인
+                const menuData = {
+                  items: [],
+                  ingredients: []
+                };
+                
+                // items 처리
+                if (msg.data.items && Array.isArray(msg.data.items)) {
+                  menuData.items = msg.data.items;
+                } else if (msg.data.items) {
+                  console.warn('menu.items가 배열이 아님:', msg.data.items);
+                }
+                
+                // ingredients 처리
+                if (msg.data.ingredients && Array.isArray(msg.data.ingredients)) {
+                  menuData.ingredients = msg.data.ingredients;
+                } else if (msg.data.ingredients) {
+                  console.warn('menu.ingredients가 배열이 아님:', msg.data.ingredients);
+                }
+                
+                // 상태 업데이트
+                setData(prev => ({
+                  ...prev,
+                  menu: menuData
+                }));
+                
+                // console.log(`메뉴 데이터 업데이트: 항목 ${menuData.items.length}개, 재료 ${menuData.ingredients.length}개`);
+              } catch (error) {
+                console.error('메뉴 데이터 처리 오류:', error);
+              }
               return;
             }
             
@@ -291,6 +328,18 @@ export function WebSocketProvider({ children }) {
 
   // 채팅 메시지 처리 함수
   const processChatMessages = (messages) => {
+    // messages가 배열인지 확인
+    if (!Array.isArray(messages)) {
+      console.warn('processChatMessages: 배열이 아닌 메시지 데이터가 전달됨:', messages);
+      // 객체인 경우 배열로 변환
+      if (messages && typeof messages === 'object') {
+        messages = [messages];
+      } else {
+        // 객체가 아닌 경우 빈 배열로 처리
+        messages = [];
+      }
+    }
+    
     setData(prev => {
       // 기존 메시지의 ID 세트 생성
       const existingIds = new Set(prev.chat.map(m => m.id));

@@ -1,4 +1,6 @@
-# 🖥️ RoboDine 키오스크 시스템
+# 로보다인 키오스크 (Robodine Kiosk)
+
+로보다인 서비스의 키오스크 웹 애플리케이션입니다. 이 애플리케이션은 고객이 메뉴를 탐색하고 주문할 수 있는 인터페이스를 제공합니다.
 
 ## 📌 개요
 
@@ -84,3 +86,84 @@ kiosk/
 
 - **AI 기반 메뉴 추천**: 사용자 주문 이력 기반 개인화된 추천
 - **음성 인식 주문**: 장애인 접근성 향상을 위한 음성 인터페이스
+
+## 설치 방법
+
+### 사전 요구사항
+
+- Node.js (v14 이상)
+- npm 또는 yarn
+
+### 설치 단계
+
+1. 저장소 클론
+   ```bash
+   git clone <repository-url>
+   cd robodine_service/frontend/kiosk
+   ```
+
+2. 의존성 설치
+   ```bash
+   npm install
+   # 또는
+   yarn install
+   ```
+
+3. 개발 서버 실행
+   ```bash
+   npm start
+   # 또는
+   yarn start
+   ```
+
+4. 빌드
+   ```bash
+   npm run build
+   # 또는
+   yarn build
+   ```
+
+## 프로젝트 구조
+
+```
+src/
+├── api/             # API 호출 관련 모듈
+├── components/      # 재사용 가능한 컴포넌트
+│   ├── Cart/        # 장바구니 관련 컴포넌트
+│   ├── Checkout/    # 결제 관련 컴포넌트
+│   ├── Layout/      # 레이아웃 관련 컴포넌트
+│   ├── Menu/        # 메뉴 관련 컴포넌트
+│   └── Notification/# 알림 관련 컴포넌트
+├── context/         # 컨텍스트 API (장바구니 등)
+├── hooks/           # 커스텀 훅
+├── pages/           # 페이지 컴포넌트
+└── utils/           # 유틸리티 함수
+```
+
+## 백엔드 연동
+
+이 키오스크 애플리케이션은 로보다인 백엔드 API와 연동됩니다. API 엔드포인트는 `src/api/` 디렉토리의 파일에서 설정할 수 있습니다.
+
+기본 API URL:
+```
+http://localhost:8000/api
+```
+
+## 배포
+
+1. 빌드 파일 생성
+   ```bash
+   npm run build
+   # 또는
+   yarn build
+   ```
+
+2. 생성된 `build` 디렉토리를 웹 서버에 배포
+
+## 라이선스
+
+이 프로젝트는 [라이선스명] 라이선스 하에 제공됩니다.
+
+## 연락처
+
+질문이나 피드백이 있으시면 [이메일주소] 로 연락해주세요.

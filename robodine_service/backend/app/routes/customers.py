@@ -17,6 +17,25 @@ from app.models.enums import TableStatus
 
 router = APIRouter()
 
+# 로거 설정 및 저장
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('inventory.log')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+# Create a directory for logs if it doesn't exist
+import os
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w') as f:
+        f.write("Inventory log file created.\n")
+    f.write("Log entries will be appended here.\n")
+    f.close()
+
 # --- Pydantic Schemas ---
 class CustomerCreateRequest(BaseModel):
     count: int
@@ -65,6 +84,14 @@ def create_customer(
     db.add(customer)
     db.commit()
     db.refresh(customer)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "customer",
+        None
+    )
     
     # Log this action
     log_info(db, f"손님이 입장하셨습니다.: {customer.count}명 (ID: {customer.id})", background_tasks)
@@ -91,6 +118,14 @@ def delete_customer(customer_id: int,
     
     # Log this action
     log_info(db, f"손님이 퇴장했습니다. 고객 ID: {customer_id}", background_tasks)
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "customer",
+        None
+    )
     
     return {"message": "Customer deleted successfully"}
 
@@ -146,6 +181,14 @@ def assign_table_to_customer(
     db.add(assignment)
     db.add(table)
     db.commit()
+
+    from run import broadcast_entity_update
+    # REST API 호출 시 웹소켓 브로드캐스트 트리거
+    background_tasks.add_task(
+        broadcast_entity_update,
+        "customer",
+        None
+    )
     
     # Log this action
     log_info(db, f"테이블 {table_id} 배정되었습니다: 고객 그룹 {customer_id} ({customer.count}명)", background_tasks)

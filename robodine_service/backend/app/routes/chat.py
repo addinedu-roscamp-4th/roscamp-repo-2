@@ -20,9 +20,26 @@ from app.core.utils import broadcast_chat_update
 from app.routes.auth import get_current_user
 from app.models.enums import ChatStatus
 
-# 로깅 설정
-logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# 로거 설정 및 저장
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.FileHandler('inventory.log')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+# Create a directory for logs if it doesn't exist
+import os
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'inventory.log')
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w') as f:
+        f.write("Inventory log file created.\n")
+    f.write("Log entries will be appended here.\n")
+    f.close()
 
 
 
@@ -60,52 +77,29 @@ INITIAL_DELAY = 3          # 첫 번째 재시도 전 대기 시간(초)
 BACKOFF_FACTOR = 2         # 지수 백오프 계수
 
 async def send_to_chat_server(message: Dict[str, Any]) -> Dict[str, Any]:
-    """채팅 메시지를 외부 서버로 TCP를 통해 전송하고, ACK 수신만 처리"""
-    attempt = 0
-    delay = INITIAL_DELAY
-
-    while attempt < MAX_RETRIES:
-        attempt += 1
-        client_socket = None
-        try:
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.settimeout(10)
-            client_socket.connect((CHAT_SERVER_HOST, CHAT_SERVER_PORT))
-
+    try:
+        with socket.create_connection((CHAT_SERVER_HOST, CHAT_SERVER_PORT), timeout=10) as sock:
             payload = json.dumps(message).encode('utf-8')
-            header = len(payload).to_bytes(4, byteorder='big')
-            client_socket.sendall(header + payload)
+            header  = len(payload).to_bytes(4, 'big')
+            sock.sendall(header + payload)
+        # 전송이 성공했음을 알려주는 간단한 리턴
+        return {"msg_id": message.get("msg_id"), "status": "sent"}
+    except Exception as e:
+        logger.error(f"메시지 전송 중 오류: {e}")
+        # 전송 실패 시 서버 오류 메시지로 응답 저장
+        session = SessionLocal()
+        chat = session.get(Chat, message.get("msg_id"))
+        if chat:
+            chat.answer = "채팅 서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요."
+            chat.status = "ERROR"
+            session.add(chat)
+            session.commit()
+            session.refresh(chat)
+            from run import broadcast_entity_update
+            asyncio.create_task(broadcast_entity_update("chat", message.get("msg_id")))
+        session.close()
 
-            # ACK 수신
-            hdr = client_socket.recv(4)
-            if not hdr:
-                raise ConnectionError("빈 ACK 헤더를 받았습니다.")
-            size = int.from_bytes(hdr, byteorder='big')
-            data = b''
-            while len(data) < size:
-                chunk = client_socket.recv(min(size - len(data), 4096))
-                if not chunk:
-                    raise ConnectionError("ACK 수신 중 연결이 끊어졌습니다.")
-                data += chunk
-
-            ack_text = data.decode('utf-8')
-            logger.info(f"채팅 서버 ACK: {ack_text}")
-            return {"msg_id": message.get("msg_id"), "response_text": ack_text, "status": "ACK"}
-
-        except (socket.timeout, ConnectionRefusedError, ConnectionError) as e:
-            logger.error(f"시도 {attempt}/{MAX_RETRIES} - ACK 수신 오류: {e}")
-            if attempt < MAX_RETRIES:
-                logger.info(f"{delay}초 후 재시도합니다...")
-                await asyncio.sleep(delay)
-                delay *= BACKOFF_FACTOR
-                continue
-            return {"msg_id": message.get("msg_id"), "response_text": "ACK 수신 실패", "status": "error"}
-        finally:
-            if client_socket:
-                try:
-                    client_socket.close()
-                except:
-                    pass
+        return {"msg_id": message.get("msg_id"), "status": "error"}
 
 async def process_chat_message(
     chat_id: int,
@@ -282,3 +276,36 @@ async def get_chat_detail(
         "timestamp": chat.timestamp,
         "status": chat.status
     } 
+
+# 채팅 답변 업데이트
+@router.put("/{chat_id}/answer", response_model=ChatResponse)
+async def update_chat_answer(
+    chat_id: int,
+    answer: str,
+    session: Session = Depends(get_db)
+):
+    """채팅 메시지 답변 업데이트"""
+    chat = session.get(Chat, chat_id)
+    
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="채팅 메시지를 찾을 수 없습니다."
+        )
+        
+    chat.answer = answer
+    chat.status = "COMPLETED"
+    session.add(chat)
+    session.commit()
+    session.refresh(chat)
+    
+    from run import broadcast_entity_update
+    asyncio.create_task(broadcast_entity_update("chat", chat_id))
+    
+    return {
+        "id": chat.id,
+        "question": chat.question,
+        "answer": chat.answer,
+        "timestamp": chat.timestamp,
+        "status": chat.status
+    }

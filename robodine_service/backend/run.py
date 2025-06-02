@@ -3,12 +3,14 @@
 import logging
 import threading
 import socketserver
+import socket
 import json
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 import anyio
 import os
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +51,38 @@ main_loop = None
 
 # 로깅 설정
 logger = logging.getLogger("robodine.run")
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 로그 디렉터리 생성
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# 로거 인스턴스
+logger = logging.getLogger("robodine.run")
+logger.setLevel(logging.INFO)
+
+# 포맷터
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# 1) 콘솔 핸들러
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# 2) 파일 핸들러 (10MB 순환, 백업 5개)
+file_handler = RotatingFileHandler(
+    filename=os.path.join(LOG_DIR, "server.log"),
+    maxBytes=10 * 1024 * 1024,
+    backupCount=5,
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# SQLAlchemy 로그는 WARNING 이상만
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # SQLAlchemy 쿼리/롤백 로그를 WARNING 이상만 찍도록 설정
@@ -72,7 +106,8 @@ last_broadcast = {
     "video_streams": datetime.min,
     "notifications": datetime.min,
     "commands": datetime.min,
-    "chat": datetime.min
+    "chat": datetime.min,
+    "menu": datetime.min
 }
 
 # 모델 데이터 변환 함수들
@@ -213,7 +248,8 @@ def serialize_orderitem(orderitem):
     return {
         "OrderItem.order_id": orderitem.order_id,
         "OrderItem.menu_item_id": orderitem.menu_item_id,
-        "OrderItem.quantity": orderitem.quantity
+        "OrderItem.quantity": orderitem.quantity,
+        "OrderItem.status": str(orderitem.status).replace('OrderStatus.', '') if orderitem.status else None,
     }
 
 def serialize_menuitem(menuitem):
@@ -222,7 +258,18 @@ def serialize_menuitem(menuitem):
         "MenuItem.id": menuitem.id,
         "MenuItem.name": menuitem.name,
         "MenuItem.price": menuitem.price,
-        "MenuItem.prepare_time": menuitem.prepare_time
+        "MenuItem.prepare_time": menuitem.prepare_time,
+        "MenuItem.image_url": menuitem.image_url,
+        "MenuItem.description": menuitem.description,
+    }
+
+def serialize_menu_ingredient(ingredient):
+    """MenuIngredient 모델을 JSON 직렬화 가능한 형태로 변환"""
+    return {
+        "MenuIngredient.id": ingredient.id,
+        "MenuIngredient.name": ingredient.name,
+        "MenuIngredient.menu_item_id": ingredient.menu_item_id,
+        "MenuIngredient.quantity_required": ingredient.quantity_required
     }
 
 def serialize_systemlog(log):
@@ -410,6 +457,15 @@ async def broadcast_chat_update(chat_data):
     }
     await manager.broadcast(message, "chat")
 
+async def broadcast_menu_update(menu_data):
+    """메뉴 데이터 업데이트를 브로드캐스팅"""
+    message = {
+        "type": "update",
+        "topic": "menu",
+        "data": menu_data
+    }
+    await manager.broadcast(message, "menu")
+
 # 비동기 브로드캐스팅 함수
 async def broadcast_entity_update(entity_type, entity_id):
     """엔티티 변경 시 해당 데이터를 웹소켓으로 브로드캐스팅"""
@@ -437,9 +493,10 @@ async def broadcast_entity_update(entity_type, entity_id):
                         .order_by(Cookbot.robot_id, Cookbot.id.desc())
                         .distinct(Cookbot.robot_id)
                     ).all()
+                    required_pose_entity_types = ["WORLD", "COOKBOT", "INVENTORY"]
                     poses = session.exec(
                         select(Pose6D)
-                        .where(Pose6D.entity_type == "WORLD")
+                        .where(Pose6D.entity_type.in_(required_pose_entity_types))
                         .order_by(Pose6D.entity_id, Pose6D.id.desc())
                         .distinct(Pose6D.entity_id)
                     ).all()
@@ -499,14 +556,14 @@ async def broadcast_entity_update(entity_type, entity_id):
                                     else_=1
                                 ),
                                 Order.id.desc())
-                            .limit(20)
+                            # .limit(20)
                         ).all()
                         out['data'] = [serialize_order(order) for order in orders]
                     # # 주문 아이템 및 키오스크 단말기 정보 추가
                     orderitems = session.exec(
                         select(OrderItem)
                         .order_by(OrderItem.order_id.desc())
-                        .distinct(OrderItem.order_id)
+                        # .distinct(OrderItem.order_id)
                     ).all()
                     out['orderitems'] = orderitems
                     kioskterminals = session.exec(
@@ -633,7 +690,16 @@ async def broadcast_entity_update(entity_type, entity_id):
                         .limit(30)
                     ).all()
                     out['data'] = [serialize_chat(chat) for chat in chats]
+                # menu
+                elif entity_type == "menu":
+                    # 메뉴 항목 및 재료 데이터 조회
+                    menu_items = session.exec(select(MenuItem).order_by(MenuItem.id)).all()
+                    menu_ingredients = session.exec(select(MenuIngredient).order_by(MenuIngredient.id)).all()
                     
+                    out['data'] = {
+                        'items': [serialize_menuitem(item) for item in menu_items],
+                        'ingredients': [serialize_menu_ingredient(ingredient) for ingredient in menu_ingredients]
+                    }
                 return out
 
         result = await anyio.to_thread.run_sync(_sync_db_work)
@@ -709,6 +775,9 @@ async def broadcast_entity_update(entity_type, entity_id):
         elif entity == "chat":
             await broadcast_chat_update(result['data'])
             last_broadcast['chat'] = now
+        elif entity == "menu":
+            await broadcast_menu_update(result['data'])
+            last_broadcast['menu'] = now
 
     except Exception as entity:
         logger.error(f"Error in broadcasting {entity_type} update: {entity}")
@@ -770,6 +839,10 @@ async def fallback_polling():
             if (now - last_broadcast.get("chat", datetime.min)).total_seconds() > POLLING_INTERVAL:
                 await broadcast_entity_update("chat", None)
                 
+            # 메뉴 데이터 10초마다 갱신
+            if (now - last_broadcast.get("menu", datetime.min)).total_seconds() > POLLING_INTERVAL:
+                await broadcast_entity_update("menu", None)
+                
         except Exception as e:
             logger.error(f"Error in fallback polling: {str(e)}")
             
@@ -804,6 +877,7 @@ async def lifespan(app: FastAPI):
     last_broadcast["notifications"] = datetime.min
     last_broadcast["commands"] = datetime.min
     last_broadcast["chat"] = datetime.min
+    last_broadcast["menu"] = datetime.min
 
     yield
     
@@ -820,7 +894,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 모든 도메인에서 접근을 허용
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],  # 모든 HTTP 메서드를 허용
     allow_headers=["*"],  # 모든 헤더를 허용
 )
@@ -845,47 +919,76 @@ def recv_all(sock, count: int) -> bytes:
         buf.extend(chunk)
     return bytes(buf)
 
-# TCP 핸들러에서 웹소켓 브로드캐스팅 추가
+# TCP 핸들러에서 웹소켓 브로드캐스트 추가
 class RoboDineTCPHandler(socketserver.BaseRequestHandler):
+    def send_json(self, sock, obj: dict) -> None:
+        """4바이트 빅엔디안 헤더 + JSON 바디 프레이밍하여 전송"""
+        data = json.dumps(obj).encode('utf-8')
+        header = len(data).to_bytes(4, 'big')
+        sock.sendall(header + data)
+
     def handle(self):
+        # 1) 타임아웃 설정 (5초)
+        self.request.settimeout(5)
+
         try:
-            # 1) 헤더(4바이트) 읽어서 전체 길이 계산
+            # 2) 헤더(4바이트) 읽어서 전체 길이 계산
             raw_len = recv_all(self.request, 4)
             total_len = int.from_bytes(raw_len, byteorder='big')
-            logger.info(f"[TCP] Incoming payload length: {total_len} bytes")
-
-            # 2) 실제 페이로드(바디)만 읽기
+            
+            # 3) 실제 페이로드(바디)만 읽기
             body = recv_all(self.request, total_len)
-
-            # 3) JSON 파싱
             data = json.loads(body.decode('utf-8'))
-            logger.info(f"[TCP] Received JSON: {data}")
-
-            # 4) dispatch & DB 저장
+            
+            # 4) 내부 처리 및 DB 저장
             with Session(engine) as session:
                 result = dispatch_payload(session, data)
                 session.commit()
-                # 필요시 브로드캐스트
+                # 필요 시 이벤트 브로드캐스트
                 if isinstance(result, dict) and 'affected_entity' in result:
                     et = result['affected_entity']['type']
                     eid = result['affected_entity']['id']
-                    # main_loop는 run.py 에서 전역으로 설정된 asyncio loop
+                    # 메인 루프에 업데이트 호출 (전역 main_loop 사용)
                     main_loop.call_soon_threadsafe(
                         lambda: asyncio.create_task(broadcast_entity_update(et, eid))
                     )
-
-            response = "OK_JSON"
+            
+            # 5) 성공 응답
+            response_obj = {
+                "status": "success",
+                "message": "정보가 성공적으로 등록되었습니다."
+            }
+            self.send_json(self.request, response_obj)
 
         except json.JSONDecodeError as e:
-            logger.error(f"[TCP] JSON 디코딩 실패: {e}")
-            response = "ERROR_JSON"
+            # JSON 파싱 실패
+            error_obj = {
+                "status": "error",
+                "message": "JSON 디코딩 실패",
+                "error_code": "INVALID_PAYLOAD",
+                "details": str(e)
+            }
+            self.send_json(self.request, error_obj)
+
+        except socket.timeout as e:
+            # 타임아웃 발생
+            error_obj = {
+                "status": "error",
+                "message": "요청 처리 타임아웃",
+                "error_code": "TIMEOUT",
+                "details": "5초 동안 응답이 없어 타임아웃되었습니다."
+            }
+            self.send_json(self.request, error_obj)
 
         except Exception as e:
-            logger.error(f"[TCP] 처리 오류: {e}")
-            response = "ERROR"
-
-        # 5) 클라이언트에 응답
-        self.request.sendall(response.encode('utf-8'))
+            # 기타 서버 오류
+            error_obj = {
+                "status": "error",
+                "message": "서버 처리 중 오류 발생",
+                "error_code": "SERVER_ERROR",
+                "details": str(e)
+            }
+            self.send_json(self.request, error_obj)
 
 # Include routers - API path prefix for all endpoints
 API_PREFIX = "/api"
@@ -949,7 +1052,7 @@ def start_tcp_server(host: str, port: int):
 def run_servers():
     import uvicorn
     uvicorn.run(
-        "robodine_service.backend.run:app", 
+        "run:app", 
         host="0.0.0.0", 
         port=8000, 
         reload=True, 

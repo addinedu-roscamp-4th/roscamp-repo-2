@@ -9,6 +9,17 @@ from pydantic import BaseModel
 import asyncio
 
 logger = logging.getLogger(__name__)
+# 로그 파일 저장
+LOG_DIR = os.path.join(os.path.dirname(__file__), '..','..', '..', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+log_file_path = os.path.join(LOG_DIR, 'websocket.log')
+file_handler = logging.FileHandler(log_file_path)
+file_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+logger.setLevel(logging.INFO)
+
 
 router = APIRouter()
 
@@ -19,7 +30,7 @@ WS_PING_INTERVAL = int(os.environ.get("WS_PING_INTERVAL", "30"))  # 초 단위
 # 웹소켓 메시지 프로토콜 정의
 class WSMessage(BaseModel):
     type: Literal["update", "error", "ping", "pong", "shutdown"]
-    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands", "chat"]
+    topic: Literal["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands", "chat", "menu"]
     data: Any
 
 # 연결 관리자 클래스
@@ -38,7 +49,8 @@ class ConnectionManager:
             "video_streams": [],
             "notifications": [],
             "commands": [],
-            "chat": []
+            "chat": [],
+            "menu": []
         }
         self.shutting_down = False
         self.max_connections_per_topic = WS_MAX_CONNECTIONS  # 환경 변수에서 가져온 값
@@ -163,7 +175,7 @@ ping_task = None
 async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
     """단일 통합 웹소켓 엔드포인트 - 토픽은 URL 경로 파라미터로 지정"""
     # 지원되는 토픽 확인
-    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands", "chat"]
+    valid_topics = ["robots", "tables", "events", "orders", "status", "systemlogs", "customers", "inventory", "video_streams", "notifications", "commands", "chat", "menu"]
     if topic not in valid_topics:
         logger.warning(f"Client attempted to connect to invalid topic: {topic}")
         await websocket.close(code=1003)  # 1003 = Unsupported data
@@ -210,6 +222,13 @@ async def websocket_topic_endpoint(websocket: WebSocket, topic: str):
                 await broadcast_entity_update("chat", None)
             except Exception as e:
                 logger.error(f"Initial chat broadcast failed: {e}")
+                
+        # 초기 브로드캐스트: 메뉴 연결 시 메뉴 데이터 즉시 전송
+        elif topic == "menu":
+            try:
+                await broadcast_entity_update("menu", None)
+            except Exception as e:
+                logger.error(f"Initial menu broadcast failed: {e}")
 
         logger.info(f"{topic.capitalize()} connection established from {websocket.client.host}")
         
