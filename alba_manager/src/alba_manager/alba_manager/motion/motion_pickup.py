@@ -51,6 +51,7 @@ class RotateToYawPID(Node):
         # 현재 yaw 계산
         q = msg.pose.orientation
         _, _, yaw = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        '''
         # 에러 계산 (-pi ~ pi)
         error = self.target_yaw - yaw
         error = math.atan2(math.sin(error), math.cos(error))
@@ -63,12 +64,13 @@ class RotateToYawPID(Node):
         else:
             twist.angular.z = self.pid.compute(error)
         # 직진 X
+        twist.angular.z = self.target_yaw
         twist.linear.x = 0.0
         self.cmd_vel_pub.publish(twist)
         self.get_logger().info(
             f"[현재 Yaw] {math.degrees(yaw):.2f}° | [목표] {math.degrees(self.target_yaw):.2f}° | "
             f"[오차] {math.degrees(error):.2f}° | [PID출력] {twist.angular.z:.3f} rad/s"
-        )
+        )'''
 
 class MoveBack(Node):
     def __init__(self):

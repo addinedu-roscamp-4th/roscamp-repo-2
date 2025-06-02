@@ -75,17 +75,27 @@ def send_goal_and_wait(x, y, yaw_deg) -> int:
 
 def main(args=None):
     rclpy.init(args=args)
-
+    result=1
     # 좌표 인자 (예: x=1.0, y=0.5, yaw=90도)
-    x = 0.98590
-    y = -0.00164
+    x = 0.44
+    y = -0.38
+    yaw_deg = -90.0
+    result = send_goal_and_wait(x, y, yaw_deg)
+    x = 0.39
+    y = -0.65
+    yaw_deg = -90.0
+    if result == 1:
+        result = send_goal_and_wait(x, y, yaw_deg)
+    x = 0.29
+    y = -0.65
     yaw_deg = 0.0
+    if result == 1:
+        result = send_goal_and_wait(x, y, yaw_deg)
 
-    node = Nav2GoalSender(x, y, yaw_deg)
-    rclpy.spin(node)
-    node.destroy_node()
     rclpy.shutdown()
 
 
 if __name__ == '__main__':
     main()
+
+
