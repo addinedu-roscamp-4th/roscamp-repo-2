@@ -1,6 +1,163 @@
 // LiveStreamComponent.jsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
+// 성능 측정을 위한 클래스
+class ClientPerformanceMonitor {
+  constructor() {
+    this.metrics = {
+      connectionStartTime: null,
+      offerCreatedTime: null,
+      answerReceivedTime: null,
+      firstFrameTime: null,
+      connectionEstablishedTime: null,
+      frameIntervals: [],
+      webrtcTiming: []
+    };
+    this.lastFrameTime = null;
+    this.frameCount = 0;
+    this.performanceInterval = null;
+  }
+
+  startConnection() {
+    this.metrics.connectionStartTime = performance.now();
+    console.log('🔄 연결 시작 시간 기록');
+  }
+
+  recordOfferCreated() {
+    this.metrics.offerCreatedTime = performance.now();
+    const elapsed = this.metrics.offerCreatedTime - this.metrics.connectionStartTime;
+    console.log(`📤 Offer 생성 완료: ${elapsed.toFixed(1)}ms`);
+  }
+
+  recordAnswerReceived() {
+    this.metrics.answerReceivedTime = performance.now();
+    const elapsed = this.metrics.answerReceivedTime - this.metrics.offerCreatedTime;
+    console.log(`📥 Answer 수신 완료: ${elapsed.toFixed(1)}ms`);
+  }
+
+  recordFirstFrame() {
+    if (!this.metrics.firstFrameTime) {
+      this.metrics.firstFrameTime = performance.now();
+      const totalTime = this.metrics.firstFrameTime - this.metrics.connectionStartTime;
+      console.log(`🎥 첫 프레임 수신: ${totalTime.toFixed(1)}ms (총 연결 시간)`);
+      
+      // 서버에 성능 메트릭 전송
+      this.sendPerformanceMetrics();
+    }
+  }
+
+  recordConnectionEstablished() {
+    this.metrics.connectionEstablishedTime = performance.now();
+    const elapsed = this.metrics.connectionEstablishedTime - this.metrics.connectionStartTime;
+    console.log(`✅ WebRTC 연결 완료: ${elapsed.toFixed(1)}ms`);
+  }
+
+  recordFrame() {
+    const now = performance.now();
+    this.frameCount++;
+    
+    if (this.lastFrameTime) {
+      const interval = now - this.lastFrameTime;
+      this.metrics.frameIntervals.push(interval);
+      
+      // 최근 30개 프레임 간격만 유지
+      if (this.metrics.frameIntervals.length > 30) {
+        this.metrics.frameIntervals.shift();
+      }
+      
+      // 긴 프레임 간격 감지 (60ms 이상 = 16.7fps 이하)
+      if (interval > 60) {
+        console.warn(`⚠️ 긴 프레임 간격 감지: ${interval.toFixed(1)}ms`);
+      }
+    }
+    
+    this.lastFrameTime = now;
+    
+    // 30프레임마다 성능 요약 출력
+    if (this.frameCount % 30 === 0) {
+      this.logPerformanceSummary();
+    }
+  }
+
+  logPerformanceSummary() {
+    if (this.metrics.frameIntervals.length > 1) {
+      const avgInterval = this.metrics.frameIntervals.reduce((a, b) => a + b, 0) / this.metrics.frameIntervals.length;
+      const avgFps = 1000 / avgInterval;
+      const maxInterval = Math.max(...this.metrics.frameIntervals);
+      const minInterval = Math.min(...this.metrics.frameIntervals);
+      
+      console.log('=== 클라이언트 성능 요약 ===');
+      console.log(`평균 FPS: ${avgFps.toFixed(1)}`);
+      console.log(`평균 프레임 간격: ${avgInterval.toFixed(1)}ms`);
+      console.log(`최대 간격: ${maxInterval.toFixed(1)}ms, 최소 간격: ${minInterval.toFixed(1)}ms`);
+      console.log(`총 프레임 수: ${this.frameCount}`);
+    }
+  }
+
+  async sendPerformanceMetrics() {
+    try {
+      const metrics = {
+        connectionStartToOffer: this.metrics.offerCreatedTime - this.metrics.connectionStartTime,
+        offerToAnswer: this.metrics.answerReceivedTime - this.metrics.offerCreatedTime,
+        answerToFirstFrame: this.metrics.firstFrameTime - this.metrics.answerReceivedTime,
+        totalConnectionTime: this.metrics.firstFrameTime - this.metrics.connectionStartTime,
+        clientUserAgent: navigator.userAgent,
+        timestamp: new Date().toISOString()
+      };
+
+      const host = window.location.hostname;
+      const port = '8000';
+      
+      // 성능 메트릭을 서버로 전송
+      await fetch(`http://${host}:${port}/client-metrics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'webrtc_client_performance',
+          metrics: metrics
+        })
+      });
+      
+      console.log('📊 성능 메트릭 서버 전송 완료:', metrics);
+    } catch (error) {
+      console.warn('성능 메트릭 전송 실패:', error);
+    }
+  }
+
+  startPerformanceMonitoring() {
+    // 5초마다 성능 요약 출력
+    this.performanceInterval = setInterval(() => {
+      if (this.frameCount > 0) {
+        this.logPerformanceSummary();
+      }
+    }, 5000);
+  }
+
+  stopPerformanceMonitoring() {
+    if (this.performanceInterval) {
+      clearInterval(this.performanceInterval);
+      this.performanceInterval = null;
+    }
+  }
+
+  reset() {
+    this.metrics = {
+      connectionStartTime: null,
+      offerCreatedTime: null,
+      answerReceivedTime: null,
+      firstFrameTime: null,
+      connectionEstablishedTime: null,
+      frameIntervals: [],
+      webrtcTiming: []
+    };
+    this.lastFrameTime = null;
+    this.frameCount = 0;
+    this.stopPerformanceMonitoring();
+  }
+}
+
 const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => {
   console.log('LiveStreamComponent 렌더링 시작 - streamId:', streamId);
   
@@ -18,6 +175,9 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
   // ICE 후보 큐 - 원격 설명이 설정되기 전에 도착한 ICE 후보를 저장
   const iceCandidatesQueueRef = useRef([]);
   const remoteDescriptionSetRef = useRef(false);
+  
+  // 성능 모니터 인스턴스
+  const performanceMonitorRef = useRef(new ClientPerformanceMonitor());
   
   // 중복 요청 방지를 위한 상태 변수들
   const lastOfferTimeRef = useRef(0);
@@ -60,10 +220,14 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
       return () => clearTimeout(timer);
     }
   }, [rateLimitMessage]);
+  
 
   // 연결 정리 함수
   const cleanupConnection = useCallback(() => {
     try {
+      // 성능 모니터링 중지
+      performanceMonitorRef.current.stopPerformanceMonitoring();
+      
       // WebRTC 연결 정리 - 상태 확인 후 안전하게 종료
       if (peerConnectionRef.current) {
         console.log('연결 정리 중, 현재 상태:', peerConnectionRef.current.signalingState);
@@ -270,6 +434,11 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
       setErrorMessage(null);
       attemptRef.current++;
 
+      // 성능 모니터 초기화 및 연결 시작 시간 기록
+      performanceMonitorRef.current.reset();
+      performanceMonitorRef.current.startConnection();
+      performanceMonitorRef.current.startPerformanceMonitoring();
+
       // 이전 연결 정리
       cleanupConnection();
 
@@ -315,7 +484,7 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
         }, 1000); // 1초 후 플래그 해제로 즉시 재시도 방지
       }
     }
-  }, [streamId, onError]); // 의존성 최소화
+  }, [streamId, onError]);
 
   // RTCPeerConnection 설정
   const setupPeerConnection = useCallback(async () => {
@@ -348,7 +517,8 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
         console.log('ICE 연결 상태:', pc.iceConnectionState);
         
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          // 연결 성공
+          // 연결 성공 - 성능 측정
+          performanceMonitorRef.current.recordConnectionEstablished();
           setLoading(false);
           setReconnecting(false);
           lastIceConnectedTimeRef.current = Date.now();
@@ -415,10 +585,26 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
           if (videoRef.current) {
             videoRef.current.srcObject = event.streams[0];
             
-            // 비디오 트랙이 활성화되면 로딩 상태 해제
+            // 비디오 프레임 수신 모니터링 설정
             if (event.track.kind === 'video') {
+              // 첫 프레임 수신 감지
+              const handleFirstFrame = () => {
+                performanceMonitorRef.current.recordFirstFrame();
+                videoRef.current.removeEventListener('loadeddata', handleFirstFrame);
+              };
+              
+              videoRef.current.addEventListener('loadeddata', handleFirstFrame);
+              
+              // 프레임 간격 모니터링
+              const handleTimeUpdate = () => {
+                performanceMonitorRef.current.recordFrame();
+              };
+              
+              videoRef.current.addEventListener('timeupdate', handleTimeUpdate);
+              
               event.track.onunmute = () => {
                 console.log('비디오 트랙 활성화됨');
+                performanceMonitorRef.current.recordFirstFrame();
                 setLoading(false);
                 setReconnecting(false);
               };
@@ -434,6 +620,7 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
         
         if (pc.connectionState === 'connected') {
           console.log('P2P 연결 성공');
+          performanceMonitorRef.current.recordConnectionEstablished();
           setLoading(false);
           setReconnecting(false);
         }
@@ -466,30 +653,11 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
           offerToReceiveAudio: true
         });
         
+        // Offer 생성 시간 기록
+        performanceMonitorRef.current.recordOfferCreated();
+        
         // 클라이언트 offer SDP 로깅 (디버깅용)
-        console.log('클라이언트 생성 offer SDP:', offer.sdp);
-        
-        // 미디어 라인 순서 분석
-        const lines = offer.sdp.split('\n');
-        const audioLines = [];
-        const videoLines = [];
-        
-        lines.forEach((line, index) => {
-          if (line.trim().startsWith('m=audio')) {
-            audioLines.push({ index, line: line.trim() });
-          } else if (line.trim().startsWith('m=video')) {
-            videoLines.push({ index, line: line.trim() });
-          }
-        });
-        
-        const firstAudioIndex = audioLines.length > 0 ? audioLines[0].index : Infinity;
-        const firstVideoIndex = videoLines.length > 0 ? videoLines[0].index : Infinity;
-        const hasAudioFirst = firstAudioIndex < firstVideoIndex;
-        
-        console.log('클라이언트 offer 미디어 라인 분석:');
-        console.log('- 오디오 라인:', audioLines);
-        console.log('- 비디오 라인:', videoLines);
-        console.log('- 첫 번째 미디어:', hasAudioFirst ? 'audio' : 'video');
+        console.log('클라이언트 생성 offer SDP 전송');
         
         await pc.setLocalDescription(offer);
         console.log('Local description set successfully');
@@ -498,60 +666,14 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
         const response = await sendOfferViaHttp(offer);
         
         if (response) {
+          // Answer 수신 시간 기록
+          performanceMonitorRef.current.recordAnswerReceived();
+          
           // 세션 ID 저장
           setSessionId(response.sessionId);
           
           // 서버 answer SDP 로깅
-          console.log('서버 answer SDP:', response.sdp);
-          
-          // 서버 answer 미디어 라인 순서 및 구조 분석
-          const answerLines = response.sdp.split('\n');
-          const answerAudioLines = [];
-          const answerVideoLines = [];
-          let bundleGroup = [];
-          let midToTypeMap = {};
-          
-          answerLines.forEach((line, index) => {
-            const trimmedLine = line.trim();
-            if (trimmedLine.startsWith('m=audio')) {
-              answerAudioLines.push({ index, line: trimmedLine });
-            } else if (trimmedLine.startsWith('m=video')) {
-              answerVideoLines.push({ index, line: trimmedLine });
-            } else if (trimmedLine.startsWith('a=group:BUNDLE')) {
-              bundleGroup = trimmedLine.split(' ').slice(1);
-            } else if (trimmedLine.startsWith('a=mid:')) {
-              // 이전 미디어 섹션의 mid 저장
-              const mid = trimmedLine.split(':')[1];
-              // 가장 최근 미디어 라인 찾기
-              let lastMediaType = null;
-              for (let i = index - 1; i >= 0; i--) {
-                const prevLine = answerLines[i].trim();
-                if (prevLine.startsWith('m=audio')) {
-                  lastMediaType = 'audio';
-                  break;
-                } else if (prevLine.startsWith('m=video')) {
-                  lastMediaType = 'video';
-                  break;
-                }
-              }
-              if (lastMediaType) {
-                midToTypeMap[mid] = lastMediaType;
-              }
-            }
-          });
-          
-          const answerFirstAudioIndex = answerAudioLines.length > 0 ? answerAudioLines[0].index : Infinity;
-          const answerFirstVideoIndex = answerVideoLines.length > 0 ? answerVideoLines[0].index : Infinity;
-          const answerHasAudioFirst = answerFirstAudioIndex < answerFirstVideoIndex;
-          
-          console.log('서버 answer SDP 구조 분석:');
-          console.log('- 오디오 라인:', answerAudioLines);
-          console.log('- 비디오 라인:', answerVideoLines);
-          console.log('- BUNDLE 그룹:', bundleGroup);
-          console.log('- MID 매핑:', midToTypeMap);
-          console.log('- 첫 번째 미디어:', answerHasAudioFirst ? 'audio' : 'video');
-          console.log('- 순서 일치 여부:', hasAudioFirst === answerHasAudioFirst ? '✅ 일치' : '❌ 불일치');
-          console.log('- BUNDLE 그룹 존재:', bundleGroup.length > 0 ? '✅ 있음' : '❌ 없음');
+          console.log('서버 answer SDP 수신');
           
           // 오류 처리 로직 추가
           try {
@@ -656,7 +778,7 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
         }, minDelay);
       }
     }
-  }, [iceServers, onConnected, onError]); // 의존성 최소화
+  }, [iceServers, onConnected, onError]);
 
   // 연결 초기화
   useEffect(() => {
@@ -726,6 +848,7 @@ const LiveStreamComponent = ({ streamId = 'webcam2', onError, onConnected }) => 
       console.log('LiveStreamComponent 언마운트됨 - streamId:', streamId);
     };
   }, [streamId]);
+  
 
   return (
     <div className="relative bg-black rounded-lg overflow-hidden">

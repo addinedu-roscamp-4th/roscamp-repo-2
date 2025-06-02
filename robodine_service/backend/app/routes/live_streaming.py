@@ -9,21 +9,339 @@ from typing import Dict, Optional, List, Tuple
 import time
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
+import socket
+import struct
+import cv2
+import numpy as np
+from threading import Thread, Event
+import queue
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 # aiortc 라이브러리 import 추가
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, VideoStreamTrack
 from aiortc.contrib.media import MediaPlayer, MediaRelay
+from av import VideoFrame
 
 from app.core.db_config import get_db
+# streaming.py에서 비디오 레코더 기능 import
+from app.routes.streaming import initialize_video_recorder, get_video_recorder
 
 router = APIRouter()
 logger = logging.getLogger("robodine.live_streaming")
 logger.setLevel(logging.DEBUG)
+
+# 성능 측정을 위한 클래스
+class StreamingPerformanceMonitor:
+    """스트리밍 성능 측정 및 모니터링 클래스"""
+    
+    def __init__(self):
+        self.frame_timestamps = deque(maxlen=100)  # 최근 100개 프레임 타임스탬프
+        self.processing_times = deque(maxlen=50)   # 최근 50개 처리 시간
+        self.webrtc_metrics = deque(maxlen=30)     # 최근 30개 WebRTC 메트릭
+        self.last_performance_log = time.time()
+        self.frame_count = 0
+        
+    def record_frame_received(self, timestamp):
+        """UDP 프레임 수신 시간 기록"""
+        self.frame_timestamps.append(timestamp)
+        self.frame_count += 1
+        
+    def record_processing_time(self, process_name, start_time, end_time):
+        """처리 시간 기록"""
+        processing_time = (end_time - start_time) * 1000  # 밀리초 단위
+        self.processing_times.append({
+            'process': process_name,
+            'time_ms': processing_time,
+            'timestamp': end_time
+        })
+        
+    def record_webrtc_metric(self, metric_name, value, session_id=None):
+        """WebRTC 메트릭 기록"""
+        self.webrtc_metrics.append({
+            'metric': metric_name,
+            'value': value,
+            'session_id': session_id,
+            'timestamp': time.time()
+        })
+        
+    def calculate_fps(self):
+        """현재 FPS 계산"""
+        if len(self.frame_timestamps) < 2:
+            return 0
+        
+        time_span = self.frame_timestamps[-1] - self.frame_timestamps[0]
+        if time_span <= 0:
+            return 0
+            
+        return (len(self.frame_timestamps) - 1) / time_span
+        
+    def calculate_average_latency(self):
+        """평균 지연 시간 계산"""
+        if not self.processing_times:
+            return 0
+            
+        recent_times = [p['time_ms'] for p in self.processing_times if p['process'] == 'frame_processing']
+        if not recent_times:
+            return 0
+            
+        return sum(recent_times) / len(recent_times)
+        
+    def log_performance_summary(self):
+        """성능 요약 로그 출력"""
+        now = time.time()
+        
+        # 5초마다 성능 요약 출력
+        if now - self.last_performance_log >= 5.0:
+            fps = self.calculate_fps()
+            avg_latency = self.calculate_average_latency()
+            
+            logger.info(f"=== 스트리밍 성능 요약 ===")
+            logger.info(f"현재 FPS: {fps:.2f}")
+            logger.info(f"총 프레임 수: {self.frame_count}")
+            logger.info(f"평균 프레임 처리 시간: {avg_latency:.2f}ms")
+            
+            if self.processing_times:
+                recent_processing = list(self.processing_times)[-10:]  # 최근 10개
+                logger.info(f"최근 처리 시간들: {[f'{p['process']}: {p['time_ms']:.1f}ms' for p in recent_processing]}")
+                
+            if self.webrtc_metrics:
+                recent_metrics = list(self.webrtc_metrics)[-5:]  # 최근 5개
+                logger.info(f"최근 WebRTC 메트릭: {[f'{m['metric']}: {m['value']}' for m in recent_metrics]}")
+                
+            self.last_performance_log = now
+
+# 전역 성능 모니터 인스턴스
+performance_monitor = StreamingPerformanceMonitor()
+
+# UDP 비디오 스트림 수신기 클래스
+class UDPReceiver:
+    def __init__(self, port=5000):
+        self.port = port
+        self.running = False
+        self.socket = None
+        self.latest_frame = None
+        self.frame_count = 0
+        self.last_update_time = time.time()
+        self.lock = threading.Lock()
+        self.receiver_thread = None
+        
+    def start(self):
+        """UDP 수신 시작"""
+        if self.running:
+            return
+            
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.socket.bind(('', self.port))
+            self.socket.settimeout(1.0)  # 1초 타임아웃
+            self.running = True
+            
+            self.receiver_thread = threading.Thread(target=self._receive_loop, daemon=True)
+            self.receiver_thread.start()
+            logger.info(f"UDP 수신기 시작됨 (포트: {self.port})")
+        except Exception as e:
+            logger.error(f"UDP 수신기 시작 실패: {e}")
+            self.running = False
+    
+    def stop(self):
+        """UDP 수신 중지"""
+        self.running = False
+        if self.socket:
+            self.socket.close()
+        if self.receiver_thread:
+            self.receiver_thread.join(timeout=2.0)
+        logger.info("UDP 수신기 중지됨")
+    
+    def has_frames(self):
+        """프레임이 있는지 확인 (최근 5초 이내)"""
+        with self.lock:
+            current_time = time.time()
+            return (self.latest_frame is not None and 
+                   current_time - self.last_update_time < 5.0 and
+                   self.frame_count > 0)
+    
+    def get_latest_frame(self):
+        """가장 최근 프레임 반환"""
+        with self.lock:
+            return self.latest_frame
+    
+    def _receive_loop(self):
+        """UDP 데이터 수신 루프"""
+        buffer = b""
+        
+        while self.running:
+            try:
+                receive_start_time = time.time()
+                data, addr = self.socket.recvfrom(65536)
+                buffer += data
+                
+                # 성능 측정: UDP 수신 시간
+                udp_receive_time = (time.time() - receive_start_time) * 1000
+                if udp_receive_time > 10:  # 10ms 이상인 경우만 로깅
+                    logger.debug(f"UDP 수신 지연: {udp_receive_time:.1f}ms")
+                
+                # 완전한 프레임 찾기 (타임스탬프 + JPEG 마커)
+                while True:
+                    # 타임스탬프 찾기 (8바이트)
+                    if len(buffer) < 8:
+                        break
+                    
+                    timestamp_bytes = buffer[:8]
+                    frame_timestamp = struct.unpack('>d', timestamp_bytes)[0]
+                    
+                    # JPEG 시작 마커 찾기
+                    jpeg_start = buffer.find(b'\xff\xd8', 8)
+                    if jpeg_start == -1:
+                        break
+                    
+                    # JPEG 끝 마커 찾기  
+                    jpeg_end = buffer.find(b'\xff\xd9', jpeg_start)
+                    if jpeg_end == -1:
+                        break
+                    
+                    # 완전한 JPEG 프레임 추출
+                    jpeg_data = buffer[jpeg_start:jpeg_end + 2]
+                    
+                    # 성능 측정: 프레임 처리 시작
+                    frame_process_start = time.time()
+                    
+                    # OpenCV로 디코딩
+                    try:
+                        frame_array = np.frombuffer(jpeg_data, np.uint8)
+                        frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
+                        
+                        if frame is not None:
+                            with self.lock:
+                                self.latest_frame = frame
+                                self.frame_count += 1
+                                self.last_update_time = time.time()
+                                
+                            # 성능 측정: 프레임 처리 완료
+                            frame_process_end = time.time()
+                            
+                            # 프레임 처리 시간 기록
+                            performance_monitor.record_processing_time(
+                                'frame_processing', 
+                                frame_process_start, 
+                                frame_process_end
+                            )
+                            
+                            # 프레임 수신 시간 기록
+                            performance_monitor.record_frame_received(time.time())
+                            
+                            # 전체 지연 시간 계산 (UDP 프레임 타임스탬프 vs 현재 시간)
+                            current_time = time.time()
+                            if frame_timestamp > 0:
+                                total_latency = (current_time - frame_timestamp) * 1000
+                                performance_monitor.record_webrtc_metric('udp_to_decode_latency_ms', total_latency)
+                                
+                                if total_latency > 100:  # 100ms 이상 지연 시 경고
+                                    logger.warning(f"높은 UDP 지연 감지: {total_latency:.1f}ms")
+                            
+                            # 주기적 성능 요약 출력
+                            performance_monitor.log_performance_summary()
+                                
+                            if self.frame_count % 30 == 0:  # 30프레임마다 로그
+                                fps = performance_monitor.calculate_fps()
+                                avg_latency = performance_monitor.calculate_average_latency()
+                                logger.info(f"UDP 프레임 수신: {self.frame_count}, FPS: {fps:.1f}, 평균 처리시간: {avg_latency:.1f}ms")
+                    except Exception as e:
+                        logger.warning(f"프레임 디코딩 실패: {e}")
+                    
+                    # 처리된 데이터 제거
+                    buffer = buffer[jpeg_end + 2:]
+                    
+            except socket.timeout:
+                continue
+            except Exception as e:
+                if self.running:
+                    logger.error(f"UDP 수신 오류: {e}")
+                break
+
+# 커스텀 비디오 스트림 트랙 클래스
+class UDPVideoStreamTrack(VideoStreamTrack):
+    """UDP로 받은 비디오를 WebRTC로 전송하는 트랙"""
+    
+    def __init__(self, udp_receiver):
+        super().__init__()
+        self.udp_receiver = udp_receiver
+        self.pts = 0
+        self.time_base = 1/30  # 30 FPS
+        self.last_frame_time = time.time()
+        
+    async def recv(self):
+        """비디오 프레임 생성"""
+        webrtc_start_time = time.time()
+        
+        pts, time_base = await self.next_timestamp()
+        
+        # UDP에서 최신 프레임 가져오기
+        frame = self.udp_receiver.get_latest_frame()
+        
+        if frame is None:
+            # 프레임이 없으면 검은 화면 생성
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            performance_monitor.record_webrtc_metric('webrtc_no_frame_count', 1)
+        else:
+            # WebRTC 프레임 전송 간격 측정
+            current_time = time.time()
+            frame_interval = (current_time - self.last_frame_time) * 1000
+            performance_monitor.record_webrtc_metric('webrtc_frame_interval_ms', frame_interval)
+            self.last_frame_time = current_time
+            
+        # OpenCV BGR을 RGB로 변환
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # VideoFrame 생성
+        video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
+        video_frame.pts = pts
+        video_frame.time_base = time_base
+        
+        # 성능 측정: WebRTC 프레임 처리 시간
+        webrtc_end_time = time.time()
+        webrtc_processing_time = (webrtc_end_time - webrtc_start_time) * 1000
+        performance_monitor.record_processing_time('webrtc_frame_processing', webrtc_start_time, webrtc_end_time)
+        
+        if webrtc_processing_time > 50:  # 50ms 이상인 경우 경고
+            logger.warning(f"WebRTC 프레임 처리 지연: {webrtc_processing_time:.1f}ms")
+        
+        return video_frame
+
+# 전역 UDP 수신기 인스턴스
+udp_receiver = UDPReceiver(port=5000)
+
+# 서버 시작 시 UDP 수신기 시작
+def start_udp_receiver():
+    """UDP 수신기 및 비디오 레코더 시작"""
+    udp_receiver.start()
+    
+    # 비디오 레코더 초기화 (데이터베이스 세션 팩토리 전달)
+    try:
+        initialize_video_recorder(udp_receiver, get_db)
+        logger.info("UDP 수신기 및 비디오 레코더 초기화 완료")
+    except Exception as e:
+        logger.error(f"비디오 레코더 초기화 실패: {e}")
+
+# 서버 종료 시 UDP 수신기 중지
+def stop_udp_receiver():
+    """UDP 수신기 및 비디오 레코더 중지"""
+    udp_receiver.stop()
+    
+    # 비디오 레코더 중지
+    try:
+        video_recorder = get_video_recorder()
+        if video_recorder:
+            video_recorder.stop_recording()
+            logger.info("비디오 레코더 중지 완료")
+    except Exception as e:
+        logger.error(f"비디오 레코더 중지 실패: {e}")
+
+# 애플리케이션 시작 시 UDP 수신기 자동 시작
+start_udp_receiver()
 
 # 전역 리소스 관리
 class DeviceResourceManager:
@@ -34,8 +352,13 @@ class DeviceResourceManager:
         self._global_lock = threading.Lock()
         
     def acquire_device(self, device_path: str, session_id: str) -> bool:
-        """디바이스 사용 권한 획득"""
+        """디바이스 사용 권한 획득 (UDP 스트림의 경우 항상 True 반환)"""
         with self._global_lock:
+            # UDP 스트림은 여러 세션에서 동시 접근 가능
+            if device_path == 'udp_stream':
+                logger.info(f"UDP 스트림 접근 허용 (세션: {session_id})")
+                return True
+                
             # 이미 다른 세션에서 사용 중인지 확인
             if device_path in self._device_users:
                 current_user = self._device_users[device_path]
@@ -55,6 +378,10 @@ class DeviceResourceManager:
     def release_device(self, device_path: str, session_id: str):
         """디바이스 사용 권한 해제"""
         with self._global_lock:
+            # UDP 스트림은 해제할 필요 없음
+            if device_path == 'udp_stream':
+                return
+                
             if device_path in self._device_users and self._device_users[device_path] == session_id:
                 del self._device_users[device_path]
                 logger.info(f"디바이스 {device_path} 사용 종료 (세션: {session_id})")
@@ -117,9 +444,9 @@ file_handler.setFormatter(logging.Formatter(
 logger.addHandler(file_handler)
 # —————————————
 
-# 고정 웹캠 설정
+# 고정 웹캠 설정 (UDP 스트림으로 변경)
 DEFAULT_WEBCAMS = [
-    {"id": "camera_2", "path": "/dev/video2", "display_name": "메인 카메라"},
+    {"id": "camera_2", "path": "udp_stream", "display_name": "UDP 웹캠 스트림"},
 ]
 
 # 고정 RTSP 스트림 설정
@@ -139,7 +466,7 @@ def initialize_streams():
     global streams
     streams.clear()
     
-    # 웹캠 등록
+    # 웹캠 등록 (UDP 스트림)
     for webcam in DEFAULT_WEBCAMS:
         webcam_id = webcam["id"]
         streams[webcam_id] = {
@@ -151,11 +478,11 @@ def initialize_streams():
             "client_count": 0
         }
         
-        # 디바이스 존재 여부 로깅
-        if os.path.exists(webcam["path"]):
-            logging.info(f"웹캠 등록: {webcam_id}, 경로: {webcam['path']}")
+        # UDP 스트림 상태 확인
+        if udp_receiver.has_frames():
+            logging.info(f"UDP 웹캠 등록: {webcam_id}, UDP 스트림 활성화됨")
         else:
-            logging.warning(f"웹캠 강제 등록 (디바이스 없음): {webcam_id}, 경로: {webcam['path']}")
+            logging.warning(f"UDP 웹캠 등록: {webcam_id}, UDP 스트림 대기 중")
     
     # RTSP 스트림 등록
     for rtsp in DEFAULT_RTSP_STREAMS:
@@ -373,31 +700,111 @@ def find_by_id_in_dict(items_dict: Dict, item_id: str) -> Optional[Dict]:
     return items_dict.get(item_id)
 
 @router.get("/streams")
-async def list_streams():
-    """사용 가능한 모든 스트림 목록 반환"""
-    # 스트림 목록을 리스트로 변환
+async def list_streams(db: Session = Depends(get_db)):
+    """사용 가능한 모든 스트림 목록 반환 (실시간 스트림 + 녹화된 영상)"""
+    # 실시간 스트림 목록을 리스트로 변환
     stream_list = []
     for stream_id, stream_data in streams.items():
         stream_list.append(stream_data)
     
-    # 웹캠 -> RTSP 순으로 정렬
-    stream_list.sort(key=lambda x: 0 if x.get("type") == "webcam" else 1)
+    # 녹화된 영상들을 스트림 목록에 추가
+    try:
+        from app.models.video_stream import VideoStream
+        from app.models.enums import StreamSourceType
+        
+        recordings = db.query(VideoStream).filter(
+            VideoStream.source_type == StreamSourceType.WEBCAM
+        ).order_by(VideoStream.recording_started_at.desc()).limit(20).all()  # 최근 20개만
+        
+        for recording in recordings:
+            if recording.recording_path and os.path.exists(recording.recording_path):
+                stream_list.append({
+                    "id": f"recording_{recording.id}",
+                    "type": "recording",
+                    "path": recording.recording_path,
+                    "url": recording.url,
+                    "display_name": f"녹화영상 {recording.recording_started_at.strftime('%Y-%m-%d %H:%M')}",
+                    "status": "recorded",
+                    "client_count": 0,
+                    "recording_started_at": recording.recording_started_at.isoformat() if recording.recording_started_at else None,
+                    "recording_ended_at": recording.recording_ended_at.isoformat() if recording.recording_ended_at else None,
+                    "file_size": os.path.getsize(recording.recording_path)
+                })
+                
+        logger.info(f"스트림 목록에 {len([s for s in stream_list if s.get('type') == 'recording'])}개의 녹화영상 추가됨")
+        
+    except Exception as e:
+        logger.error(f"녹화영상 목록 조회 중 오류: {e}")
+    
+    # 정렬: 웹캠 -> RTSP -> 녹화영상 순
+    def sort_key(x):
+        stream_type = x.get("type")
+        if stream_type == "webcam":
+            return 0
+        elif stream_type == "rtsp":
+            return 1
+        elif stream_type == "recording":
+            return 2
+        else:
+            return 3
+    
+    stream_list.sort(key=sort_key)
     
     return JSONResponse(content={"streams": stream_list})
 
 @router.post("/refresh-streams")
-async def refresh_streams():
-    """사용 가능한 디바이스 새로고침"""
+async def refresh_streams(db: Session = Depends(get_db)):
+    """사용 가능한 디바이스 새로고침 (실시간 스트림 + 녹화된 영상)"""
     # 스트림 목록 다시 초기화
     initialize_streams()
     
-    # 정렬된 스트림 목록 반환
+    # 실시간 스트림 목록을 리스트로 변환
     stream_list = []
     for stream_id, stream_data in streams.items():
         stream_list.append(stream_data)
     
-    # 웹캠 -> RTSP 순으로 정렬
-    stream_list.sort(key=lambda x: 0 if x.get("type") == "webcam" else 1)
+    # 녹화된 영상들을 스트림 목록에 추가
+    try:
+        from app.models.video_stream import VideoStream
+        from app.models.enums import StreamSourceType
+        
+        recordings = db.query(VideoStream).filter(
+            VideoStream.source_type == StreamSourceType.WEBCAM
+        ).order_by(VideoStream.recording_started_at.desc()).limit(20).all()  # 최근 20개만
+        
+        for recording in recordings:
+            if recording.recording_path and os.path.exists(recording.recording_path):
+                stream_list.append({
+                    "id": f"recording_{recording.id}",
+                    "type": "recording",
+                    "path": recording.recording_path,
+                    "url": recording.url,
+                    "display_name": f"녹화영상 {recording.recording_started_at.strftime('%Y-%m-%d %H:%M')}",
+                    "status": "recorded",
+                    "client_count": 0,
+                    "recording_started_at": recording.recording_started_at.isoformat() if recording.recording_started_at else None,
+                    "recording_ended_at": recording.recording_ended_at.isoformat() if recording.recording_ended_at else None,
+                    "file_size": os.path.getsize(recording.recording_path)
+                })
+                
+        logger.info(f"새로고침된 스트림 목록에 {len([s for s in stream_list if s.get('type') == 'recording'])}개의 녹화영상 추가됨")
+        
+    except Exception as e:
+        logger.error(f"새로고침 시 녹화영상 목록 조회 중 오류: {e}")
+    
+    # 정렬: 웹캠 -> RTSP -> 녹화영상 순
+    def sort_key(x):
+        stream_type = x.get("type")
+        if stream_type == "webcam":
+            return 0
+        elif stream_type == "rtsp":
+            return 1
+        elif stream_type == "recording":
+            return 2
+        else:
+            return 3
+    
+    stream_list.sort(key=sort_key)
     
     return JSONResponse(content={"streams": stream_list})
 
@@ -633,7 +1040,8 @@ async def websocket_endpoint(websocket: WebSocket, stream_id: str, db: Session =
     
     except Exception as e:
         logging.error(f"WebSocket 처리 중 예외 발생: {str(e)}")
-    
+
+        
     finally:
         # 클라이언트 등록 해제 및 정리
         try:
@@ -642,6 +1050,10 @@ async def websocket_endpoint(websocket: WebSocket, stream_id: str, db: Session =
                 logging.info(f"클라이언트 {client_id} 등록 해제됨")
         except Exception as e:
             logging.error(f"클라이언트 등록 해제 중 오류: {str(e)}")
+        
+        for webcam in DEFAULT_WEBCAMS:
+            resource_manager.release_device(webcam, session_id)
+
         
         # 웹소켓 닫기 시도
         try:
@@ -665,115 +1077,144 @@ async def get_session(session_id: str):
     
     return JSONResponse(content=safe_session)
 
+# 전역 MediaRelay 및 공유 비디오 트랙
+media_relay = MediaRelay()
+shared_video = None
+logger = logging.getLogger("robodine.live_streaming")
+
+import logging
+import asyncio
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
+from aiortc.contrib.media import MediaPlayer
+
+# 전역 리소스 및 공유 비디오 소스
+logger = logging.getLogger("robodine.live_streaming")
+media_relay = MediaRelay()
+shared_video_source = None
+
 async def generate_valid_answer_sdp(offer_sdp: str, session_id: str = None) -> str:
-    """aiortc RTCPeerConnection을 사용하여 브라우저와 동일한 방식으로 SDP answer 자동 생성 (리소스 관리 포함)"""
+    """
+    aiortc RTCPeerConnection을 사용하여 브라우저와 동일한 방식으로 SDP answer 자동 생성
+    UDP 스트림을 이용한 비디오 트랙 제공
+    """
+    # 성능 측정 시작
+    sdp_start_time = time.time()
     
+    # 세션 ID 보장
     if not session_id:
         session_id = str(uuid.uuid4())
-    
-    logger.info(f"클라이언트 offer SDP 수신 (세션: {session_id}):\n{offer_sdp}")
-    
+    logger.info(f"클라이언트 offer SDP 수신 (세션: {session_id})")
+
+    # PeerConnection 생성
+    config = RTCConfiguration(
+        iceServers=[
+            RTCIceServer(urls="stun:stun.l.google.com:19302"),
+            RTCIceServer(urls="stun:stun1.l.google.com:19302")
+        ]
+    )
+    pc = RTCPeerConnection(configuration=config)
+
     try:
-        # RTCPeerConnection 생성 (aiortc) - RTCIceServer 객체 사용
-        config = RTCConfiguration(
-            iceServers=[
-                RTCIceServer(urls="stun:stun.l.google.com:19302"),
-                RTCIceServer(urls="stun:stun1.l.google.com:19302")
-            ]
-        )
-        pc = RTCPeerConnection(configuration=config)
-        
-        # 더미 미디어 트랙 추가 (실제 웹캠 스트림을 시뮬레이션)
-        # 오디오 트랙 추가
+        # 1) 오디오 트랙 추가 (무음)
+        audio_start_time = time.time()
         try:
-            # 더미 오디오 소스 생성 (사일런스)
-            audio_player = MediaPlayer('anullsrc=sample_rate=48000:channel_layout=stereo', format='lavfi', options={
-                'f': 'lavfi'
-            })
+            audio_player = MediaPlayer(
+                'anullsrc=sample_rate=48000:channel_layout=stereo',
+                format='lavfi', options={'f': 'lavfi'}
+            )
             if audio_player.audio:
                 pc.addTrack(audio_player.audio)
                 logger.info(f"더미 오디오 트랙 추가됨 (세션: {session_id})")
         except Exception as e:
             logger.warning(f"오디오 트랙 추가 실패 (세션: {session_id}): {e}")
         
-        # 비디오 트랙 추가 - 디바이스 경합 방지
+        audio_end_time = time.time()
+        performance_monitor.record_processing_time('audio_track_setup', audio_start_time, audio_end_time)
+
+        # 2) 비디오 트랙 추가 - UDP 스트림 우선
+        video_start_time = time.time()
         video_track_added = False
-        webcam_device = '/dev/video2'
-        
-        # 웹캠 디바이스 사용 권한 확인
-        if resource_manager.acquire_device(webcam_device, session_id):
-            try:
-                # 실제 웹캠 시도
-                video_player = MediaPlayer(webcam_device, format='v4l2', options={
-                    'video_size': '640x480',
-                    'framerate': '30'
-                })
-                if video_player.video:
-                    pc.addTrack(video_player.video)
-                    logger.info(f"웹캠 비디오 트랙 추가됨 (세션: {session_id})")
-                    video_track_added = True
-            except Exception as e:
-                logger.warning(f"웹캠 비디오 트랙 추가 실패 (세션: {session_id}): {e}")
-                # 실패시 디바이스 해제
-                resource_manager.release_device(webcam_device, session_id)
-        else:
-            logger.info(f"웹캠 디바이스 사용 중, 더미 트랙 사용 (세션: {session_id})")
-        
-        # 웹캠 실패시 반드시 더미 비디오 패턴 사용
+
+        # UDP 스트림에서 비디오 트랙 생성
+        try:
+            if udp_receiver.has_frames():
+                # UDP 스트림이 활성화된 경우
+                udp_video_track = UDPVideoStreamTrack(udp_receiver)
+                pc.addTrack(udp_video_track)
+                logger.info(f"UDP 비디오 트랙 추가됨 (세션: {session_id})")
+                video_track_added = True
+                performance_monitor.record_webrtc_metric('udp_video_track_used', 1, session_id)
+            else:
+                logger.warning(f"UDP 스트림에 프레임이 없음 (세션: {session_id})")
+                performance_monitor.record_webrtc_metric('udp_video_track_unavailable', 1, session_id)
+        except Exception as e:
+            logger.warning(f"UDP 비디오 트랙 추가 실패 (세션: {session_id}): {e}")
+
+        # 3) UDP 스트림 실패 시 더미 비디오 트랙 사용
         if not video_track_added:
             try:
-                dummy_video_player = MediaPlayer('testsrc=size=640x480:rate=30', format='lavfi', options={
-                    'f': 'lavfi'
-                })
-                if dummy_video_player.video:
-                    pc.addTrack(dummy_video_player.video)
+                # 테스트 패턴 비디오 생성
+                dummy_video = MediaPlayer(
+                    'testsrc=size=640x480:rate=30', format='lavfi', options={'f': 'lavfi'}
+                )
+                if dummy_video.video:
+                    pc.addTrack(dummy_video.video)
                     logger.info(f"더미 비디오 트랙 추가됨 (세션: {session_id})")
                     video_track_added = True
+                    performance_monitor.record_webrtc_metric('dummy_video_track_used', 1, session_id)
             except Exception as ve:
-                logger.error(f"더미 비디오 트랙 추가도 실패 (세션: {session_id}): {ve}")
-        
-        # 어떤 트랙도 추가되지 않았다면 최소한의 검은 화면 트랙 추가
+                logger.error(f"더미 비디오 트랙 추가 실패: {ve}")
+
+        # 4) 최종 폴백: 검은 화면 트랙
         if not video_track_added:
             try:
-                black_video_player = MediaPlayer('color=black:size=640x480:rate=30', format='lavfi', options={
-                    'f': 'lavfi'
-                })
-                if black_video_player.video:
-                    pc.addTrack(black_video_player.video)
+                black_video = MediaPlayer(
+                    'color=black:size=640x480:rate=30', format='lavfi', options={'f': 'lavfi'}
+                )
+                if black_video.video:
+                    pc.addTrack(black_video.video)
                     logger.info(f"검은 화면 비디오 트랙 추가됨 (세션: {session_id})")
-                    video_track_added = True
+                    performance_monitor.record_webrtc_metric('black_video_track_used', 1, session_id)
             except Exception as bve:
-                logger.error(f"검은 화면 비디오 트랙 추가도 실패 (세션: {session_id}): {bve}")
+                logger.error(f"검은 화면 트랙 추가 실패: {bve}")
         
-        if not video_track_added:
-            logger.error(f"어떤 비디오 트랙도 추가할 수 없음 (세션: {session_id}) - SDP 생성에 영향을 줄 수 있음")
-        
-        # 클라이언트 offer를 원격 설명으로 설정
+        video_end_time = time.time()
+        performance_monitor.record_processing_time('video_track_setup', video_start_time, video_end_time)
+
+        # 5) 원격 offer 설정 및 answer 생성
+        offer_process_start = time.time()
         offer = RTCSessionDescription(sdp=offer_sdp, type="offer")
         await pc.setRemoteDescription(offer)
         logger.info(f"클라이언트 offer를 원격 설명으로 설정 완료 (세션: {session_id})")
-        
-        # 브라우저 내장 API와 동일한 방식으로 answer 자동 생성
+
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
+        offer_process_end = time.time()
         
-        # 생성된 answer SDP 추출
+        performance_monitor.record_processing_time('sdp_offer_answer', offer_process_start, offer_process_end)
+
+        # 6) SDP 반환
         answer_sdp = pc.localDescription.sdp
         
-        logger.info(f"브라우저 내장 API 방식으로 SDP answer 자동 생성 완료 (세션: {session_id})")
-        logger.debug(f"생성된 answer SDP (세션: {session_id}):\n{answer_sdp}")
+        # 전체 SDP 처리 시간 측정
+        sdp_end_time = time.time()
+        total_sdp_time = (sdp_end_time - sdp_start_time) * 1000
+        performance_monitor.record_processing_time('total_sdp_processing', sdp_start_time, sdp_end_time)
         
-        # TODO: pc.close()는 실제 스트리밍이 끝날 때 호출해야 함
-        # 현재는 리소스 관리를 위해 주석 처리
+        logger.info(f"SDP answer 자동 생성 완료 (세션: {session_id}) - 총 처리시간: {total_sdp_time:.1f}ms")
+        performance_monitor.record_webrtc_metric('sdp_processing_time_ms', total_sdp_time, session_id)
         
         return answer_sdp
         
     except Exception as e:
-        logger.error(f"aiortc SDP answer 생성 중 오류 (세션: {session_id}): {str(e)}")
-        # 오류 발생시 디바이스 해제
-        resource_manager.release_device(webcam_device, session_id)
-        # 오류 발생시 기본 응답 반환
-        return generate_minimal_answer_sdp()
+        sdp_error_time = time.time()
+        error_processing_time = (sdp_error_time - sdp_start_time) * 1000
+        logger.error(f"SDP 처리 중 오류 (세션: {session_id}) - 처리시간: {error_processing_time:.1f}ms, 오류: {e}")
+        performance_monitor.record_webrtc_metric('sdp_processing_error', 1, session_id)
+        raise e
+    finally:
+        # PC 리소스 정리는 클라이언트에서 관리하므로 여기서는 하지 않음
+        pass
 
 def generate_minimal_answer_sdp() -> str:
     """최소한의 기본 answer SDP (aiortc 실패시 대체용)"""
@@ -928,6 +1369,9 @@ async def close_webrtc_session(session_id: str):
             del webrtc_sessions[session_id]
         
         logger.info(f"WebRTC 세션 정리 완료: {session_id}")
+
+        for webcam in DEFAULT_WEBCAMS:
+            resource_manager.release_device(webcam, session_id)
         
         return JSONResponse(content={
             "status": "closed",
@@ -958,4 +1402,87 @@ async def get_device_status():
         return JSONResponse(
             status_code=500,
             content={"error": "디바이스 상태 조회 실패", "details": str(e)}
+        )
+
+# 클라이언트 성능 메트릭 수신 엔드포인트 추가
+@router.post("/client-metrics")
+async def receive_client_metrics(request_data: dict):
+    """클라이언트에서 전송된 성능 메트릭 수신 및 로깅"""
+    try:
+        metric_type = request_data.get("type")
+        metrics = request_data.get("metrics", {})
+        
+        if metric_type == "webrtc_client_performance":
+            logger.info("=== 클라이언트 WebRTC 성능 메트릭 ===")
+            logger.info(f"연결 시작 → Offer 생성: {metrics.get('connectionStartToOffer', 0):.1f}ms")
+            logger.info(f"Offer → Answer 수신: {metrics.get('offerToAnswer', 0):.1f}ms")
+            logger.info(f"Answer → 첫 프레임: {metrics.get('answerToFirstFrame', 0):.1f}ms")
+            logger.info(f"총 연결 시간: {metrics.get('totalConnectionTime', 0):.1f}ms")
+            logger.info(f"클라이언트 User-Agent: {metrics.get('clientUserAgent', 'Unknown')}")
+            logger.info(f"메트릭 수신 시간: {metrics.get('timestamp', 'Unknown')}")
+            
+            # 전역 성능 모니터에 클라이언트 메트릭 기록
+            performance_monitor.record_webrtc_metric('client_total_connection_time_ms', metrics.get('totalConnectionTime', 0))
+            performance_monitor.record_webrtc_metric('client_offer_to_answer_ms', metrics.get('offerToAnswer', 0))
+            
+            # 긴 연결 시간 경고
+            total_time = metrics.get('totalConnectionTime', 0)
+            if total_time > 3000:  # 3초 이상
+                logger.warning(f"⚠️ 긴 클라이언트 연결 시간 감지: {total_time:.1f}ms")
+            elif total_time > 5000:  # 5초 이상
+                logger.error(f"❌ 매우 긴 클라이언트 연결 시간: {total_time:.1f}ms")
+                
+        else:
+            logger.info(f"기타 클라이언트 메트릭 수신: {metric_type}")
+            logger.debug(f"메트릭 데이터: {metrics}")
+        
+        return JSONResponse(content={"status": "received", "type": metric_type})
+        
+    except Exception as e:
+        logger.error(f"클라이언트 메트릭 처리 중 오류: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "메트릭 처리 실패", "details": str(e)}
+        )
+
+# 현재 스트리밍 성능 상태 조회 엔드포인트
+@router.get("/performance-status")
+async def get_performance_status():
+    """현재 스트리밍 성능 상태 조회"""
+    try:
+        fps = performance_monitor.calculate_fps()
+        avg_latency = performance_monitor.calculate_average_latency()
+        
+        # 최근 메트릭들 수집
+        recent_processing = list(performance_monitor.processing_times)[-10:] if performance_monitor.processing_times else []
+        recent_webrtc = list(performance_monitor.webrtc_metrics)[-10:] if performance_monitor.webrtc_metrics else []
+        
+        status = {
+            "current_fps": round(fps, 2),
+            "average_processing_latency_ms": round(avg_latency, 2),
+            "total_frames_processed": performance_monitor.frame_count,
+            "udp_receiver_active": udp_receiver.has_frames(),
+            "recent_processing_times": [
+                {
+                    "process": p['process'],
+                    "time_ms": round(p['time_ms'], 2),
+                    "timestamp": p['timestamp']
+                } for p in recent_processing
+            ],
+            "recent_webrtc_metrics": [
+                {
+                    "metric": m['metric'],
+                    "value": m['value'],
+                    "timestamp": m['timestamp']
+                } for m in recent_webrtc
+            ]
+        }
+        
+        return JSONResponse(content=status)
+        
+    except Exception as e:
+        logger.error(f"성능 상태 조회 중 오류: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "성능 상태 조회 실패", "details": str(e)}
         )

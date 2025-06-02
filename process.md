@@ -1,5 +1,131 @@
 # 프로세스 변경 내역
 
+## 2024-12-22: UDP 스트림 자동 녹화 기능 구현
+
+### 변경 사항
+1. UDP로 수신되는 실시간 영상을 일정 시간마다 자동으로 녹화하여 파일로 저장하는 기능 구현
+   - 5분 간격으로 MP4 파일 생성 (시간 간격 설정 가능)
+   - 녹화된 파일을 데이터베이스에 자동 저장
+   - 스트림 목록 API에 녹화된 영상도 포함하여 반환
+
+2. VideoRecorder 클래스 구현 (streaming.py)
+   - UDP 수신기에서 프레임을 가져와서 OpenCV로 MP4 파일로 저장
+   - 백그라운드 스레드에서 지속적으로 녹화 진행
+   - 파일 크기 검증으로 유효하지 않은 녹화 파일 자동 삭제
+   - 녹화 완료 시 VideoStream 모델로 데이터베이스에 메타데이터 저장
+
+3. 녹화 관리 API 엔드포인트 추가
+   - GET /recordings: 저장된 녹화 목록 조회
+   - GET /recordings/{id}: 특정 녹화 정보 조회
+   - DELETE /recordings/{id}: 녹화 파일 및 DB 기록 삭제
+   - POST /recordings/start: 수동 녹화 시작
+   - POST /recordings/stop: 수동 녹화 중지
+   - GET /recordings/status: 현재 녹화 상태 조회
+
+4. 스트림 목록에 녹화 영상 통합
+   - list_streams API에서 실시간 스트림과 녹화된 영상을 함께 반환
+   - 최근 20개의 녹화 영상을 스트림 목록에 포함
+   - 스트림 타입별 정렬: 웹캠 → RTSP → 녹화영상 순
+
+### 수정된 파일
+- `robodine_service/backend/app/routes/streaming.py`
+  - VideoRecorder 클래스 구현 (UDP 스트림 녹화)
+  - 녹화 관리 API 엔드포인트 추가
+  - 비디오 레코더 초기화 및 관리 함수 추가
+
+- `robodine_service/backend/app/routes/live_streaming.py`
+  - streaming.py에서 비디오 레코더 기능 import
+  - start_udp_receiver 함수에 비디오 레코더 초기화 추가
+  - list_streams API에 녹화된 영상 포함 기능 추가
+  - refresh_streams API에 녹화된 영상 포함 기능 추가
+
+### 기술 스택
+- OpenCV: 영상 녹화 및 프레임 처리
+- FastAPI: REST API 엔드포인트
+- SQLAlchemy: 데이터베이스 ORM
+- Python Threading: 백그라운드 녹화 처리
+- VideoStream 모델: 녹화 메타데이터 저장
+
+### 디렉토리 구조
+```
+robodine_service/backend/
+├── recordings/          # 녹화 파일 저장 디렉토리 (자동 생성)
+│   └── udp_stream_YYYYMMDD_HHMMSS.mp4
+└── app/routes/
+    ├── streaming.py     # 녹화 기능 구현
+    └── live_streaming.py # UDP 수신 및 스트림 관리
+```
+
+### 녹화 파일 명명 규칙
+- 형식: `udp_stream_YYYYMMDD_HHMMSS.mp4`
+- 예시: `udp_stream_20241222_143025.mp4`
+
+## 2024-12-22: 실시간 조리 라이브 다국어 번역 지원 추가
+
+### 변경 사항
+1. OrderStatusPage.js의 실시간 조리 라이브 관련 문장들을 다국어 번역 지원으로 변경
+   - 하드코딩된 한국어 문장들을 번역 키(translation key)로 대체
+   - 4개 언어(한국어, 영어, 일본어, 중국어)로 번역 지원
+   - 일관된 다국어 사용자 경험 제공
+
+2. 번역된 텍스트 항목
+   - 실시간 조리 라이브 버튼: "실시간 조리 라이브" → `t('orderStatus.liveStream.button')`
+   - 모달 제목: "실시간 조리 영상" → `t('orderStatus.liveStream.title')`  
+   - 에러 메시지: "조리 영상에 문제가 발생했습니다. 서버를 확인하세요." → `t('orderStatus.liveStream.error')`
+   - 설명 텍스트: "실시간으로 조리 과정을 확인하실 수 있습니다." → `t('orderStatus.liveStream.description')`
+
+3. translations.js에 새로운 번역 키 추가
+   - ko: 기존 한국어 텍스트 유지
+   - en: Live Cooking Stream, Live Cooking Video 등 영어 번역
+   - ja: リアルタイム調理ライブ, リアルタイム調理映像 등 일본어 번역  
+   - zh: 实时烹饪直播, 实时烹饪视频 등 중국어 번역
+
+### 수정된 파일
+- `robodine_service/frontend/kiosk/src/locale/translations.js`
+  - 각 언어(ko, en, ja, zh)의 orderStatus 섹션에 liveStream 하위 키 추가
+  - button, title, description, error 키로 구조화
+- `robodine_service/frontend/kiosk/src/pages/OrderStatusPage.js`  
+  - 실시간 조리 라이브 버튼 텍스트를 `{t('orderStatus.liveStream.button')}`로 변경
+  - 모달 제목을 `{t('orderStatus.liveStream.title')}`로 변경
+  - 에러 메시지를 `{t('orderStatus.liveStream.error')}`로 변경
+  - 설명 텍스트를 `{t('orderStatus.liveStream.description')}`로 변경
+
+### 기술 스택
+- React
+- Context API (LanguageContext)
+- 다국어 번역 시스템 (i18n)
+
+## 2024-12-21: 중국어 언어 지원 추가
+
+### 변경 사항
+1. 키오스크 시스템에 중국어(zh) 언어 지원 추가
+   - 기존의 한국어, 영어, 일본어와 함께 4개 언어 지원
+   - 중국어 번역 텍스트는 기존 언어들과 비슷한 글자수로 간결하게 작성
+   - 간체 중국어 기준으로 번역 진행
+
+2. 번역 파일 확장
+   - 카테고리, 사이드바, 직원 호출, 언어 선택, 장바구니, 주문 상태, 결제, 메뉴, 공통 메시지 등 모든 섹션에 중국어 번역 추가
+   - 메뉴 데이터도 중국어로 번역 (샐러드→沙拉, 스테이크→牛排, 파스타→意面, 주스→果汁, 와인→红酒)
+
+3. UI 컴포넌트 업데이트
+   - 언어 선택 모달에 중국어 옵션 추가 (🇨🇳 중문)
+   - 언어 컨텍스트에서 중국어 아이콘 및 라벨 함수 확장
+
+### 수정된 파일
+- `robodine_service/frontend/kiosk/src/locale/translations.js`
+  - 중국어(zh) 번역 섹션 추가
+  - 기존 언어들의 language 섹션에 chinese 라벨 추가
+- `robodine_service/frontend/kiosk/src/components/Layout/Sidebar.js`
+  - 언어 선택 모달에 중국어 옵션 추가
+- `robodine_service/frontend/kiosk/src/context/LanguageContext.js`
+  - getLanguageIcon 함수에 중국어 아이콘 (🇨🇳) 추가
+  - getLanguageLabel 함수에 중국어 라벨 (중국어) 추가
+
+### 기술 스택
+- React
+- Context API
+- 다국어 번역 시스템 (i18n)
+
 ## 2024-05-19: 키오스크 청소 완료 버튼 기능 추가
 
 ### 변경 사항
@@ -1484,6 +1610,92 @@ WebRTC SDP a=mid 속성 파싱 오류 해결
 3. 번역 데이터 구조 유지하면서 필요한 번역 텍스트 추가
 
 ## 2024-09-08: 키오스크 앱 다국어 지원 개선 및 WebSocketContext 오류 수정
+
+### 문제 상황
+1. OrderStatusPage.js에서 존재하지 않는 WebSocketContext 모듈을 임포트하고 있어 오류 발생
+2. 메뉴 이름과 상세 내용의 다국어 처리가 제대로 작동하지 않는 문제
+3. OrderStatusPage 내 텍스트 일부가 다국어 처리되지 않은 상태
+
+### 변경 사항
+1. WebSocketContext 임포트 제거
+   - OrderStatusPage.js에서 불필요한 WebSocketContext 임포트 제거
+   - 이미 존재하는 UnifiedWebSocketProvider 사용으로 변경
+
+2. OrderStatusPage 다국어 지원 개선
+   - 주문 상태, 테이블 이름, 결제 정보 등 모든 정적 텍스트 번역 적용
+   - MenuItemCard 컴포넌트 내 텍스트 번역 처리
+   - 모달 메시지 및 알림 텍스트 번역 기능 추가
+
+3. 메뉴 이름 다국어 지원 기능 수정
+   - MenuItemCard의 getMenuName 함수 수정으로 메뉴 이름 정확히 번역
+   - translations.js에서 직접 번역 객체에 접근하는 방식으로 변경
+   - 가격 및 날짜 포맷팅 함수 추가로 언어별 적합한 형식 표시
+
+4. translations.js에 필요한 번역 텍스트 추가
+   - 주문 취소 관련 확인 메시지 추가
+   - 성공/오류 알림 메시지 추가
+   - 누락된 UI 텍스트 번역 추가 
+
+### 개선 효과
+1. "Module not found: Error: Can't resolve '../context/WebSocketContext'" 오류 해결
+2. 메뉴 이름 및 상세 내용이 선택한 언어로 정확히 표시됨
+3. 가격 표시 형식이 언어에 맞게 변경 (₩, $, ¥)
+4. 날짜 및 시간 표시도 각 언어에 맞는 형식으로 변경
+5. 사용자에게 보여주는 모든 메시지를 선택한 언어로 일관되게 표시
+
+### 수정된 파일
+- `robodine_service/frontend/kiosk/src/pages/OrderStatusPage.js`
+- `robodine_service/frontend/kiosk/src/locale/translations.js`
+
+### 기술적 접근
+1. 기존 언어 컨텍스트(LanguageContext)를 활용한 일관된 번역 기능 적용
+2. 각 언어별 특성에 맞는 날짜/시간/통화 포맷팅 함수 개선
+3. 번역 데이터 구조 유지하면서 필요한 번역 텍스트 추가
+
+## 2024-08-29: 키오스크 앱 다국어 지원 개선 및 WebSocketContext 오류 수정
+
+### 문제 상황
+1. OrderStatusPage.js에서 존재하지 않는 WebSocketContext 모듈을 임포트하고 있어 오류 발생
+2. 메뉴 이름과 상세 내용의 다국어 처리가 제대로 작동하지 않는 문제
+3. OrderStatusPage 내 텍스트 일부가 다국어 처리되지 않은 상태
+
+### 변경 사항
+1. WebSocketContext 임포트 제거
+   - OrderStatusPage.js에서 불필요한 WebSocketContext 임포트 제거
+   - 이미 존재하는 UnifiedWebSocketProvider 사용으로 변경
+
+2. OrderStatusPage 다국어 지원 개선
+   - 주문 상태, 테이블 이름, 결제 정보 등 모든 정적 텍스트 번역 적용
+   - MenuItemCard 컴포넌트 내 텍스트 번역 처리
+   - 모달 메시지 및 알림 텍스트 번역 기능 추가
+
+3. 메뉴 이름 다국어 지원 기능 수정
+   - MenuItemCard의 getMenuName 함수 수정으로 메뉴 이름 정확히 번역
+   - translations.js에서 직접 번역 객체에 접근하는 방식으로 변경
+   - 가격 및 날짜 포맷팅 함수 추가로 언어별 적합한 형식 표시
+
+4. translations.js에 필요한 번역 텍스트 추가
+   - 주문 취소 관련 확인 메시지 추가
+   - 성공/오류 알림 메시지 추가
+   - 누락된 UI 텍스트 번역 추가 
+
+### 개선 효과
+1. "Module not found: Error: Can't resolve '../context/WebSocketContext'" 오류 해결
+2. 메뉴 이름 및 상세 내용이 선택한 언어로 정확히 표시됨
+3. 가격 표시 형식이 언어에 맞게 변경 (₩, $, ¥)
+4. 날짜 및 시간 표시도 각 언어에 맞는 형식으로 변경
+5. 사용자에게 보여주는 모든 메시지를 선택한 언어로 일관되게 표시
+
+### 수정된 파일
+- `robodine_service/frontend/kiosk/src/pages/OrderStatusPage.js`
+- `robodine_service/frontend/kiosk/src/locale/translations.js`
+
+### 기술적 접근
+1. 기존 언어 컨텍스트(LanguageContext)를 활용한 일관된 번역 기능 적용
+2. 각 언어별 특성에 맞는 날짜/시간/통화 포맷팅 함수 개선
+3. 번역 데이터 구조 유지하면서 필요한 번역 텍스트 추가
+
+## 2024-08-30: 키오스크 앱 다국어 지원 개선 및 WebSocketContext 오류 수정
 
 ### 문제 상황
 1. OrderStatusPage.js에서 존재하지 않는 WebSocketContext 모듈을 임포트하고 있어 오류 발생

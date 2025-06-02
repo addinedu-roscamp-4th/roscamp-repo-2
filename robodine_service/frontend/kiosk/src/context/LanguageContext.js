@@ -28,6 +28,7 @@ export const LanguageProvider = ({ children }) => {
     switch(language) {
       case 'en': return '🇺🇸';
       case 'ja': return '🇯🇵';
+      case 'zh': return '🇨🇳';
       default: return '🇰🇷';
     }
   };
@@ -37,6 +38,7 @@ export const LanguageProvider = ({ children }) => {
     switch(language) {
       case 'en': return '영어';
       case 'ja': return '일본어';
+      case 'zh': return '중국어';
       default: return '한국어';
     }
   };

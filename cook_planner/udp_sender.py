@@ -10,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description="UDP Video Sender (using default OpenCV backend)")
     parser.add_argument('--host',    default='192.168.0.156', help='Destination IP')
     parser.add_argument('--port',    type=int, default=5000, help='Destination port')
-    parser.add_argument('--device',  default='/dev/jetcocam0', help='Video device path (e.g. /dev/jetcocam0)')
+    parser.add_argument('--device',  default='/dev/video2', help='Video device path (e.g. /dev/jetcocam0)')
     parser.add_argument('--width',   type=int, default=640,    help='Capture width')
     parser.add_argument('--height',  type=int, default=480,    help='Capture height')
     parser.add_argument('--fps',     type=int, default=20,     help='Frames per second')

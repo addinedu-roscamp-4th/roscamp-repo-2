@@ -1,0 +1,22 @@
+
+# MediaMTX 설정
+logLevel: info
+logDestinations: [stdout]
+logFile: mediamtx.log
+
+# RTSP 서버 설정
+rtspAddress: :8554
+rtmpAddress: :1935
+hlsAddress: :8888
+webrtcAddress: :8889
+
+# 경로 설정
+paths:
+  webcam:
+    # 웹캠 스트림 허용
+    publishUser: ""
+    publishPass: ""
+    publishIPs: []
+    readUser: ""
+    readPass: ""
+    readIPs: []

@@ -12,9 +12,9 @@ const StaffCallModal = ({ isOpen, onClose, onSelect }) => {
   if (!isOpen) return null;
 
   const callOptions = [
-    { id: 'HELP', label: t('staffCall.options.help'), icon: '🙋‍♂️' },
-    { id: 'MENU', label: t('staffCall.options.menu'), icon: '🍽️' },
-    { id: 'PAYMENT', label: t('staffCall.options.payment'), icon: '💳' },
+    // { id: 'HELP', label: t('staffCall.options.help'), icon: '🙋‍♂️' },
+    // { id: 'MENU', label: t('staffCall.options.menu'), icon: '🍽️' },
+    // { id: 'PAYMENT', label: t('staffCall.options.payment'), icon: '💳' },
     { id: 'BIRTHDAY', label: t('staffCall.options.birthday'), icon: '🎂' },
     { id: 'OTHER', label: t('staffCall.options.other'), icon: '❓' }
   ];
@@ -58,7 +58,8 @@ const LanguageModal = ({ isOpen, onClose, onSelect }) => {
   const languageOptions = [
     { id: 'ko', label: t('language.korean'), icon: '🇰🇷' },
     { id: 'en', label: t('language.english'), icon: '🇺🇸' },
-    { id: 'ja', label: t('language.japanese'), icon: '🇯🇵' }
+    { id: 'ja', label: t('language.japanese'), icon: '🇯🇵' },
+    { id: 'zh', label: t('language.chinese'), icon: '🇨🇳' }
   ];
 
   return (

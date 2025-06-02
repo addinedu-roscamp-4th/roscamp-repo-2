@@ -329,6 +329,18 @@ def update_order_status(
             f"주문 항목 {order_id} 서빙완료됨",
             background_tasks
         )
+    
+    if new_status == "COMPLETED":
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        for item in order_items:
+            item.status = OrderStatus.COMPLETED
+            db.add(item)
+            db.commit()
+        # Log order item completion
+        log_info(db,
+            f"주문 항목 {order_id} 완료됨",
+            background_tasks
+        )
 
     # 주문이 준비중일시 전체 주문 항목도 준비중으로 변경 및 핑키에게 서빙 요청 명령
     if new_status == "PREPARING":

@@ -59,3 +59,35 @@
   - 필요한 속성만 포함한 새 객체 생성
 
 이 수정으로 메뉴 아이템을 여러 번 클릭할 때 수량이 일관되게 처리되도록 개선하였습니다. 
+
+## 2025-01-07: 실시간 조리 라이브 기능 추가
+
+### LiveStreamComponent.jsx 생성
+- operator 프로젝트의 컴포넌트를 기반으로 키오스크용으로 수정
+- WebRTC를 이용한 실시간 스트리밍 구현
+- 브랜드 컬러 적용 및 에러 처리 기능 포함
+
+### OrderStatusPage.js 수정
+- "실시간 조리 라이브" 버튼 추가
+- 라이브 스트림 모달 표시 기능 구현
+- 스트림 오류 및 로딩 상태에 대한 사용자 피드백 개선
+
+### 스트림 연결 방법 개선
+- 고정된 streamId ('webcam2') 대신 /streams 엔드포인트에서 동적으로 스트림 목록을 가져와서 웹캠 스트림을 자동으로 식별하도록 변경
+- loadStreams() 함수 추가로 스트림 목록 조회 및 웹캠 스트림 검색
+- selectedStreamId 상태 변수 추가로 찾은 웹캠 스트림 ID 저장
+- streamId prop 제거하고 로딩 화면에 현재 스트림 ID 표시
+
+### UDP 스트림 연동 기능 추가 (live_streaming.py)
+- UDPReceiver 클래스로 udp_sender.py에서 보낸 비디오 스트림 수신
+- UDP로 받은 JPEG 프레임을 OpenCV로 디코딩하여 WebRTC로 전송
+- has_frames() 메서드로 UDP 스트림 상태 확인 (최근 5초 이내 프레임 수신 여부)
+- 버퍼링 시스템으로 완전한 JPEG 프레임만 처리
+- UDP 스트림 실패 시 더미 비디오로 폴백 처리
+
+### 데이터 플로우
+1. udp_sender.py: /dev/video2 캡처 → UDP 192.168.0.156:5000으로 전송
+2. live_streaming.py: UDP 수신 → JPEG 디코딩 → WebRTC 스트림 생성
+3. LiveStreamComponent.jsx: WebRTC로 실시간 비디오 수신 및 표시
+
+이 기능으로 고객들이 주문 상태 확인 중에 실시간으로 조리 과정을 볼 수 있게 되었습니다. 

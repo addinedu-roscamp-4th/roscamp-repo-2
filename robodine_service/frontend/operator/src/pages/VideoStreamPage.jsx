@@ -689,7 +689,7 @@ const VideoStreamPage = () => {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center">
                 <Radio className="h-5 w-5 text-red-500 mr-2 animate-pulse" />
-                <h3 className="text-lg font-medium text-gray-900">웹캠 스트리밍</h3>
+                <h3 className="text-lg font-medium text-gray-900">라이브 스트리밍</h3>
               </div>
               <button 
                 onClick={loadStreams}
@@ -715,7 +715,7 @@ const VideoStreamPage = () => {
               <div className="md:col-span-1 border border-gray-200 rounded-lg p-4">
                 <h4 className="font-medium mb-4 flex items-center">
                   <Webcam className="h-5 w-5 text-blue-500 mr-2" />
-                  웹캠 목록
+                  라이브 목록
                 </h4>
                 
                 {isLoading ? (

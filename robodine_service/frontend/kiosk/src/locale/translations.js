@@ -39,6 +39,7 @@ const translations = {
       korean: '한국어',
       english: '영어',
       japanese: '일본어',
+      chinese: '중국어',
       success: '언어가 {language}로 변경되었습니다.'
     },
     
@@ -46,7 +47,7 @@ const translations = {
     cart: {
       title: '장바구니',
       empty: '장바구니가 비어 있습니다',
-      addItem: '장바구니에 담기',
+      addItem: '담기',
       removeItem: '항목 제거',
       totalPrice: '총 금액',
       checkout: '결제하기'
@@ -79,6 +80,12 @@ const translations = {
       confirmCancelAll: '정말로 전체 주문을 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
       confirmCancelItem: '선택한 메뉴를 취소하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
       refreshed: '주문 정보를 새로고침했습니다.',
+      liveStream: {
+        button: '실시간 조리 라이브',
+        title: '실시간 조리 영상',
+        description: '실시간으로 조리 과정을 확인하실 수 있습니다.',
+        error: '조리 영상에 문제가 발생했습니다. 서버를 확인하세요.'
+      },
       success: {
         cancelled: '주문이 성공적으로 취소되었습니다.',
         itemCancelled: '선택한 메뉴가 취소되었습니다.'
@@ -111,7 +118,7 @@ const translations = {
       noDescription: '설명이 없습니다',
       price: '가격',
       quantity: '수량',
-      addToCart: '장바구니에 담기',
+      addToCart: '담기',
       removeFromCart: '장바구니에서 제거',
       increaseQuantity: '수량 증가',
       decreaseQuantity: '수량 감소',
@@ -161,7 +168,7 @@ const translations = {
   en: {
     // 카테고리
     categories: {
-      recommended: 'Recommended',
+      recommended: 'Recommend',
       food: 'Food',
       beverage: 'Beverages'
     },
@@ -196,6 +203,7 @@ const translations = {
       korean: 'Korean',
       english: 'English',
       japanese: 'Japanese',
+      chinese: 'Chinese',
       success: 'Language changed to {language}'
     },
     
@@ -236,6 +244,12 @@ const translations = {
       confirmCancelAll: 'Are you sure you want to cancel the entire order?\nThis action cannot be undone.',
       confirmCancelItem: 'Are you sure you want to cancel this menu item?\nThis action cannot be undone.',
       refreshed: 'Order information has been refreshed.',
+      liveStream: {
+        button: 'Live Cooking Stream',
+        title: 'Live Cooking Video',
+        description: 'You can check the cooking process in real-time.',
+        error: 'An error occurred while loading the live video. Please check the server.'
+      },
       success: {
         cancelled: 'Order has been successfully cancelled.',
         itemCancelled: 'Selected menu item has been cancelled.'
@@ -353,6 +367,7 @@ const translations = {
       korean: '韓国語',
       english: '英語',
       japanese: '日本語',
+      chinese: '中国語',
       success: '言語が{language}に変更されました'
     },
     
@@ -393,6 +408,12 @@ const translations = {
       confirmCancelAll: '全ての注文をキャンセルしてもよろしいですか？\nこの操作は元に戻せません。',
       confirmCancelItem: '選択したメニューをキャンセルしてもよろしいですか？\nこの操作は元に戻せません。',
       refreshed: '注文情報が更新されました。',
+      liveStream: {
+        button: 'リアルタイム調理ライブ',
+        title: 'リアルタイム調理映像',
+        description: 'リアルタイムで調理過程を確認できます。',
+        error: '調理映像に問題が発生しました。サーバーを確認してください。'
+      },
       success: {
         cancelled: '注文が正常にキャンセルされました。',
         itemCancelled: '選択したメニューがキャンセルされました。'
@@ -468,6 +489,170 @@ const translations = {
       noMenuInfo: 'メニュー情報なし',
       noAvailableMenuInfo: '現在利用可能なメニュー情報はありません。',
       refresh: '再読み込み'
+    }
+  },
+
+  // 중국어 번역
+  zh: {
+    // 카테고리
+    categories: {
+      recommended: '推荐',
+      food: '食物',
+      beverage: '饮品'
+    },
+    
+    // 사이드바 버튼
+    sidebar: {
+      orderStatus: '订单状态',
+      callStaff: '呼叫服务员',
+      callStaffInProgress: '呼叫中',
+      changeLanguage: '语言切换'
+    },
+    
+    // 직원 호출 모달
+    staffCall: {
+      title: '呼叫服务类型',
+      close: '关闭',
+      options: {
+        help: '一般帮助',
+        menu: '菜单咨询',
+        payment: '支付帮助',
+        birthday: '生日祝贺',
+        other: '其他需求'
+      },
+      success: '{type}请求已发送，请稍等。',
+      error: '呼叫服务员失败，请重试。'
+    },
+    
+    // 언어 선택 모달
+    language: {
+      title: '选择语言',
+      close: '关闭',
+      korean: '韩语',
+      english: '英语',
+      japanese: '日语',
+      chinese: '中文',
+      success: '语言已切换为{language}'
+    },
+    
+    // 장바구니
+    cart: {
+      title: '购物车',
+      empty: '购物车为空',
+      addItem: '添加',
+      removeItem: '移除商品',
+      totalPrice: '总金额',
+      checkout: '结账'
+    },
+    
+    // 주문 상태
+    orderStatus: {
+      title: '订单状态',
+      waiting: '等待中',
+      cooking: '制作中',
+      ready: '完成',
+      cancel: '取消',
+      orderNumber: '订单号',
+      remainingTime: '剩余时间',
+      minutes: '分钟',
+      fullOrderCancel: '取消全部订单',
+      menuPreparationStatus: '菜品制作状态',
+      paymentDetails: '支付详情',
+      paymentMethod: '支付方式',
+      creditCard: '信用卡',
+      cash: '现金',
+      mobilePayment: '手机支付',
+      totalAmount: '总金额',
+      paymentTime: '支付时间',
+      table: '桌号',
+      customerId: '客户ID',
+      orderTime: '下单时间',
+      menuTotalCount: '菜品总数',
+      items: '个',
+      confirmCancelAll: '确定要取消全部订单吗？\n此操作无法撤销。',
+      confirmCancelItem: '确定要取消此菜品吗？\n此操作无法撤销。',
+      refreshed: '订单信息已刷新。',
+      liveStream: {
+        button: '实时烹饪直播',
+        title: '实时烹饪视频',
+        description: '您可以实时查看烹饪过程。',
+        error: '加载实时视频时发生错误。请检查服务器。'
+      },
+      success: {
+        cancelled: '订单已成功取消。',
+        itemCancelled: '所选菜品已取消。'
+      },
+      error: {
+        cancel: '取消订单时发生错误'
+      }
+    },
+    
+    // 결제 관련
+    payment: {
+      title: '支付',
+      method: '支付方式',
+      card: '刷卡支付',
+      cash: '现金支付',
+      mobilePayment: '手机支付',
+      customerCount: '用餐人数',
+      persons: '人',
+      totalAmount: '总支付金额',
+      proceed: '进行支付',
+      cancel: '取消',
+      success: '支付完成',
+      error: '支付时发生错误'
+    },
+    
+    // 메뉴 아이템
+    menu: {
+      cookingTime: '预计制作时间',
+      minutes: '分钟',
+      noDescription: '暂无说明',
+      price: '价格',
+      quantity: '数量',
+      addToCart: '添加',
+      removeFromCart: '从购物车移除',
+      increaseQuantity: '增加数量',
+      decreaseQuantity: '减少数量',
+      viewDetails: '查看详情'
+    },
+    
+    // 메뉴 데이터
+    menuData: {
+      "샐러드": {
+        name: "沙拉",
+        description: "新鲜蔬菜制作的爽口沙拉"
+      },
+      "스테이크": {
+        name: "牛排",
+        description: "优质牛肉制作的嫩滑牛排"
+      },
+      "파스타": {
+        name: "意面",
+        description: "当地主厨制作的传统意面"
+      },
+      "주스": {
+        name: "果汁",
+        description: "清爽香甜的水果汁"
+      },
+      "와인": {
+        name: "红酒",
+        description: "百搭香甜的红酒"
+      }
+    },
+    
+    // 공통 메시지
+    common: {
+      loading: '加载中...',
+      error: '发生错误',
+      retry: '重试',
+      close: '关闭',
+      confirm: '确认',
+      cancel: '取消',
+      noMenuItemsInCategory: '此分类暂无菜品',
+      noMenuInfo: '暂无菜单信息',
+      noAvailableMenuInfo: '暂无可用菜单信息。',
+      refresh: '刷新'
     }
   }
 };
