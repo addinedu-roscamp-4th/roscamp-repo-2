@@ -75,15 +75,16 @@ graph TB
 alba_manager/
 ├── alba_manager/
 │   ├── __init__.py
-│   ├── main.py              # 메인 실행 파일
-│   ├── config.py            # 설정 관리
-│   ├── ros2_interface.py    # ROS2 연동 인터페이스
 │   ├── tcp_client.py        # 중앙 서버 통신 클라이언트
 │   ├── path_planner.py      # 경로 계획 알고리즘
-│   ├── robot_state.py       # 로봇 상태 관리
-│   ├── speech_manager.py    # 음성 안내 관리
-│   ├── customer_detector.py # 고객 감지 모듈
-│   ├── battery_monitor.py   # 배터리 모니터링
+│   ├── albabot_controller.py     # 로봇 컨트롤러
+│   ├── albabot_pos_publisher.py  # 로봇 상태 관리, 배터리 모니터링, 로봇, GLOBAL CAM, WORLD의 POSE 발행
+│   ├── albabot_task_manager.py   # 태스크 매니저. 로보다인 서비스와 로봇 사이 연동
+│   ├── aruco_detector.py         # 아르코마커 모니터링 + Initialpose 발행
+│   ├── camera_calibration.pkl    # GLOBAL CAM 캘리브레이션
+│   ├── cmd_vel_mux.py            # Nav2의 cmd_vel topic 충돌 회피를 위한 cmd_vel muxer
+│   ├── global_cam_config.py      # aruco_detector에서 사용하는 GLOBAL CAM 설정
+│   ├── mapping.py                # 카메라 좌표계 <-> 맵 좌표계 변환 정보
 |   └── motion/
 │       ├── motion_cleaning.py  # 청소 모션
 │       ├── motion_pickup.py    # 픽업 모션
@@ -92,18 +93,28 @@ alba_manager/
 │       │   └── nav2_goal_send.py # nav2 goal 전달
 │       └── rotate
 │           └── rotate_pid.py # PID 회전
+├── domain_bridge
+│   ├── albabot1_from_bridge_config.yaml  # from albabot1 domain bridge
+│   ├── albabot1_to_bridge_config.yaml    # to albabot1 domain bridge
+│   ├── albabot2_from_bridge_config.yaml  # from albabot2 domain bridge
+│   ├── albabot2_to_bridge_config.yaml    # to albabot2 domain bridge
+│   ├── albabot3_from_bridge_config.yaml  # from albabot3 domain bridge
+│   ├── albabot3_to_bridge_config.yaml    # to albabot3 domain bridge
+│   └── bridge_albabot_domain_lauch.xml   # domain bridge launch
 ├── launch/
 │   └── alba_manager_launch.py  # ROS2 실행 파일
-├── msg/
-│   ├── RobotState.msg       # 로봇 상태 메시지 정의
-│   └── NavigationGoal.msg   # 네비게이션 목표 메시지 정의
-├── config/
-│   ├── robot_params.yaml    # 로봇 파라미터 설정
-│   └── map.yaml             # 맵 설정
 ├── tests/
-│   ├── test_path_planner.py # 경로 계획 테스트
-│   └── test_tcp_client.py   # TCP 클라이언트 테스트
+│   ├── test_copyright.py
+│   ├── test_flake8.py
+│   └── test_pep257.py
+├── package.xml
+├── setup.cfg
 └── setup.py                 # ROS2 패키지 설정
+alba_msgs/
+├── msg/
+│   ├── AlbabotCoordinate.msg # 로봇 상태 및 POSE 메시지 정의
+├── CMakeLists.txt
+└── package.xml
 ```
 
 ## 💻 기술 스택
